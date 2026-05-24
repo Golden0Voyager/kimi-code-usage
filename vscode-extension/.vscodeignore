@@ -6,4 +6,6 @@ src/**
 .gitattributes
 tsconfig.json
 package-lock.json
-```
+.claude/**
+.scratch/**
+*.vsix
