@@ -6,7 +6,7 @@
   "publisher": "HainingYu",
   "author": "Haining Yu",
   "license": "MIT",
-  "version": "0.1.6",
+  "version": "0.1.8",
   "repository": {
     "type": "git",
     "url": "https://github.com/Golden0Voyager/kimi-code-usage.git"
@@ -36,9 +36,17 @@
           "enum": [
             "Auto",
             "English",
-            "Chinese"
+            "Chinese",
+            "Japanese",
+            "French",
+            "German",
+            "Spanish",
+            "Korean",
+            "Russian",
+            "Portuguese",
+            "Italian"
           ],
-          "description": "Display Language / 显示语言 (Requires restart / 重启插件后生效)",
+          "description": "Display Language / 显示语言 (Auto = follow VS Code / 自动跟随 VS Code 界面语言)",
           "order": 1
         },
         "kimiCodeUsage.apiKey": {
@@ -78,14 +86,14 @@
         "kimiCodeUsage.showPaceIndicator": {
           "type": "boolean",
           "default": true,
-          "description": "Show pace indicator (Warp/Impulse/Moonwalk) / 显示速度指针（曲率/脉冲/月球漫步）",
+          "description": "Show pace indicator (Fast/Normal/Slow) / 显示速度指针（快/正常/慢）",
           "order": 7
         },
         "kimiCodeUsage.paceLabels": {
           "type": "object",
           "default": {},
           "description": "Advanced: custom pace labels by state (fast/normal/slow) / 高级：自定义速度状态名称",
-          "order": 12,
+          "order": 16,
           "additionalProperties": false,
           "properties": {
             "fast": {
@@ -107,7 +115,7 @@
           "default": {},
           "description": "Advanced: codicon names by pace state (fast/normal/slow) / 高级：按状态配置 Codicon 名称",
           "markdownDescription": "Advanced: codicon names by pace state (fast/normal/slow). See [VS Code Icon Reference](https://code.visualstudio.com/api/references/icons-in-labels) for available names.\n\n高级：按状态配置 Codicon 名称。可用图标请参考 [VS Code 官方图标列表](https://code.visualstudio.com/api/references/icons-in-labels)。",
-          "order": 13,
+          "order": 17,
           "additionalProperties": false,
           "properties": {
             "fast": {
@@ -126,21 +134,27 @@
         },
         "kimiCodeUsage.paceTheme": {
           "type": "string",
-          "default": "Default",
+          "default": "Simple",
           "enum": [
-            "Default",
+            "Simple",
             "Animals",
-            "Racing",
             "Fish",
             "Birds",
-            "Rocket",
+            "Racing",
             "Running",
-            "STAR WARS",
-            "STAR TREK",
-            "BACK TO THE FUTURE"
+            "F1",
+            "Rocket",
+            "Star Wars",
+            "Star Trek",
+            "Back To The Future",
+            "Pink Floyd",
+            "Submarine",
+            "Airliner",
+            "Fighter",
+            "Firearms"
           ],
           "description": "Pace label theme preset / 速度指针主题预设",
-          "order": 8
+          "order": 10
         },
         "kimiCodeUsage.paceSensitivity": {
           "type": "string",
@@ -152,19 +166,46 @@
             "Custom"
           ],
           "description": "Pace threshold sensitivity. Relaxed=1.2/0.8, Normal=1.12/0.88, Strict=1.05/0.95, Custom=manual / 阈值灵敏度：Relaxed=1.2/0.8、Normal=1.12/0.88、Strict=1.05/0.95、Custom=自定义",
-          "order": 9
+          "order": 11
         },
         "kimiCodeUsage.paceThresholdFast": {
           "type": "number",
-          "description": "Threshold for 'using too fast'. Leave unset to use sensitivity preset. / '用得太快'的阈值，留空使用灵敏度预设。",
-          "markdownDescription": "Pace ratio = (used ÷ limit) ÷ (elapsed time ÷ total window). When ratio ≥ this value, the indicator shows \"using too fast\". Leave unset to use sensitivity preset.\n\n速度比率 = (已用量 ÷ 限额) ÷ (已过时间 ÷ 总窗口)。比率 ≥ 此值时指针显示「用得太快」，留空使用灵敏度预设。",
-          "order": 10
+          "description": "Threshold for fast state. Leave unset to use sensitivity preset. / 快状态的阈值，留空使用灵敏度预设。",
+          "markdownDescription": "Pace ratio = (used ÷ limit) ÷ (elapsed time ÷ total window). When ratio ≥ this value, the indicator shows fast state. Leave unset to use sensitivity preset.\n\n速度比率 = (已用量 ÷ 限额) ÷ (已过时间 ÷ 总窗口)。比率 ≥ 此值时指针显示「快」，留空使用灵敏度预设。",
+          "order": 12
         },
         "kimiCodeUsage.paceThresholdSlow": {
           "type": "number",
-          "description": "Threshold for 'using too slow'. Leave unset to use sensitivity preset. / '用得太慢'的阈值，留空使用灵敏度预设。",
-          "markdownDescription": "Pace ratio = (used ÷ limit) ÷ (elapsed time ÷ total window). When ratio ≤ this value, the indicator shows \"using too slow\". Leave unset to use sensitivity preset.\n\n速度比率 = (已用量 ÷ 限额) ÷ (已过时间 ÷ 总窗口)。比率 ≤ 此值时指针显示「用得太慢」，留空使用灵敏度预设。",
-          "order": 11
+          "description": "Threshold for slow state. Leave unset to use sensitivity preset. / 慢状态的阈值，留空使用灵敏度预设。",
+          "markdownDescription": "Pace ratio = (used ÷ limit) ÷ (elapsed time ÷ total window). When ratio ≤ this value, the indicator shows slow state. Leave unset to use sensitivity preset.\n\n速度比率 = (已用量 ÷ 限额) ÷ (已过时间 ÷ 总窗口)。比率 ≤ 此值时指针显示「慢」，留空使用灵敏度预设。",
+          "order": 13
+        },
+        "kimiCodeUsage.redAlertCondition": {
+          "type": "string",
+          "default": "Either",
+          "enum": [
+            "Weekly",
+            "5 Hours",
+            "Either"
+          ],
+          "description": "Which quota threshold triggers red status bar / 哪个限额触发状态栏变红",
+          "order": 14
+        },
+        "kimiCodeUsage.showPaceBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show pace bar in status bar / 在状态栏显示速度进度条",
+          "order": 8
+        },
+        "kimiCodeUsage.statusBarAlignment": {
+          "type": "string",
+          "default": "Right",
+          "enum": [
+            "Left",
+            "Right"
+          ],
+          "description": "Status bar alignment / 状态栏对齐位置",
+          "order": 9
         }
       }
     },
