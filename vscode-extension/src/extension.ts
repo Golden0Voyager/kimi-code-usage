@@ -16,7 +16,7 @@ interface UsageItem {
 
 interface PaceState {
   ratio: number;
-  state: 'warp' | 'impulse' | 'moonwalk';
+  state: 'fast' | 'normal' | 'slow';
 }
 
 interface PacePresentation {
@@ -40,51 +40,57 @@ const MIN_REFRESH_MINUTES = 1;
 const DEFAULT_LOW_THRESHOLD = 30;
 const ICON_NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
 
-type LanguageChoice = 'Auto' | 'English' | 'Chinese';
+type LanguageChoice = 'Auto' | 'English' | 'Chinese' | 'Japanese' | 'French' | 'German' | 'Spanish' | 'Korean' | 'Russian' | 'Portuguese' | 'Italian';
 type WindowType = 'weekly' | 'fiveHours' | 'monthly' | 'other';
 
-type PaceTheme = 'Default' | 'Animals' | 'Racing' | 'Fish' | 'Birds' | 'Rocket' | 'Running' | 'STAR WARS' | 'STAR TREK' | 'BACK TO THE FUTURE';
+type PaceTheme = 'Simple' | 'Animals' | 'Fish' | 'Birds' | 'Racing' | 'Running' | 'F1' | 'Rocket' | 'Star Wars' | 'Star Trek' | 'Back To The Future' | 'Pink Floyd' | 'Submarine' | 'Airliner' | 'Fighter' | 'Firearms';
 type PaceSensitivity = 'Relaxed' | 'Normal' | 'Strict' | 'custom';
 
 interface ThresholdConfig {
-  warp: number;
-  moonwalk: number;
+  fast: number;
+  slow: number;
 }
 
-const THEME_LABELS: Record<PaceTheme, Record<'warp' | 'impulse' | 'moonwalk', string>> = {
-  'Default': { warp: 'Warp', impulse: 'Impulse', moonwalk: 'Moonwalk' },
-  'Animals': { warp: 'Cheetah', impulse: 'Lynx', moonwalk: 'Sloth' },
-  'Racing': { warp: 'Nitro', impulse: 'Cruise', moonwalk: 'Idle' },
-  'Fish': { warp: 'Marlin', impulse: 'Dolphin', moonwalk: 'Turtle' },
-  'Birds': { warp: 'Peregrine', impulse: 'Eagle', moonwalk: 'Ostrich' },
-  'Rocket': { warp: 'Thrust', impulse: 'Propulsion', moonwalk: 'Hover' },
-  'Running': { warp: 'Sprint', impulse: 'Jog', moonwalk: 'Moonwalk' },
-  'STAR WARS': { warp: 'Falcon', impulse: 'X-Wing', moonwalk: 'Shuttle' },
-  'STAR TREK': { warp: 'Defiant', impulse: 'Enterprise', moonwalk: 'Shuttle' },
-  'BACK TO THE FUTURE': { warp: 'Flux', impulse: 'Driving', moonwalk: 'Parked' },
+const THEME_LABELS: Record<PaceTheme, Record<'fast' | 'normal' | 'slow', string>> = {
+  'Simple': { fast: 'Fast', normal: 'Normal', slow: 'Slow' },
+  'Animals': { fast: 'Cheetah', normal: 'Lynx', slow: 'Sloth' },
+  'Fish': { fast: 'Marlin', normal: 'Dolphin', slow: 'Turtle' },
+  'Birds': { fast: 'Peregrine', normal: 'Eagle', slow: 'Ostrich' },
+  'Racing': { fast: 'Nitro', normal: 'Cruise', slow: 'Idle' },
+  'Running': { fast: 'Sprint', normal: 'Jog', slow: 'Walk' },
+  'F1': { fast: 'Overtake Mode', normal: 'Race Pace', slow: 'Safety Car' },
+  'Rocket': { fast: 'Thrust', normal: 'Propulsion', slow: 'Hover' },
+  'Star Wars': { fast: 'Falcon', normal: 'X-Wing', slow: 'Shuttle' },
+  'Star Trek': { fast: 'Defiant', normal: 'Enterprise', slow: 'Voyager' },
+  'Back To The Future': { fast: 'Flux', normal: 'Driving', slow: 'Parked' },
+  'Pink Floyd': { fast: 'Eclipse', normal: 'Time', slow: 'Breathe' },
+  'Submarine': { fast: 'Alfa', normal: 'Ohio', slow: 'U-Boat' },
+  'Airliner': { fast: 'Concorde', normal: 'A350', slow: 'Comet' },
+  'Fighter': { fast: 'SR-71', normal: 'F-22', slow: 'A-10' },
+  'Firearms': { fast: 'Minigun', normal: 'AK-47', slow: 'Revolver' },
 };
 
 const SENSITIVITY_THRESHOLDS: Record<Exclude<PaceSensitivity, 'custom'>, ThresholdConfig> = {
-  Relaxed: { warp: 1.2, moonwalk: 0.8 },
-  Normal: { warp: 1.12, moonwalk: 0.88 },
-  Strict: { warp: 1.05, moonwalk: 0.95 },
+  Relaxed: { fast: 1.2, slow: 0.8 },
+  Normal: { fast: 1.12, slow: 0.88 },
+  Strict: { fast: 1.05, slow: 0.95 },
 };
 
 const PACE_CONFIG = {
-  warp: {
-    labelKey: 'Warp',
+  fast: {
+    labelKey: 'Fast',
     labelSetting: 'paceLabels.fast',
     iconSetting: 'paceIcons.fast',
     defaultIcon: 'warning',
   },
-  impulse: {
-    labelKey: 'Impulse',
+  normal: {
+    labelKey: 'Normal',
     labelSetting: 'paceLabels.normal',
     iconSetting: 'paceIcons.normal',
     defaultIcon: 'dashboard',
   },
-  moonwalk: {
-    labelKey: 'Moonwalk',
+  slow: {
+    labelKey: 'Slow',
     labelSetting: 'paceLabels.slow',
     iconSetting: 'paceIcons.slow',
     defaultIcon: 'coffee',
@@ -104,10 +110,10 @@ function computePace(item: UsageItem, windowSeconds: number, thresholds: Thresho
   const rawRatio = elapsedRatio > 0 ? actualUsedRatio / elapsedRatio : 0;
   const ratio = Math.min(rawRatio, 5.0);
 
-  let state: 'warp' | 'impulse' | 'moonwalk';
-  if (ratio >= thresholds.warp) state = 'warp';
-  else if (ratio <= thresholds.moonwalk) state = 'moonwalk';
-  else state = 'impulse';
+  let state: 'fast' | 'normal' | 'slow';
+  if (ratio >= thresholds.fast) state = 'fast';
+  else if (ratio <= thresholds.slow) state = 'slow';
+  else state = 'normal';
 
   return { ratio, state };
 }
@@ -129,8 +135,8 @@ function getWindowSeconds(label: string): number {
 
 function formatPaceBar(ratio: number, thresholds: ThresholdConfig): string {
   let filled: number;
-  if (ratio >= thresholds.warp) filled = 3;
-  else if (ratio >= thresholds.moonwalk) filled = 2;
+  if (ratio >= thresholds.fast) filled = 3;
+  else if (ratio >= thresholds.slow) filled = 2;
   else filled = 1;
   return '▰'.repeat(filled) + '▱'.repeat(3 - filled);
 }
@@ -140,12 +146,28 @@ let intervalId: NodeJS.Timeout | undefined;
 let translator: Translator;
 
 class Translator {
-  private bundle: Record<string, string> = {};
-  private useNative = true;
+  private bundles = new Map<string, Record<string, string>>();
+  private currentLang = 'en';
   private languageChoice: LanguageChoice = 'Auto';
 
   constructor(context: vscode.ExtensionContext) {
+    this.loadAll(context);
     this.update(context);
+  }
+
+  private loadAll(context: vscode.ExtensionContext) {
+    const langs = ['en', 'zh-cn', 'ja', 'fr', 'de', 'es', 'ko', 'ru', 'pt', 'it'];
+    for (const lang of langs) {
+      const filePath = path.join(context.extensionPath, 'l10n', `bundle.l10n.${lang}.json`);
+      try {
+        if (fs.existsSync(filePath)) {
+          const content = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          this.bundles.set(lang, content);
+        }
+      } catch (e) {
+        console.error(`Failed to load l10n bundle for ${lang}`, e);
+      }
+    }
   }
 
   update(context: vscode.ExtensionContext) {
@@ -154,29 +176,41 @@ class Translator {
     this.languageChoice = lang;
 
     if (lang === 'Auto') {
-      this.useNative = true;
-      this.bundle = {};
-      return;
-    }
-
-    this.useNative = false;
-    const fileName = lang === 'Chinese' ? 'bundle.l10n.zh-cn.json' : 'bundle.l10n.json';
-    const filePath = path.join(context.extensionPath, 'l10n', fileName);
-    try {
-      if (fs.existsSync(filePath)) {
-        this.bundle = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      } else {
-        this.bundle = {};
-      }
-    } catch (e) {
-      console.error('Failed to load l10n bundle', e);
-      this.useNative = true;
-      this.bundle = {};
+      this.currentLang = this.mapEnvLanguage(vscode.env.language.toLowerCase());
+    } else {
+      const map: Record<Exclude<LanguageChoice, 'Auto'>, string> = {
+        'English': 'en',
+        'Chinese': 'zh-cn',
+        'Japanese': 'ja',
+        'French': 'fr',
+        'German': 'de',
+        'Spanish': 'es',
+        'Korean': 'ko',
+        'Russian': 'ru',
+        'Portuguese': 'pt',
+        'Italian': 'it',
+      };
+      this.currentLang = map[lang] ?? 'en';
     }
   }
 
+  private mapEnvLanguage(envLang: string): string {
+    if (envLang.startsWith('zh')) return 'zh-cn';
+    if (envLang.startsWith('ja')) return 'ja';
+    if (envLang.startsWith('fr')) return 'fr';
+    if (envLang.startsWith('de')) return 'de';
+    if (envLang.startsWith('es')) return 'es';
+    if (envLang.startsWith('ko')) return 'ko';
+    if (envLang.startsWith('ru')) return 'ru';
+    if (envLang.startsWith('pt')) return 'pt';
+    if (envLang.startsWith('it')) return 'it';
+    return 'en';
+  }
+
   t(message: string, ...args: unknown[]): string {
-    let str = this.useNative ? vscode.l10n.t(message) : (this.bundle[message] || message);
+    const bundle = this.bundles.get(this.currentLang) ?? this.bundles.get('en');
+    let str = bundle?.[message] ?? vscode.l10n.t(message);
+
     if (args.length > 0) {
       args.forEach((arg, i) => {
         str = str.replace(`{${i}}`, String(arg));
@@ -185,19 +219,33 @@ class Translator {
     return str;
   }
 
-  isZh(): boolean {
-    if (this.languageChoice === 'Chinese') return true;
-    if (this.languageChoice === 'English') return false;
-    return vscode.env.language.toLowerCase().startsWith('zh');
+  lang(): string {
+    return this.currentLang;
   }
+
+  isZh(): boolean {
+    return this.currentLang === 'zh-cn';
+  }
+}
+
+function createStatusBarItem() {
+  if (statusBarItem) {
+    statusBarItem.dispose();
+  }
+  const cfg = vscode.workspace.getConfiguration('kimiCodeUsage');
+  const alignment = cfg.get<'Left' | 'Right'>('statusBarAlignment', 'Right');
+  statusBarItem = vscode.window.createStatusBarItem(
+    alignment === 'Left' ? vscode.StatusBarAlignment.Left : vscode.StatusBarAlignment.Right,
+    100
+  );
+  statusBarItem.command = 'kimiCodeUsage.showDetails';
+  statusBarItem.show();
 }
 
 export function activate(context: vscode.ExtensionContext) {
   translator = new Translator(context);
 
-  statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  statusBarItem.command = 'kimiCodeUsage.showDetails';
-  statusBarItem.show();
+  createStatusBarItem();
 
   const refreshCmd = vscode.commands.registerCommand('kimiCodeUsage.refresh', refresh);
   const detailsCmd = vscode.commands.registerCommand('kimiCodeUsage.showDetails', showDetails);
@@ -211,13 +259,17 @@ export function activate(context: vscode.ExtensionContext) {
       translator.update(context);
     }
 
+    if (e.affectsConfiguration('kimiCodeUsage.statusBarAlignment')) {
+      createStatusBarItem();
+    }
+
     // Sensitivity changed -> auto-sync thresholds
     if (e.affectsConfiguration('kimiCodeUsage.paceSensitivity')) {
       const sensitivity = cfg.get<PaceSensitivity>('paceSensitivity', 'Normal');
       if (sensitivity !== 'custom') {
         const preset = SENSITIVITY_THRESHOLDS[sensitivity] ?? SENSITIVITY_THRESHOLDS.Normal;
-        await cfg.update('paceThresholdFast', preset.warp, true);
-        await cfg.update('paceThresholdSlow', preset.moonwalk, true);
+        await cfg.update('paceThresholdFast', preset.fast, true);
+        await cfg.update('paceThresholdSlow', preset.slow, true);
       }
     }
 
@@ -233,7 +285,7 @@ export function activate(context: vscode.ExtensionContext) {
         let matched: PaceSensitivity | null = null;
         for (const [key, preset] of Object.entries(SENSITIVITY_THRESHOLDS)) {
           if (key === 'custom') continue;
-          if (preset.warp === fast && preset.moonwalk === slow) {
+          if (preset.fast === fast && preset.slow === slow) {
             matched = key as PaceSensitivity;
             break;
           }
@@ -275,12 +327,12 @@ function readPaceThresholds(cfg: vscode.WorkspaceConfiguration): ThresholdConfig
     ? SENSITIVITY_THRESHOLDS.Normal
     : (SENSITIVITY_THRESHOLDS[sensitivity] ?? SENSITIVITY_THRESHOLDS.Normal);
 
-  const customWarp = cfg.get<number>('paceThresholdFast');
-  const customMoonwalk = cfg.get<number>('paceThresholdSlow');
+  const customFast = cfg.get<number>('paceThresholdFast');
+  const customSlow = cfg.get<number>('paceThresholdSlow');
 
   return {
-    warp: Number.isFinite(customWarp) ? customWarp! : preset.warp,
-    moonwalk: Number.isFinite(customMoonwalk) ? customMoonwalk! : preset.moonwalk,
+    fast: Number.isFinite(customFast) ? customFast! : preset.fast,
+    slow: Number.isFinite(customSlow) ? customSlow! : preset.slow,
   };
 }
 
@@ -306,8 +358,8 @@ function getPacePresentation(cfg: vscode.WorkspaceConfiguration, state: PaceStat
   const fromLegacy = cfg.get<string>(config.labelSetting, '');
 
   // 2. 主题预设
-  const theme = cfg.get<PaceTheme>('paceTheme', 'Default');
-  const themeKey = (THEME_LABELS[theme] ?? THEME_LABELS['Default'])[state];
+  const theme = cfg.get<PaceTheme>('paceTheme', 'Simple');
+  const themeKey = (THEME_LABELS[theme] ?? THEME_LABELS['Simple'])[state];
   const themeLabel = t(themeKey);
 
   const configuredLabel = (fromObject || fromLegacy || themeLabel).trim();
@@ -370,11 +422,10 @@ async function resolveApiKey(): Promise<string> {
 
 function localizedLimitName(label: string): string {
   const type = detectWindowType(label);
-  const isZh = translator.isZh();
 
-  if (type === 'weekly') return isZh ? t('Every Week') : t('Weekly');
-  if (type === 'fiveHours') return isZh ? t('Every 5 Hours') : t('5 Hours');
-  if (type === 'monthly') return isZh ? t('Every Month') : t('Monthly');
+  if (type === 'weekly') return t('Weekly');
+  if (type === 'fiveHours') return t('5 Hours');
+  if (type === 'monthly') return t('Monthly');
   return label;
 }
 
@@ -410,8 +461,8 @@ function buildErrorPresentation(err: unknown): ErrorPresentation {
 
   if (lower.includes('timeout')) {
     return {
-      text: `$(watch) ${t('Ground Control to Major Kimi!')}`,
-      tooltip: `${t('Ground Control to Major Kimi!')} ${t('Check baseUrl and network link.')}`,
+      text: `🌑  ${t('Can you hear me, Major Kimi?')}`,
+      tooltip: `${t('Ground Control to Major Kimi — Planet Earth is blue and there\'s nothing I can do.')}\n${t('Check baseUrl and network link.')}`,
       isWarning: false,
     };
   }
@@ -442,16 +493,16 @@ function buildErrorPresentation(err: unknown): ErrorPresentation {
 
   if (lower.includes('enotfound') || lower.includes('econnreset') || lower.includes('network') || lower.includes('socket')) {
     return {
-      text: `$(broadcast) ${t('Ground Control to Major Kimi!')}`,
-      tooltip: `${t('Ground Control to Major Kimi!')} ${t('Check baseUrl and network link.')}`,
+      text: `🌑  ${t('Can you hear me, Major Kimi?')}`,
+      tooltip: `${t('Ground Control to Major Kimi — Planet Earth is blue and there\'s nothing I can do.')}\n${t('Check baseUrl and network link.')}`,
       isWarning: false,
     };
   }
 
   if (lower.includes('invalid url')) {
     return {
-      text: `$(link-external) ${t('Ground Control to Major Kimi!')}`,
-      tooltip: `${t('Ground Control to Major Kimi!')} ${t('Check baseUrl and network link.')}`,
+      text: `🌑  ${t('Can you hear me, Major Kimi?')}`,
+      tooltip: `${t('Ground Control to Major Kimi — Planet Earth is blue and there\'s nothing I can do.')}\n${t('Check baseUrl and network link.')}`,
       isWarning: false,
     };
   }
@@ -474,7 +525,7 @@ async function refresh() {
     statusBarItem.text = `$(key) ${t('API Key Missing')}`;
     const missingKeyTooltip = new vscode.MarkdownString(
       [
-        `**${t('Ground Control to Major Kimi!')}**`,
+        `**${t('Ground Control to Major Kimi — Planet Earth is blue and there\'s nothing I can do.')}**`,
         `${t('Set `kimiCodeUsage.apiKey` or `.env` key to reconnect.')}`,
       ].join('\n')
     );
@@ -485,8 +536,8 @@ async function refresh() {
   }
 
   if (!baseUrl || !baseUrl.trim()) {
-    statusBarItem.text = `$(link-external) ${t('Ground Control to Major Kimi!')}`;
-    statusBarItem.tooltip = `${t('Ground Control to Major Kimi!')} ${t('Check baseUrl and network link.')}`;
+    statusBarItem.text = `🌑  ${t('Can you hear me, Major Kimi?')}`;
+    statusBarItem.tooltip = `${t('Ground Control to Major Kimi — Planet Earth is blue and there\'s nothing I can do.')}\n${t('Check baseUrl and network link.')}`;
     statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
     return;
   }
@@ -507,8 +558,9 @@ async function refresh() {
     const fiveHoursItem = findWindowItem(items, 'fiveHours');
 
     const showPace = cfg.get<boolean>('showPaceIndicator', true);
+    const showPaceBar = cfg.get<boolean>('showPaceBar', true);
     const pace = weeklyItem && showPace ? computePace(weeklyItem, getWindowSeconds(weeklyItem.label), paceThresholds) : null;
-    const paceState = pace?.state || 'impulse';
+    const paceState = pace?.state || 'normal';
     const pacePresentation = getPacePresentation(cfg, paceState);
 
     const moonEmoji = (() => {
@@ -517,19 +569,29 @@ async function refresh() {
         if (item.percent_left >= 99) return '🌕';
         if (item.percent_left <= 1) return '🌑';
       }
-      return paceState === 'warp' ? '🌒' : paceState === 'impulse' ? '🌓' : '🌔';
+      return paceState === 'fast' ? '🌒' : paceState === 'normal' ? '🌓' : '🌔';
     })();
-    const paceBar = pace ? formatPaceBar(pace.ratio, paceThresholds) : '▰▰▱';
+
+    let paceBarStr = '';
+    if (showPaceBar) {
+      paceBarStr = pace ? formatPaceBar(pace.ratio, paceThresholds) : '▰▰▱';
+    }
 
     const suffix = showPace ? `> $(${pacePresentation.icon}) ${pacePresentation.label}` : '';
 
     const parts = items.map((i) => `${shortLabel(i.label)}:${i.percent_left.toFixed(0)}%`);
-    const prefix = `${moonEmoji}  ${paceBar}  ${parts.join(' ')}`.trim();
+    const prefix = paceBarStr
+      ? `${moonEmoji}  ${paceBarStr}  ${parts.join(' ')}`.trim()
+      : `${moonEmoji}  ${parts.join(' ')}`.trim();
     statusBarItem.text = `${prefix} ${suffix}`.trim();
 
+    const redAlertCondition = cfg.get<'Weekly' | '5 Hours' | 'Either'>('redAlertCondition', 'Either');
     const lowWeekly = isLowRemaining(weeklyItem, thresholds.weekly);
     const lowFiveHours = isLowRemaining(fiveHoursItem, thresholds.fiveHours);
-    const shouldRed = pace?.state === 'warp' || lowWeekly || lowFiveHours;
+    const thresholdRed = redAlertCondition === 'Weekly' ? lowWeekly
+      : redAlertCondition === '5 Hours' ? lowFiveHours
+      : lowWeekly || lowFiveHours;
+    const shouldRed = pace?.state === 'fast' || thresholdRed;
 
     statusBarItem.backgroundColor = shouldRed
       ? new vscode.ThemeColor('statusBarItem.errorBackground')
@@ -542,9 +604,7 @@ async function refresh() {
       const name = localizedLimitName(item.label);
       if (item.reset_at) {
         const formatted = formatResetTimeAbsolute(item.reset_at);
-        const line = translator.isZh()
-          ? t('{0}: Remaining Fuel: {1} | Refuel: {2}', name, formatted.relative, formatted.absolute)
-          : t('{0}: Fuel: {1} | Refuel: {2}', name, formatted.relative, formatted.absolute);
+        const line = t('{0}: Fuel: {1} | Refuel: {2}', name, formatted.relative, formatted.absolute);
         resetEntries.push(line);
       } else if (item.reset_hint) {
         resetEntries.push(`${name}: ${item.reset_hint}`);
@@ -590,7 +650,7 @@ function fetchUsage(baseUrl: string, apiKey: string): Promise<unknown> {
       {
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          'User-Agent': 'kimi-usage-vscode/0.1.5',
+          'User-Agent': 'kimi-usage-vscode/0.1.8',
         },
         timeout: 10000,
       },
@@ -767,23 +827,22 @@ function formatResetTime(val: string): string {
 }
 
 function formatDuration(seconds: number): string {
-  const isZh = translator.isZh();
   const parts: string[] = [];
 
   const days = Math.floor(seconds / 86400);
-  if (days) parts.push(isZh ? `${days}天` : `${days}d`);
+  if (days) parts.push(`${days}${t('day-short')}`);
 
   const rem = seconds % 86400;
   const hours = Math.floor(rem / 3600);
-  if (hours) parts.push(isZh ? `${hours}时` : `${hours}h`);
+  if (hours) parts.push(`${hours}${t('hour-short')}`);
 
   const mins = Math.floor((rem % 3600) / 60);
-  if (mins) parts.push(isZh ? `${mins}分` : `${mins}m`);
+  if (mins) parts.push(`${mins}${t('minute-short')}`);
 
   const secs = rem % 60;
-  if (secs && !parts.length) parts.push(isZh ? `${secs}秒` : `${secs}s`);
+  if (secs && !parts.length) parts.push(`${secs}${t('second-short')}`);
 
-  return parts.join(' ') || (isZh ? '0秒' : '0s');
+  return parts.join(' ') || `0${t('second-short')}`;
 }
 
 function formatResetTimeAbsolute(val: string): { absolute: string; relative: string } {
@@ -821,6 +880,7 @@ function formatResetTimeAbsolute(val: string): { absolute: string; relative: str
 }
 
 function toInt(v: unknown): number | null {
+  if (v == null) return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
@@ -828,9 +888,9 @@ function toInt(v: unknown): number | null {
 function shortLabel(label: string): string {
   const type = detectWindowType(label);
 
-  if (type === 'weekly') return translator.isZh() ? t('W-Short') : 'W';
-  if (type === 'fiveHours') return translator.isZh() ? t('5H-Short') : '5H';
-  if (type === 'monthly') return translator.isZh() ? t('M-Short') : 'M';
+  if (type === 'weekly') return t('W-Short');
+  if (type === 'fiveHours') return t('5H-Short');
+  if (type === 'monthly') return t('M-Short');
   return label.slice(0, 3);
 }
 
@@ -840,12 +900,12 @@ async function showDetails() {
   const baseUrl = cfg.get<string>('baseUrl', 'https://api.kimi.com/coding/v1');
 
   if (!apiKey) {
-    vscode.window.showWarningMessage(`${t('Ground Control to Major Kimi!')} ${t('Set `kimiCodeUsage.apiKey` or `.env` key to reconnect.')}`);
+    vscode.window.showWarningMessage(`${t('Can you hear me, Major Kimi?')}\n${t('Set `kimiCodeUsage.apiKey` or `.env` key to reconnect.')}`);
     return;
   }
 
   if (!baseUrl || !baseUrl.trim()) {
-    vscode.window.showWarningMessage(`${t('Ground Control to Major Kimi!')} ${t('Check baseUrl and network link.')}`);
+    vscode.window.showWarningMessage(`${t('Can you hear me, Major Kimi?')}\n${t('Check baseUrl and network link.')}`);
     return;
   }
 
@@ -868,7 +928,7 @@ async function showDetails() {
           const deviation = rawDeviation.toFixed(2);
           const sign = rawDeviation > 0 ? '+' : '';
           const pacePresentation = getPacePresentation(cfg, pace.state);
-          segments.push(`${t('Warp Factor')}: ${sign}${deviation}%`);
+          segments.push(`${t('Current Pace')}: ${sign}${deviation}%`);
           segments.push(`$(${pacePresentation.icon}) ${pacePresentation.label}`);
         }
       }
@@ -887,26 +947,34 @@ async function showDetails() {
       };
     });
 
-    const settingsLabel = `$(gear) ${t('Open Settings')}`;
-    picks.push({
-      label: settingsLabel,
-      description: '',
-      detail: '',
+    const quickPick = vscode.window.createQuickPick();
+    quickPick.items = picks;
+    quickPick.placeholder = t('Kimi API Usage Details');
+    quickPick.matchOnDescription = true;
+    quickPick.matchOnDetail = true;
+
+    const settingsButton: vscode.QuickInputButton = {
+      iconPath: new vscode.ThemeIcon('gear'),
+      tooltip: t('Open Settings'),
+    };
+    quickPick.buttons = [settingsButton];
+
+    quickPick.onDidTriggerButton((button) => {
+      if (button.tooltip === settingsButton.tooltip) {
+        vscode.commands.executeCommand('workbench.action.openSettings', 'kimiCodeUsage');
+        quickPick.hide();
+      }
     });
 
-    const selected = await vscode.window.showQuickPick(picks, {
-      placeHolder: t('Kimi API Usage Details'),
-      matchOnDescription: true,
-      matchOnDetail: true,
+    quickPick.onDidAccept(() => {
+      quickPick.hide();
     });
 
-    if (selected?.label === settingsLabel) {
-      await vscode.commands.executeCommand('workbench.action.openSettings', 'kimiCodeUsage');
-    }
+    quickPick.show();
   } catch (err) {
     const rawLower = String(err ?? '').toLowerCase();
     if (isLinkIssue(err)) {
-      vscode.window.showWarningMessage(`${t('Ground Control to Major Kimi!')} ${t('Check baseUrl and network link.')}`);
+      vscode.window.showWarningMessage(`${t('Can you hear me, Major Kimi?')}\n${t('Check baseUrl and network link.')}`);
       return;
     }
     if (rawLower.includes('http 5')) {
