@@ -40,11 +40,11 @@ In the vastness of the code universe, your creative flow shouldn't be pulled dow
 ### 🛰️ Telemetry Showcase | 遥测显示
 
 ```text
-🌔 ▰▱▱  W:64% 5H:54%  > Moonwalk
+🌔 ▰▰▱  W:64% 5H:54%  > Walk
 --------------------------------------------------
 | Kimi API Telemetry Details                     |
-| Weekly: 64% left  [Warp Factor: -30% > Moonwalk]|
-| 5 Hours: 54% left [Warp Factor: -30% > Moonwalk]|
+| Weekly: 64% left  [Current Pace: -30% > Walk]  |
+| 5 Hours: 54% left [Current Pace: -30% > Walk]  |
 | Resets Today 16:22 (in 3d 17h)                 |
 --------------------------------------------------
 ```
@@ -86,22 +86,38 @@ In the vastness of the code universe, your creative flow shouldn't be pulled dow
 | `apiKey` | Your Kimi API secret / 核心密钥 | `KIMI_CODING_API_KEY` |
 | `baseUrl` | API base URL / 接口基站 | `Kimi Coding V1` |
 | `refreshIntervalMinutes` | Auto-sync minutes / 雷达刷新间隔 | `5` |
+| `language` | Display language (Auto/English/Chinese/Japanese/French/German/Spanish/Korean/Russian/Portuguese/Italian) / 显示语言 | `Auto` |
 | `weeklyLowThresholdPercent` | Weekly low quota threshold (%) / 每周低余量告警阈值 | `30` |
-| `fiveHourLowThresholdPercent` | 5-hour low quota threshold (%) / 5小时低余量告警阈值 | `30` |
+| `fiveHourLowThresholdPercent` | 5-hour low quota threshold (%) / 5小时低余量告警阈值 | `15` |
 | `showPaceIndicator` | Show pace indicator / 显示速度指针 | `true` |
-| `paceTheme` | Pace label theme preset (10 themes) / 主题预设 | `Default` |
+| `showPaceBar` | Show pace bar in status bar / 在状态栏显示速度进度条 | `true` |
+| `statusBarAlignment` | Status bar alignment (Left/Right) / 状态栏对齐位置 | `Right` |
+| `paceTheme` | Pace label theme preset (16 themes) / 主题预设 | `Simple` |
 | `paceSensitivity` | Threshold sensitivity (Relaxed/Normal/Strict/Custom) / 灵敏度档位 | `Normal` |
 | `paceThresholdFast` | Fast usage threshold / 用量过快阈值 | *(sensitivity preset)* |
 | `paceThresholdSlow` | Slow usage threshold / 用量过慢阈值 | *(sensitivity preset)* |
 | `paceLabels` | Custom pace labels (fast/normal/slow) / 自定义速度状态名称 | `{}` |
 | `paceIcons` | Custom codicon names / 自定义状态图标名称 | `{}` |
+| `redAlertCondition` | Which quota triggers red alert (Weekly/5 Hours/Either) / 红色告警触发条件 | `Either` |
 
 ---
 
 ### 📋 Changelog | 更新日志
 
+**v0.1.8** — *Support Link & Polish*
+- 添加 Ko-fi 支持链接 / Added Ko-fi support link
+
+**v0.1.7** — *Multilingual & UI Polish*
+- 🌍 多语言支持（10 种语言：English / 中文 / 日本語 / Français / Deutsch / Español / 한국어 / Русский / Português / Italiano）
+- 16 款速度指针主题预设（新增 F1 / Pink Floyd / Submarine / Airliner / Fighter / Firearms）
+- 速度进度条独立开关 `showPaceBar`
+- 状态栏位置控制 `statusBarAlignment`（Left / Right）
+- 红色告警触发条件 `redAlertCondition`（Weekly / 5 Hours / Either）
+- Settings 按钮移至 QuickPick 标题栏右侧
+- Running 主题慢速标签统一为 Walk/漫步
+
 **v0.1.6** — *Theme Engine & Threshold Control*
-- 10 款速度指针主题预设（Default / Animals / Racing / Fish / Birds / Rocket / Running / STAR WARS / STAR TREK / BACK TO THE FUTURE）
+- 10 款速度指针主题预设（Default / Animals / Racing / Fish / Birds / Rocket / Running / Star Wars / Star Trek / Back To The Future）
 - 4 档灵敏度联动阈值（Relaxed / Normal / Strict / Custom），档位切换自动同步阈值
 - 自定义 Fast / Slow 分界阈值
 - 状态栏用量边界 emoji（满额 🌕 / 耗尽 🌑）
@@ -126,6 +142,8 @@ In the vastness of the code universe, your creative flow shouldn't be pulled dow
 Engineered with ❤️ by **Haining Yu**. This extension is a piece of digital architecture designed to bridge the gap between aesthetic curation and intuitive, AI-powered exploration.
 
 由 **Haining Yu** 精心打磨。它不仅是一个开发工具，更是一件融合了美学策展与直觉化 AI 探索的数字航天舱组件。
+
+If you find it useful, you can [buy me a coffee](https://ko-fi.com/golden_voyager). / 觉得有用的话，可以[请我喝杯咖啡](https://ko-fi.com/golden_voyager)。
 
 ---
 
