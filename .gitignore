@@ -27,3 +27,6 @@ vscode-extension/out/
 # OS
 .DS_Store
 Thumbs.db
+# Skill-generated analysis artifacts
+.understand-anything/
+.codegraph/
