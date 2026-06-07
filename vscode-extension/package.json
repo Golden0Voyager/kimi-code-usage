@@ -6,7 +6,7 @@
   "publisher": "HainingYu",
   "author": "Haining Yu",
   "license": "MIT",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "repository": {
     "type": "git",
     "url": "https://github.com/Golden0Voyager/kimi-code-usage.git"
@@ -32,7 +32,7 @@
       "properties": {
         "kimiCodeUsage.language": {
           "type": "string",
-          "default": "Auto",
+          "default": "English",
           "enum": [
             "Auto",
             "English",
@@ -197,6 +197,27 @@
           "description": "Show pace bar in status bar / 在状态栏显示速度进度条",
           "order": 8
         },
+        "kimiCodeUsage.apiCacheTtlSeconds": {
+          "type": "number",
+          "default": 300,
+          "minimum": 0,
+          "description": "API response cache TTL in seconds / API 响应缓存秒数",
+          "order": 18
+        },
+        "kimiCodeUsage.historyRetentionDays": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 365,
+          "description": "Days to keep usage history snapshots / 历史快照保留天数",
+          "order": 19
+        },
+        "kimiCodeUsage.supportUrl": {
+          "type": "string",
+          "default": "https://ko-fi.com/golden_voyager",
+          "description": "Support URL opened from the details panel / 详情面板里的「支持项目」按钮链接",
+          "order": 20
+        },
         "kimiCodeUsage.statusBarAlignment": {
           "type": "string",
           "default": "Right",
@@ -219,16 +240,37 @@
         "command": "kimiCodeUsage.showDetails",
         "title": "Show Usage Details / 查看用量详情",
         "category": "Kimi"
+      },
+      {
+        "command": "kimiCodeUsage.showHistory",
+        "title": "Show Usage History / 查看用量历史",
+        "category": "Kimi"
       }
     ]
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "assets": "node scripts/copy-assets.mjs",
+    "build": "npm run compile && npm run assets",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src",
+    "format": "prettier --write src",
+    "format:check": "prettier --check src"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.74.0",
-    "typescript": "^5.0.0"
+    "@typescript-eslint/eslint-plugin": "^8.60.1",
+    "@typescript-eslint/parser": "^8.60.1",
+    "@vitest/ui": "^4.1.8",
+    "chart.js": "^4.5.1",
+    "eslint": "^10.4.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.8"
   }
 }
