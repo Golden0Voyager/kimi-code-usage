@@ -9,3 +9,11 @@ package-lock.json
 .claude/**
 .scratch/**
 *.vsix
+vitest.config.*
+eslint.config.*
+.prettierignore
+.prettierrc.json
+scripts/**
+.github/**
+node_modules/**
+coverage/**
