@@ -29,6 +29,20 @@
 
 ---
 
+<p align="center">
+  <a href="https://ko-fi.com/golden_voyager"><img src="https://img.shields.io/badge/☕_Buy_me_a_coffee-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Buy me a coffee" /></a>&nbsp;
+  <a href="https://github.com/Golden0Voyager/kimi-code-usage"><img src="https://img.shields.io/badge/⭐_Star_on-GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="Star on GitHub" /></a>
+</p>
+
+<p align="center">
+  <em>If <strong>Kimi Code Usage</strong> keeps your flight on course, consider fueling the next trajectory.</em><br>
+  <em>如果 <strong>Kimi Code Usage</strong> 让你的航线保持平稳，欢迎为下一段轨迹加杯燃料。</em>
+  <br /><br />
+  <a href="https://ko-fi.com/golden_voyager"><strong>☕ ko-fi.com/golden_voyager</strong></a>
+</p>
+
+---
+
 ### 🌑 Why Kimi Code Usage? | 为什么选择它？
 
 In the vastness of the code universe, your creative flow shouldn't be pulled down by the unexpected gravity well of API quota limits. **Kimi Code Usage** acts as your orbital telemetry system. It brings transparency to your AI consumption, allowing you to focus on exploring the digital cosmos while maintaining full awareness of your life-support resources.
@@ -68,6 +82,13 @@ In the vastness of the code universe, your creative flow shouldn't be pulled dow
 - **Thruster Controls | 推进器微调**
   - `Kimi: Refresh Usage` — Instant telemetry sync. (立即同步雷达数据)
   - `Kimi: Show Details` — Deep dive into stats with absolute reset times. (查看深空数据面板，含精确重置时间)
+  - `Kimi: Show Usage History` — Open the flight recorder: usage over time, exhaustion prediction, and confidence. (打开黑匣子：用量历史、耗尽预测、置信度)
+- **Flight Recorder | 黑匣子记录仪**
+  Local JSONL snapshot every refresh (30-day retention). Inspect trends, forecast when you'll run out, and see the model confidence based on sample size.
+  每次刷新写入本地 JSONL 快照（默认保留 30 天）。查看趋势曲线、预测耗尽时间，并根据样本量给出置信度。
+- **Mission Alerts | 任务警报**
+  Optional notifications when weekly / 5-hour quota drops below threshold, or when consumption pace goes hot. Deduped to avoid spam.
+  当每周 / 5 小时配额跌破阈值、或消耗进入「快」档时弹通知；状态机去重避免刷屏。
 
 ---
 
@@ -103,6 +124,15 @@ In the vastness of the code universe, your creative flow shouldn't be pulled dow
 ---
 
 ### 📋 Changelog | 更新日志
+
+**v0.1.9** — *History, Predictions & Engineering Overhaul*
+- 📈 用量历史 Webview（`Kimi: Show Usage History`）：本地 JSONL 快照、Chart.js 折线图、默认保留 30 天
+- 🔮 耗尽预测：线性回归估算每日消耗速率 + 预计耗尽日期，按样本量给出置信度（low/medium/high）
+- 🔔 阈值/速度通知：余量跌破阈值或速度进入 fast 时弹信息提示，去重防骚扰
+- 💾 API 响应缓存：默认 5 分钟 TTL，可通过 `kimiCodeUsage.apiCacheTtlSeconds` 调整
+- 🛠️ 工程重构：`extension.ts` 从 987 行拆分为独立模块（`types` / `i18n` / `pace` / `api` / `config` / `statusBar` / `storage` / `predict` / `notifier` / `apiCache` / `historyPanel`），新增 109 个单元测试（Vitest）
+- 🤖 CI：GitHub Actions 跑 typecheck / lint / test
+- 🎨 引入 ESLint + Prettier
 
 **v0.1.8** — *Support Link & Polish*
 - 添加 Ko-fi 支持链接 / Added Ko-fi support link
@@ -142,8 +172,6 @@ In the vastness of the code universe, your creative flow shouldn't be pulled dow
 Engineered with ❤️ by **Haining Yu**. This extension is a piece of digital architecture designed to bridge the gap between aesthetic curation and intuitive, AI-powered exploration.
 
 由 **Haining Yu** 精心打磨。它不仅是一个开发工具，更是一件融合了美学策展与直觉化 AI 探索的数字航天舱组件。
-
-If you find it useful, you can [buy me a coffee](https://ko-fi.com/golden_voyager). / 觉得有用的话，可以[请我喝杯咖啡](https://ko-fi.com/golden_voyager)。
 
 ---
 
