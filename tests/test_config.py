@@ -114,3 +114,99 @@ def test_config_resolver_no_arg(tmp_path):
     with patch("kimi_code_usage.config.DEFAULT_CONFIG_PATH", dummy_path):
         resolver = ConfigResolver()
         assert resolver.config_path == dummy_path
+
+def test_config_resolver_enabled_env_and_json(tmp_path, monkeypatch):
+    # Test JSON configuration of enabled
+    config_path = tmp_path / "config.json"
+    data = {
+        "providers": {
+            "kimi": { "apiKey": "kimi-key", "enabled": True },
+            "openai": { "apiKey": "openai-key", "enabled": False }
+        }
+    }
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+        
+    # Test env override of enabled
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
+    monkeypatch.setenv("OPENROUTER_ENABLED", "false")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "ant-key")
+    monkeypatch.setenv("ANTHROPIC_ENABLED", "true")
+    
+    resolver = ConfigResolver(config_path=str(config_path))
+    config = resolver.resolve()
+    
+    # Check that only kimi and anthropic are enabled
+    assert "kimi" in config.enabled_providers
+    assert "anthropic" in config.enabled_providers
+    assert "openai" not in config.enabled_providers
+    assert "openrouter" not in config.enabled_providers
+    
+    assert config.providers["kimi"].enabled is True
+    assert config.providers["openai"].enabled is False
+    assert config.providers["openrouter"].enabled is False
+    assert config.providers["anthropic"].enabled is True
+
+def test_config_resolver_ordering(tmp_path):
+    # Test custom providers list order in JSON
+    config_path = tmp_path / "config.json"
+    data = {
+        "providers": {
+            "openrouter": {},
+            "kimi": {}
+        }
+    }
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+        
+    resolver = ConfigResolver(config_path=str(config_path))
+    config = resolver.resolve()
+    
+    # Expected order: JSON defined order (openrouter, kimi), then default remaining order (anthropic, openai)
+    assert config.provider_order == ["openrouter", "kimi", "anthropic", "openai"]
+
+def test_config_resolver_theme(tmp_path, monkeypatch):
+    # 1. JSON config theme
+    config_path = tmp_path / "config.json"
+    data = {
+        "general": {
+            "theme": "cyberpunk-dark"
+        }
+    }
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+        
+    resolver = ConfigResolver(config_path=str(config_path))
+    config = resolver.resolve()
+    assert config.theme == "cyberpunk-dark"
+    
+    # 2. Env variable theme override (when JSON has no theme)
+    config_path_empty = tmp_path / "config_empty.json"
+    with open(config_path_empty, "w", encoding="utf-8") as f:
+        json.dump({}, f)
+        
+    monkeypatch.setenv("KIMI_USAGE_THEME", "nordic-dark")
+    resolver2 = ConfigResolver(config_path=str(config_path_empty))
+    config2 = resolver2.resolve()
+    assert config2.theme == "nordic-dark"
+
+
+def test_config_resolver_language_and_visible_providers(tmp_path):
+    config_path = tmp_path / "config.json"
+    data = {
+        "general": {
+            "theme": "matisse-dark",
+            "language": "zh",
+            "visibleProviders": ["openai", "kimi"]
+        }
+    }
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+        
+    resolver = ConfigResolver(config_path=str(config_path))
+    config = resolver.resolve()
+    assert config.theme == "matisse-dark"
+    assert config.language == "zh"
+    assert config.visible_providers == ["openai", "kimi"]
+
+
