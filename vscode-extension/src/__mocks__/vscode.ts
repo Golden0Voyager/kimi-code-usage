@@ -35,6 +35,10 @@ export class Uri {
   ) {}
 }
 
+export const ViewColumn = { One: 1, Two: 2, Three: 3 } as const;
+
+export const ColorThemeKind = { Light: 1, Dark: 2, HighContrast: 3 } as const;
+
 export const window = {
   createStatusBarItem: vi.fn(() => ({
     text: '',
@@ -56,9 +60,22 @@ export const window = {
     hide: vi.fn(),
     dispose: vi.fn(),
   })),
+  createWebviewPanel: vi.fn(() => ({
+    webview: {
+      html: '',
+      postMessage: vi.fn(),
+      onDidReceiveMessage: vi.fn(),
+      asWebviewUri: vi.fn((u: any) => u),
+      cspSource: 'vscode-webview://',
+    },
+    reveal: vi.fn(),
+    onDidDispose: vi.fn((_: any) => ({ dispose: vi.fn() })),
+    dispose: vi.fn(),
+  })),
   showWarningMessage: vi.fn(),
   showInformationMessage: vi.fn(),
   showErrorMessage: vi.fn(),
+  activeColorTheme: { kind: 1 },
 };
 
 export const workspace = {
