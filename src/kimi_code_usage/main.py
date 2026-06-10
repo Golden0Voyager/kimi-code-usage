@@ -1,226 +1,206 @@
-import os
-import asyncio
 import argparse
-import aiohttp
+import asyncio
 import json
+import os
 import sys
-from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
-from typing import Any, Mapping, Sequence, cast, Tuple, List
+from typing import Dict, List
+
+from kimi_code_usage.config import ConfigResolver
+from kimi_code_usage.providers import dispatch_all, ProviderUsage
 
 # --- i18n ---
 LANG = os.getenv("LANG", "en")
 IS_ZH = "zh" in LANG.lower()
 
 L_EN = {
-    "title": "Kimi Code Usage",
+    "title": "AI Quota Monitor",
     "weekly_limit": "Weekly Usage",
     "limit_fallback": "Limit",
     "remaining": "remaining",
     "countdown": "Countdown",
     "reset": "Reset",
-    "no_data": "No usage data found.",
-    "error_key": "KIMI_API_KEY not found in environment or .env file.",
+    "no_data": "No usage data found or no providers configured.",
     "error_api": "API Error",
 }
 
 L_ZH = {
-    "title": "Kimi Code 用量监控",
+    "title": "AI 用量配额监控",
     "weekly_limit": "周用量限额",
     "limit_fallback": "限额",
     "remaining": "剩余",
     "countdown": "重置倒计时",
     "reset": "重置时间",
-    "no_data": "未找到用量数据。",
-    "error_key": "未在环境或 .env 文件中找到 KIMI_API_KEY。",
+    "no_data": "未找到用量数据，或未配置任何服务商。",
     "error_api": "API 错误",
 }
 
 L = L_ZH if IS_ZH else L_EN
 
-class UsageRow:
-    def __init__(self, label: str, used: int, limit: int, reset_at: str = None, countdown: str = None):
-        self.label = label
-        self.used = used
-        self.limit = limit
-        self.reset_at = reset_at
-        self.countdown = countdown
-
-def _to_int(v) -> int | None:
-    try: return int(v)
-    except (TypeError, ValueError): return None
-
-def _get_reset_info(data: Mapping[str, Any]):
-    reset_at = data.get("resetTime") or data.get("reset_at") or data.get("reset_time")
-    if reset_at:
-        try:
-            if isinstance(reset_at, (int, float)):
-                dt = datetime.fromtimestamp(reset_at)
-            else:
-                dt = datetime.fromisoformat(reset_at.replace("Z", "+00:00")).astimezone()
-            
-            now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
-            diff = dt - now
-            if diff.total_seconds() <= 0: return dt.strftime("%m-%d %H:%M"), "0m"
-            days = diff.days
-            hours, rem = divmod(diff.seconds, 3600)
-            minutes, _ = divmod(rem, 60)
-            parts = []
-            if days > 0: parts.append(f"{days}d")
-            if hours > 0: parts.append(f"{hours}h")
-            parts.append(f"{minutes}m")
-            return dt.strftime("%m-%d %H:%M"), " ".join(parts)
-        except Exception: pass
-    
-    reset_in = _to_int(data.get("reset_in"))
-    if reset_in is not None:
-        dt = datetime.now() + timedelta(seconds=reset_in)
-        hours, rem = divmod(reset_in, 3600)
-        minutes, _ = divmod(rem, 60)
-        return dt.strftime("%m-%d %H:%M"), f"{hours}h {minutes}m"
-    return None
-
-def _limit_label(item, detail, window, idx) -> str:
-    duration = _to_int(window.get("duration"))
-    time_unit = str(window.get("time_unit") or "").upper()
-    if duration and time_unit:
-        if "HOUR" in time_unit: return f"{duration}h {L['limit_fallback']}"
-        if "DAY" in time_unit: return f"{duration}d {L['limit_fallback']}"
-    return f"{L['limit_fallback']} #{idx + 1}"
-
-def _to_usage_row(data, *, default_label) -> UsageRow | None:
-    limit = _to_int(data.get("limit") or data.get("limit_amount"))
-    used = _to_int(data.get("used") or data.get("used_amount"))
-    if used is None:
-        remaining = _to_int(data.get("remaining"))
-        if remaining is not None and limit is not None:
-            used = limit - remaining
-    if used is None and limit is None: return None
-    reset_at, countdown = _get_reset_info(data) or (None, None)
-    return UsageRow(
-        label=str(data.get("name") or data.get("title") or data.get("model_name") or default_label),
-        used=used or 0,
-        limit=limit or 0,
-        reset_at=reset_at,
-        countdown=countdown,
-    )
-
-def _parse_usage_payload(payload):
-    summary = None
-    limits = []
-    
-    # Check if it's the direct list from /usage or the nested dict from /usages
-    data_list = payload.get("data")
-    if isinstance(data_list, Sequence):
-        # Format: [{"model_name": "all", ...}, {"model_name": "...", ...}]
-        for item in data_list:
-            label = L["weekly_limit"] if item.get("model_name") == "all" else L["limit_fallback"]
-            row = _to_usage_row(item, default_label=label)
-            if row:
-                if item.get("model_name") == "all": summary = row
-                else: limits.append(row)
-    else:
-        # Original complex structure
-        usage = payload.get("usage")
-        if isinstance(usage, Mapping):
-            summary = _to_usage_row(cast(Mapping, usage), default_label=L["weekly_limit"])
-        raw_limits = payload.get("limits")
-        if isinstance(raw_limits, Sequence):
-            for idx, item in enumerate(raw_limits):
-                if not isinstance(item, Mapping): continue
-                detail = item.get("detail") if isinstance(item.get("detail"), Mapping) else item
-                window = item.get("window") if isinstance(item.get("window"), Mapping) else {}
-                row = _to_usage_row(detail, default_label=_limit_label(item, detail, window, idx))
-                if row: limits.append(row)
-                
-    return summary, limits
-
 def _get_visual_width(s: str) -> int:
     import unicodedata
     width = 0
     for char in s:
-        if unicodedata.east_asian_width(char) in ("W", "F", "A"): width += 2
-        else: width += 1
+        if unicodedata.east_asian_width(char) in ("W", "F", "A"):
+            width += 2
+        else:
+            width += 1
     return width
 
-def _format_rows(rows: List[UsageRow]) -> Text:
-    visual_widths = [_get_visual_width(r.label) for r in rows]
-    max_visual_width = max(visual_widths) if visual_widths else 0
-    max_visual_width = max(max_visual_width, 6)
-    bar_width = 20
-    result = Text()
-    for i, row in enumerate(rows):
-        used_ratio = row.used / row.limit if row.limit > 0 else 0
-        remaining_percent = 100 - (used_ratio * 100)
-        color = "red" if used_ratio > 0.9 else "yellow" if used_ratio > 0.7 else "green"
-        filled = int(used_ratio * bar_width)
-        if i > 0: result.append("\n\n")
-        
-        label_v_width = _get_visual_width(row.label)
-        padding = " " * (max_visual_width - label_v_width)
-        result.append(f"{row.label}{padding}  ", style="cyan")
-        result.append("█" * filled, style=color)
-        result.append("░" * (bar_width - filled))
-        result.append(f"  {used_ratio * 100:.0f}%   {remaining_percent:.0f}% {L['remaining']}", style="bold")
-        
-        meta_parts = []
-        if row.countdown: meta_parts.append(f"{L['countdown']}: {row.countdown}")
-        if row.reset_at: meta_parts.append(f"{L['reset']}: {row.reset_at}")
-        if meta_parts:
-            result.append("\n")
-            result.append("  ".join(meta_parts), style="dim cyan")
-    return result
+def _get_localized_label(label: str) -> str:
+    if label == "Weekly Usage":
+        return L["weekly_limit"]
+    if "Limit" in label:
+        return label.replace("Limit", L["limit_fallback"])
+    return label
 
-async def get_usage_data(api_key: str, base_url: str) -> Tuple[UsageRow | None, List[UsageRow]]:
-    url = base_url.rstrip("/") + "/usages"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}) as resp:
-            if resp.status != 200:
-                # Try fallback /usage if /usages fails
-                fallback_url = base_url.rstrip("/") + "/usage"
-                async with session.get(fallback_url, headers={"Authorization": f"Bearer {api_key}"}) as f_resp:
-                    if f_resp.status != 200:
-                        text = await f_resp.text()
-                        raise Exception(f"{L['error_api']} {f_resp.status}: {text}")
-                    payload = await f_resp.json()
+def _format_aggregated_results(results: Dict[str, List[ProviderUsage]], errors: Dict[str, str]) -> Text:
+    result = Text()
+    order = ["kimi", "openai", "anthropic", "openrouter"]
+    first_section = True
+
+    for p in order:
+        p_items = results.get(p)
+        if not p_items:
+            continue
+
+        if not first_section:
+            result.append("\n\n")
+        first_section = False
+
+        title_str = "Kimi" if p == "kimi" else p.capitalize()
+        result.append(f"── {title_str} ──────────────────────\n", style="bold cyan")
+
+        visual_widths = [_get_visual_width(_get_localized_label(r.label)) for r in p_items]
+        max_visual_width = max(visual_widths) if visual_widths else 0
+        max_visual_width = max(max_visual_width, 6)
+        bar_width = 20
+
+        for i, row in enumerate(p_items):
+            if i > 0:
+                result.append("\n")
+
+            loc_label = _get_localized_label(row.label)
+            label_v_width = _get_visual_width(loc_label)
+            padding = " " * (max_visual_width - label_v_width)
+
+            result.append(f"  {loc_label}{padding}  ", style="cyan")
+
+            if row.limit is not None and row.limit > 0:
+                used_ratio = row.used / row.limit
+                remaining_percent = max(0.0, 100.0 - (used_ratio * 100.0))
+                color = "red" if used_ratio > 0.9 else "yellow" if used_ratio > 0.7 else "green"
+                filled = min(bar_width, int(used_ratio * bar_width))
+
+                result.append("█" * filled, style=color)
+                result.append("░" * (bar_width - filled))
+
+                if row.unit == "%":
+                    result.append(f"  {used_ratio * 100:.0f}%   {remaining_percent:.0f}% {L['remaining']}", style="bold")
+                elif row.unit == "$":
+                    result.append(f"  ${row.used:.2f} / ${row.limit:.2f} ({remaining_percent:.0f}% {L['remaining']})", style="bold")
+                else:
+                    result.append(f"  {row.used:,.0f} / {row.limit:,.0f} {row.unit} ({remaining_percent:.0f}% {L['remaining']})", style="bold")
             else:
-                payload = await resp.json()
-    
-    return _parse_usage_payload(payload)
+                if row.unit == "$":
+                    result.append(f"  ${row.used:.2f}", style="bold")
+                elif row.unit == "text":
+                    # For messages like "API Plan" where label itself is descriptive
+                    pass
+                else:
+                    result.append(f"  {row.used:,.0f} {row.unit}", style="bold")
+
+            meta_parts = []
+            if row.countdown:
+                meta_parts.append(f"{L['countdown']}: {row.countdown}")
+            if row.reset_at:
+                meta_parts.append(f"{L['reset']}: {row.reset_at}")
+            if meta_parts:
+                result.append("\n")
+                result.append("  " + "  ".join(meta_parts), style="dim cyan")
+
+    for p, err in errors.items():
+        if not first_section:
+            result.append("\n\n")
+        first_section = False
+        title_str = "Kimi" if p == "kimi" else p.capitalize()
+        result.append(f"── {title_str} ──────────────────────\n", style="bold red")
+        result.append(f"  ⚠ {err}", style="bold red")
+
+    return result
 
 async def main():
     load_dotenv()
-    parser = argparse.ArgumentParser(description="Kimi Code Usage CLI")
+    parser = argparse.ArgumentParser(description="Multi-Provider AI Quota Tracker CLI")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--plain", action="store_true")
+    parser.add_argument("--provider", help="Comma-separated providers to query (kimi,openai,anthropic,openrouter)")
+    parser.add_argument("--config", help="Custom configuration file path")
     args = parser.parse_args()
 
-    api_key = os.getenv("KIMI_API_KEY") or os.getenv("KIMI_CODING_API_KEY")
-    base_url = os.getenv("KIMI_BASE_URL", "https://api.kimi.com/coding/v1")
-    if not api_key:
-        print(f"[Error] {L['error_key']}", file=sys.stderr)
-        return
+    resolver = ConfigResolver(config_path=args.config)
+    config = resolver.resolve()
 
-    try:
-        summary, limits = await get_usage_data(api_key, base_url)
-        rows = ([summary] if summary else []) + limits
+    # If --provider filter is provided, override enabled providers
+    allowed_providers = None
+    if args.provider:
+        allowed_providers = [p.strip().lower() for p in args.provider.split(",") if p.strip()]
+        # Filter config providers
+        for p in list(config.providers.keys()):
+            if p not in allowed_providers:
+                config.providers[p].api_key = None
 
-        if args.json:
-            print(json.dumps([{"label": r.label, "used": r.used, "limit": r.limit, "reset_at": r.reset_at} for r in rows], ensure_ascii=False))
-        elif args.plain:
-            for r in rows:
-                print(f"{r.label}: {r.used}/{r.limit} ({r.used/r.limit*100:.0f}% used)")
+    results, errors = await dispatch_all(config)
+
+    # Filter outputs
+    if allowed_providers:
+        results = {k: v for k, v in results.items() if k in allowed_providers}
+        errors = {k: v for k, v in errors.items() if k in allowed_providers}
+
+    if args.json:
+        output_data = {}
+        for p, items in results.items():
+            output_data[p] = [
+                {
+                    "label": item.label,
+                    "used": item.used,
+                    "limit": item.limit,
+                    "remaining": item.remaining,
+                    "percent": item.percent,
+                    "reset_at": item.reset_at,
+                    "unit": item.unit
+                }
+                for item in items
+            ]
+        # Include errors in JSON if any
+        if errors:
+            output_data["errors"] = errors
+        print(json.dumps(output_data, ensure_ascii=False))
+    elif args.plain:
+        if not results and not errors:
+            print(L["no_data"])
         else:
-            console = Console()
-            if not rows:
-                console.print(Panel(Text(L["no_data"], style="dim"), title=f"[bold]{L['title']}[/bold]"))
-            else:
-                console.print(Panel(_format_rows(rows), title=f"[bold]{L['title']}[/bold]", expand=False, padding=(1, 2, 0, 2)))
-    except Exception as e:
-        print(f"[Error] {e}", file=sys.stderr)
+            for p, items in results.items():
+                for item in items:
+                    if item.limit is not None and item.limit > 0:
+                        pct_used = item.used / item.limit * 100
+                        print(f"{p.capitalize()} - {item.label}: {item.used}/{item.limit} ({pct_used:.0f}% used)")
+                    else:
+                        if item.unit == "text":
+                            print(f"{p.capitalize()} - {item.label}")
+                        else:
+                            print(f"{p.capitalize()} - {item.label}: {item.used} ({item.unit})")
+            for p, err in errors.items():
+                print(f"{p.capitalize()} - Error: {err}", file=sys.stderr)
+    else:
+        console = Console()
+        if not results and not errors:
+            console.print(Panel(Text(L["no_data"], style="dim"), title=f"[bold]{L['title']}[/bold]"))
+        else:
+            console.print(Panel(_format_aggregated_results(results, errors), title=f"[bold]{L['title']}[/bold]", expand=False, padding=(1, 2, 1, 2)))
 
 def run_cli():
     asyncio.run(main())
