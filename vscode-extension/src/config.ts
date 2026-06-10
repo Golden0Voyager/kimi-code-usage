@@ -47,7 +47,7 @@ export function readPaceThresholds(cfg: vscode.WorkspaceConfiguration): Threshol
   const preset =
     sensitivity === 'Custom'
       ? SENSITIVITY_THRESHOLDS.Normal
-      : (SENSITIVITY_THRESHOLDS[sensitivity] ?? SENSITIVITY_THRESHOLDS.Normal);
+      : SENSITIVITY_THRESHOLDS[sensitivity];
 
   const customFast = cfg.get<number>('paceThresholdFast');
   const customSlow = cfg.get<number>('paceThresholdSlow');
@@ -72,7 +72,7 @@ export async function syncSensitivityToThresholds(
   sensitivity: PaceSensitivity,
 ): Promise<void> {
   if (sensitivity === 'Custom') return;
-  const preset = SENSITIVITY_THRESHOLDS[sensitivity] ?? SENSITIVITY_THRESHOLDS.Normal;
+  const preset = SENSITIVITY_THRESHOLDS[sensitivity];
   await cfg.update('paceThresholdFast', preset.fast, true);
   await cfg.update('paceThresholdSlow', preset.slow, true);
 }

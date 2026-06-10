@@ -119,7 +119,7 @@ export function getPacePresentation(
   const fromLegacy = cfg.get<string>(config.labelSetting, '');
 
   const theme = cfg.get<PaceTheme>('paceTheme', 'Simple');
-  const themeKey = (THEME_LABELS[theme] ?? THEME_LABELS['Simple'])[state];
+  const themeKey = THEME_LABELS[theme][state];
   const themeLabel = t(themeKey);
 
   const configuredLabel = (fromObject || fromLegacy || themeLabel).trim();

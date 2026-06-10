@@ -73,7 +73,6 @@ vi.mock('./config', () => ({
 
 vi.mock('./pace', () => ({
   computePace: vi.fn(() => ({ state: 'normal', ratio: 0.9 })),
-  computePace: vi.fn(() => ({ state: 'normal', ratio: 0.9 })),
   formatPaceBar: vi.fn(() => '[===]'),
   getPacePresentation: vi.fn(() => ({ icon: 'circle', label: 'Normal' })),
 }));

@@ -64,13 +64,13 @@ export function parsePayload(payload: unknown): UsageItem[] {
   const data = payload as Record<string, unknown>;
   const items: UsageItem[] = [];
 
-  const usage = data?.usage;
+  const usage = data.usage;
   if (usage && typeof usage === 'object') {
     const row = toRow(usage as Record<string, unknown>, t('Weekly limit'));
     if (row) items.push(row);
   }
 
-  const limits = data?.limits;
+  const limits = data.limits;
   if (Array.isArray(limits)) {
     for (let i = 0; i < limits.length; i++) {
       const item = limits[i];
@@ -81,7 +81,7 @@ export function parsePayload(payload: unknown): UsageItem[] {
         itemObj.detail && typeof itemObj.detail === 'object' ? itemObj.detail : itemObj
       ) as Record<string, unknown>;
 
-      const label = limitLabel(itemObj, detail, (itemObj.window as Record<string, unknown>) || {}, i);
+      const label = limitLabel(itemObj, detail, (itemObj.window as Record<string, unknown> | undefined) || {}, i);
       const row = toRow(detail, label);
       if (row) items.push(row);
     }

@@ -79,7 +79,6 @@ export class HistoryPanel {
     const cfg = vscode.workspace.getConfiguration('kimiCodeUsage');
     const retentionDays = readHistoryRetentionDays(cfg);
     const snapshots = await this.store.list({ sinceMs: Date.now() - retentionDays * DAY_MS });
-    if (!this.panel) return;
     const payload = buildPayload(snapshots, retentionDays);
     const isDark =
       vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ||

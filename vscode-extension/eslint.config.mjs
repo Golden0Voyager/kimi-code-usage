@@ -15,6 +15,7 @@ export default [
       parserOptions: {
         ecmaVersion: 2022,
         sourceType: 'module',
+        project: './tsconfig.eslint.json',
       },
       globals: {
         console: 'readonly',
@@ -28,6 +29,7 @@ export default [
         NodeJS: 'readonly',
         global: 'readonly',
         Thenable: 'readonly',
+        TextEncoder: 'readonly',
       },
     },
     plugins: {
@@ -38,6 +40,8 @@ export default [
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'off',
       'no-empty': ['error', { allowEmptyCatch: true }],
+      '@typescript-eslint/no-unnecessary-condition': 'error',
+      '@typescript-eslint/strict-boolean-expressions': 'warn',
     },
   },
   prettier,

@@ -62,8 +62,8 @@ export function predictExhaustion(
 
   const lastPoint = points[points.length - 1]!;
   let predictedTs: number | null = null;
-  const alreadyExhausted = !!lastPoint && lastPoint.limit > 0 && lastPoint.used >= lastPoint.limit;
-  if (lastPoint && !alreadyExhausted && slope > 0) {
+  const alreadyExhausted = lastPoint.limit > 0 && lastPoint.used >= lastPoint.limit;
+  if (!alreadyExhausted && slope > 0) {
     const targetX = (lastPoint.limit - intercept) / slope;
     predictedTs = x0 + targetX * 1000;
   }
