@@ -43,3 +43,4 @@ vscode-extension/coverage/
 # VS Code extension test runner
 .vscode-test/
 **/*.js.map
+tokscale-export-*.json
