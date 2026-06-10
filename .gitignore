@@ -17,6 +17,7 @@ package-lock.json
 # VSCode Extension artifacts
 *.vsix
 vscode-extension/out/
+vscode-extension/archive/
 
 # IDE
 .vscode/
@@ -30,3 +31,15 @@ Thumbs.db
 # Skill-generated analysis artifacts
 .understand-anything/
 .codegraph/
+
+# Python test artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+
+# Node / Vitest coverage
+vscode-extension/coverage/
+
+# VS Code extension test runner
+.vscode-test/
+**/*.js.map
