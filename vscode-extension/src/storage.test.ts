@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as fs from 'fs/promises';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as os from 'os';
 import * as path from 'path';
-import { SnapshotStore, buildSnapshotPath } from './storage';
+import * as fs from 'fs/promises';
+import { buildSnapshotPath, SnapshotStore } from './storage';
 import type { Snapshot } from './types';
 
 let dir = '';
@@ -160,5 +160,74 @@ describe('SnapshotStore', () => {
 describe('buildSnapshotPath', () => {
   it('joins under global storage', () => {
     expect(buildSnapshotPath('/var/storage')).toBe(path.join('/var/storage', 'history.jsonl'));
+  });
+
+  it('handles append error gracefully', async () => {
+    const store = new SnapshotStore('/nonexistent/deep/path/to/history.jsonl');
+    await expect(store.append(snap(1, 10, 100))).resolves.toBeUndefined();
+  });
+});
+
+describe('SnapshotStore edge cases', () => {
+  it('throws when read fails with non-ENOENT error', async () => {
+    const fp = path.join(dir, 'history.jsonl');
+    await fs.mkdir(fp);
+    const s = new SnapshotStore(fp);
+    await expect(s.list()).rejects.toThrow();
+  });
+
+  it('prunes all snapshots and clears underlying file', async () => {
+    await store.append(snap(1000));
+    await store.append(snap(5000));
+    const removed = await store.prune(Infinity);
+    expect(removed).toBe(2);
+    const list = await store.list();
+    expect(list).toEqual([]);
+  });
+
+  it('prune with no snapshots to remove returns 0', async () => {
+    await store.append(snap(1000));
+    await store.append(snap(5000));
+    const removed = await store.prune(0);
+    expect(removed).toBe(0);
+  });
+
+  it('skips invalid snapshot types', async () => {
+    const fp = path.join(dir, 'history.jsonl');
+    await fs.appendFile(fp, 'null\n', 'utf8');
+    await fs.appendFile(fp, '123\n', 'utf8');
+    await fs.appendFile(fp, '"string"\n', 'utf8');
+    await fs.appendFile(fp, '{"ts": "not-a-number", "items": []}\n', 'utf8');
+    await fs.appendFile(fp, '{"ts": 123, "items": "not-an-array"}\n', 'utf8');
+    await fs.appendFile(fp, '{"ts": 123, "items": [null]}\n', 'utf8');
+    await fs.appendFile(fp, '{"ts": 123, "items": ["string"]}\n', 'utf8');
+    await store.append(snap(2000));
+    const list = await store.list();
+    expect(list.map((s) => s.ts)).toEqual([2000]);
+  });
+
+  it('clear reraises non-missing file errors', async () => {
+    const fp = path.join(dir, 'history.jsonl');
+    await fs.mkdir(fp);
+    const s = new SnapshotStore(fp);
+    await expect(s.clear()).rejects.toThrow();
+  });
+
+  it('clear ignores missing file errors', async () => {
+    const fp = path.join(dir, 'nonexistent-history.jsonl');
+    const s = new SnapshotStore(fp);
+    await expect(s.clear()).resolves.toBeUndefined();
+  });
+
+  it('list handles writeQueue rejection gracefully', async () => {
+    // Override clearUnsafe to throw an error, causing enqueue to reject
+    (store as any).clearUnsafe = () => Promise.reject(new Error('Unlink failed'));
+    
+    const clearPromise = store.clear();
+    await expect(clearPromise).rejects.toThrow('Unlink failed');
+
+    // Call list() immediately while writeQueue is still in rejected state to cover list catch block
+    const list = await store.list();
+    expect(list).toEqual([]);
   });
 });
