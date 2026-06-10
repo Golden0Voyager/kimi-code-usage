@@ -60,7 +60,7 @@ export function predictExhaustion(
   else if (dailyRate > 0) trend = 'increasing';
   else trend = 'decreasing';
 
-  const lastPoint = points[points.length - 1];
+  const lastPoint = points[points.length - 1]!;
   let predictedTs: number | null = null;
   const alreadyExhausted = !!lastPoint && lastPoint.limit > 0 && lastPoint.used >= lastPoint.limit;
   if (lastPoint && !alreadyExhausted && slope > 0) {
@@ -133,8 +133,8 @@ function dedupeByTimestamp(points: Array<{ ts: number; used: number; limit: numb
 function currentWindowSegment(points: Array<{ ts: number; used: number; limit: number }>): typeof points {
   let start = 0;
   for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const cur = points[i];
+    const prev = points[i - 1]!;
+    const cur = points[i]!;
     if (isResetBoundary(prev, cur)) {
       start = i;
     }
@@ -155,13 +155,13 @@ function isResetBoundary(
 }
 
 function linearRegression(points: Array<{ ts: number; used: number; limit: number }>) {
-  const x0 = points[0].ts;
+  const x0 = points[0]!.ts;
   const xs = points.map((p) => (p.ts - x0) / 1000);
   const ys = points.map((p) => p.used);
   const n = xs.length;
   const sumX = xs.reduce((a, b) => a + b, 0);
   const sumY = ys.reduce((a, b) => a + b, 0);
-  const sumXY = xs.reduce((acc, x, i) => acc + x * ys[i], 0);
+  const sumXY = xs.reduce((acc, x, i) => acc + x * ys[i]!, 0);
   const sumX2 = xs.reduce((acc, x) => acc + x * x, 0);
   const denom = n * sumX2 - sumX * sumX;
   if (denom === 0) {

@@ -195,7 +195,7 @@ export function normalizeIso(val: string): string {
   let iso = val;
   if (iso.includes('.') && iso.endsWith('Z')) {
     const [base, frac] = iso.slice(0, -1).split('.');
-    iso = `${base}.${frac.slice(0, 6)}Z`;
+    iso = `${base!}.${frac!.slice(0, 6)}Z`;
   }
   return iso;
 }

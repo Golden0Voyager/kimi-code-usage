@@ -612,7 +612,7 @@ function buildSeries(snapshots: Snapshot[], windowType: WindowType): Series | nu
   }
   if (points.length === 0) return null;
   points.sort((a, b) => a.ts - b.ts);
-  const first = points[0];
+  const first = points[0]!;
   return {
     windowType,
     label: localizedLimitName(first.label) || first.label,

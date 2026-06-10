@@ -93,8 +93,8 @@ export async function resolveApiKey(): Promise<string> {
         for (const line of lines) {
           const match = line.match(/^\s*(KIMI_CODING_API_KEY|KIMI_API_KEY)\s*=\s*['"]?([^'"\s]+)['"]?/);
           if (match) {
-            if (match[1] === 'KIMI_CODING_API_KEY') return match[2];
-            if (!fallbackKey) fallbackKey = match[2];
+            if (match[1]! === 'KIMI_CODING_API_KEY') return match[2]!;
+            if (!fallbackKey) fallbackKey = match[2]!;
           }
         }
         if (fallbackKey) return fallbackKey;
