@@ -12,6 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
     "types": ["node", "vscode"]
   },
   "exclude": ["node_modules", ".vscode-test", "src/**/*.test.ts", "src/__mocks__/**", "scripts/**", "vitest.config.ts"]
