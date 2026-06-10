@@ -67,7 +67,10 @@ async def test_multiple_providers(monkeypatch):
             ProviderUsage(provider="openai", label="Tokens", used=1000, limit=None, remaining=None, percent=None, reset_at=None, unit="tokens"),
             ProviderUsage(provider="openai", label="Cost", used=1.5, limit=None, remaining=None, percent=None, reset_at=None, unit="$")
         ],
-        "anthropic": [ProviderUsage(provider="anthropic", label="API Plan", used=0, limit=None, remaining=None, percent=None, reset_at=None, unit="text")],
+        "anthropic": [
+            ProviderUsage(provider="anthropic", label="API Plan", used=0, limit=None, remaining=None, percent=None, reset_at=None, unit="text", text_value="Pro Plan"),
+            ProviderUsage(provider="anthropic", label="Empty Plan", used=0, limit=None, remaining=None, percent=None, reset_at=None, unit="text", text_value=None)
+        ],
         "openrouter": [ProviderUsage(provider="openrouter", label="Credits", used=2.5, limit=10.0, remaining=7.5, percent=25.0, reset_at=None, unit="$")]
     }
     mock_errors = {
@@ -82,7 +85,8 @@ async def test_multiple_providers(monkeypatch):
         assert "Openai - Tokens: 1,000 used" in result
         assert "Openai - Cost: $1.50 used" in result
         assert "Openai - Error: Auth error" in result
-        assert "Anthropic - API Plan" in result
+        assert "Anthropic - API Plan: Pro Plan" in result
+        assert "Anthropic - Empty Plan" in result
         assert "Openrouter - Credits: $2.50/$10.00 used" in result
 
 @pytest.mark.asyncio
