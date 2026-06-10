@@ -82,6 +82,16 @@ def test_config_resolver_env_variables(tmp_path, monkeypatch):
     assert config.providers["anthropic"].api_key == "env-anthropic-key"
     assert config.providers["anthropic"].base_url == "https://api.anthropic.com"
 
+def test_config_resolver_openrouter_admin_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_ADMIN_KEY", "env-or-admin-key")
+    
+    config_path = tmp_path / "nonexistent.json"
+    resolver = ConfigResolver(config_path=str(config_path))
+    config = resolver.resolve()
+    
+    assert "openrouter" in config.enabled_providers
+    assert config.providers["openrouter"].api_key == "env-or-admin-key"
+
 def test_config_resolver_priority(tmp_path, monkeypatch):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-env-key")
     

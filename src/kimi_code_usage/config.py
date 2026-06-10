@@ -51,7 +51,7 @@ class ConfigResolver:
             "kimi": ("KIMI_API_KEY", "KIMI_CODING_API_KEY"),
             "openai": ("OPENAI_API_KEY",),
             "anthropic": ("ANTHROPIC_API_KEY",),
-            "openrouter": ("OPENROUTER_API_KEY",),
+            "openrouter": ("OPENROUTER_API_KEY", "OPENROUTER_ADMIN_KEY"),
         }
 
         env_urls = {
