@@ -8,13 +8,17 @@ const src = path.join(root, 'node_modules', 'chart.js', 'dist', 'chart.umd.js');
 const destDir = path.join(root, 'out', 'media');
 const dest = path.join(destDir, 'chart.umd.js');
 
-try {
-  await access(src);
-} catch {
-  console.error(`[copy-assets] missing ${src}. Did you run "npm install"?`);
-  process.exit(1);
+async function main(): Promise<void> {
+  try {
+    await access(src);
+  } catch {
+    console.error(`[copy-assets] missing ${src}. Did you run "npm install"?`);
+    process.exit(1);
+  }
+
+  await mkdir(destDir, { recursive: true });
+  await copyFile(src, dest);
+  console.log(`[copy-assets] ${path.relative(root, src)} -> ${path.relative(root, dest)}`);
 }
 
-await mkdir(destDir, { recursive: true });
-await copyFile(src, dest);
-console.log(`[copy-assets] ${path.relative(root, src)} -> ${path.relative(root, dest)}`);
+main();
