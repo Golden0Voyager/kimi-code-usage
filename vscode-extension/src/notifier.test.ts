@@ -120,7 +120,8 @@ describe('Notifier.checkAndNotify', () => {
     show.mockClear();
     await n.checkAndNotify([item('Weekly limit', 5)], false);
     expect(show).not.toHaveBeenCalled();
-  });  it('checkAndNotify handles critical to critical transition (no duplicate notification)', async () => {
+  });
+  it('checkAndNotify handles critical to critical transition (no duplicate notification)', async () => {
     const show = vi.fn().mockResolvedValue(undefined);
     const n = new Notifier(opts, show);
     await n.checkAndNotify([item('Weekly limit', 3), item('5h limit', 3)], false);

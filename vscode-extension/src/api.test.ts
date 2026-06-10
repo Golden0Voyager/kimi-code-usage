@@ -216,9 +216,7 @@ describe('parsePayload', () => {
 
   it('falls back to generic seconds label for unknown timeUnit', () => {
     const raw = {
-      limits: [
-        { detail: { used: 5, limit: 100 }, window: { timeUnit: 'SECOND', duration: 30 } },
-      ] as any,
+      limits: [{ detail: { used: 5, limit: 100 }, window: { timeUnit: 'SECOND', duration: 30 } }] as any,
     };
     const result = parsePayload(raw);
     expect(result).toHaveLength(1);
@@ -227,9 +225,7 @@ describe('parsePayload', () => {
 
   it('formats MINUTE timeUnit as hours when duration >= 60 and divisible by 60', () => {
     const raw = {
-      limits: [
-        { detail: { used: 10, limit: 100 }, window: { timeUnit: 'MINUTE', duration: 120 } },
-      ] as any,
+      limits: [{ detail: { used: 10, limit: 100 }, window: { timeUnit: 'MINUTE', duration: 120 } }] as any,
     };
     const result = parsePayload(raw);
     expect(result).toHaveLength(1);
@@ -238,9 +234,7 @@ describe('parsePayload', () => {
 
   it('formats DAY timeUnit label', () => {
     const raw = {
-      limits: [
-        { detail: { used: 10, limit: 100 }, window: { timeUnit: 'DAY', duration: 14 } },
-      ] as any,
+      limits: [{ detail: { used: 10, limit: 100 }, window: { timeUnit: 'DAY', duration: 14 } }] as any,
     };
     const result = parsePayload(raw);
     expect(result).toHaveLength(1);
@@ -249,9 +243,7 @@ describe('parsePayload', () => {
 
   it('formats HOUR timeUnit label', () => {
     const raw = {
-      limits: [
-        { detail: { used: 10, limit: 100 }, window: { timeUnit: 'HOUR', duration: 3 } },
-      ] as any,
+      limits: [{ detail: { used: 10, limit: 100 }, window: { timeUnit: 'HOUR', duration: 3 } }] as any,
     };
     const result = parsePayload(raw);
     expect(result).toHaveLength(1);
@@ -260,9 +252,7 @@ describe('parsePayload', () => {
 
   it('formats sub-hour MINUTE duration as minutes', () => {
     const raw = {
-      limits: [
-        { detail: { used: 5, limit: 100 }, window: { timeUnit: 'MINUTE', duration: 30 } },
-      ] as any,
+      limits: [{ detail: { used: 5, limit: 100 }, window: { timeUnit: 'MINUTE', duration: 30 } }] as any,
     };
     const result = parsePayload(raw);
     expect(result).toHaveLength(1);
@@ -271,9 +261,7 @@ describe('parsePayload', () => {
 
   it('formats MINUTE timeUnit as minutes when not divisible by 60', () => {
     const raw = {
-      limits: [
-        { detail: { used: 10, limit: 100 }, window: { timeUnit: 'MINUTE', duration: 90 } },
-      ] as any,
+      limits: [{ detail: { used: 10, limit: 100 }, window: { timeUnit: 'MINUTE', duration: 90 } }] as any,
     };
     const result = parsePayload(raw);
     expect(result).toHaveLength(1);
@@ -385,7 +373,6 @@ describe('isLinkIssue', () => {
   });
 });
 
-
 describe('localizedLimitName', () => {
   it('returns "Weekly" for weekly labels', () => {
     expect(localizedLimitName('Weekly')).toBe('Weekly');
@@ -422,13 +409,42 @@ describe('shortLabel', () => {
 describe('findWindowItem', () => {
   it('finds matching item by window type', () => {
     const items = [
-      { label: 'Weekly', used: 10, limit: 100, remaining: 90, percent_left: 90, reset_hint: null, reset_seconds: null, reset_at: null } as any,
-      { label: 'Monthly', used: 50, limit: 200, remaining: 150, percent_left: 75, reset_hint: null, reset_seconds: null, reset_at: null } as any,
+      {
+        label: 'Weekly',
+        used: 10,
+        limit: 100,
+        remaining: 90,
+        percent_left: 90,
+        reset_hint: null,
+        reset_seconds: null,
+        reset_at: null,
+      } as any,
+      {
+        label: 'Monthly',
+        used: 50,
+        limit: 200,
+        remaining: 150,
+        percent_left: 75,
+        reset_hint: null,
+        reset_seconds: null,
+        reset_at: null,
+      } as any,
     ];
     expect(findWindowItem(items, 'weekly')).toBe(items[0]);
   });
   it('returns undefined when no match', () => {
-    const items = [{ label: 'Weekly', used: 10, limit: 100, remaining: 90, percent_left: 90, reset_hint: null, reset_seconds: null, reset_at: null } as any];
+    const items = [
+      {
+        label: 'Weekly',
+        used: 10,
+        limit: 100,
+        remaining: 90,
+        percent_left: 90,
+        reset_hint: null,
+        reset_seconds: null,
+        reset_at: null,
+      } as any,
+    ];
     expect(findWindowItem(items, 'fiveHours')).toBeUndefined();
   });
 });
@@ -438,11 +454,29 @@ describe('isLowRemaining', () => {
     expect(isLowRemaining(undefined, 20)).toBe(false);
   });
   it('returns true when percent_left is below threshold', () => {
-    const item = { label: 'Weekly', used: 90, limit: 100, remaining: 10, percent_left: 10, reset_hint: null, reset_seconds: null, reset_at: null } as any;
+    const item = {
+      label: 'Weekly',
+      used: 90,
+      limit: 100,
+      remaining: 10,
+      percent_left: 10,
+      reset_hint: null,
+      reset_seconds: null,
+      reset_at: null,
+    } as any;
     expect(isLowRemaining(item, 20)).toBe(true);
   });
   it('returns false when percent_left is above threshold', () => {
-    const item = { label: 'Weekly', used: 10, limit: 100, remaining: 90, percent_left: 90, reset_hint: null, reset_seconds: null, reset_at: null } as any;
+    const item = {
+      label: 'Weekly',
+      used: 10,
+      limit: 100,
+      remaining: 90,
+      percent_left: 90,
+      reset_hint: null,
+      reset_seconds: null,
+      reset_at: null,
+    } as any;
     expect(isLowRemaining(item, 20)).toBe(false);
   });
 });
@@ -521,7 +555,7 @@ describe('fetchUsage', () => {
   it('fetches and parses valid JSON response', async () => {
     const chunks = [JSON.stringify({ used: 50, limit: 100 })];
     mockRes.on = vi.fn((event: string, cb: any) => {
-      if (event === 'data') chunks.forEach(c => cb(c));
+      if (event === 'data') chunks.forEach((c) => cb(c));
       if (event === 'end') cb();
     });
     vi.mocked(https.get).mockImplementation((_url: any, _opts: any, cb: any) => {
@@ -585,7 +619,7 @@ describe('fetchUsage', () => {
     vi.mocked(https.get).mockReturnValue(mockReq);
 
     const fetchPromise = fetchUsage('https://api.example.com', 'sk-test');
-    errorHandlers.forEach(cb => cb(new Error('ENOTFOUND api.example.com')));
+    errorHandlers.forEach((cb) => cb(new Error('ENOTFOUND api.example.com')));
 
     await expect(fetchPromise).rejects.toThrow('ENOTFOUND');
   });

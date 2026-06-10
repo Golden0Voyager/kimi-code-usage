@@ -13,7 +13,7 @@ import {
   commands,
   l10n,
   ConfigurationTarget,
-  EventEmitter
+  EventEmitter,
 } from './__mocks__/vscode';
 
 describe('VS Code Mock', () => {
@@ -42,7 +42,7 @@ describe('VS Code Mock', () => {
   it('Uri helper works', () => {
     const u = Uri.file('/path');
     expect(u.path).toBe('/path');
-    
+
     const joined = Uri.joinPath(u, 'sub', 'dir');
     expect(joined.path).toBe('/path/sub/dir');
   });

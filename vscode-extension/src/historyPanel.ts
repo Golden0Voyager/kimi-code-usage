@@ -75,15 +75,18 @@ export class HistoryPanel {
   }
 
   private async refresh(): Promise<void> {
-    if (!this.panel) return;
+    const panel = this.panel;
+    if (!panel) return;
     const cfg = vscode.workspace.getConfiguration('kimiCodeUsage');
     const retentionDays = readHistoryRetentionDays(cfg);
     const snapshots = await this.store.list({ sinceMs: Date.now() - retentionDays * DAY_MS });
+    const activePanel = this.panel as vscode.WebviewPanel | undefined;
+    if (!activePanel) return;
     const payload = buildPayload(snapshots, retentionDays);
     const isDark =
       vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ||
       vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.HighContrast;
-    await this.panel.webview.postMessage({ type: 'data', payload, isDark });
+    await panel.webview.postMessage({ type: 'data', payload, isDark });
   }
 
   private renderHtml(): string {

@@ -61,6 +61,7 @@ export function shortLabel(label: string): string {
 }
 
 export function parsePayload(payload: unknown): UsageItem[] {
+  if (!payload || typeof payload !== 'object') return [];
   const data = payload as Record<string, unknown>;
   const items: UsageItem[] = [];
 
@@ -81,7 +82,12 @@ export function parsePayload(payload: unknown): UsageItem[] {
         itemObj.detail && typeof itemObj.detail === 'object' ? itemObj.detail : itemObj
       ) as Record<string, unknown>;
 
-      const label = limitLabel(itemObj, detail, (itemObj.window as Record<string, unknown> | undefined) || {}, i);
+      const label = limitLabel(
+        itemObj,
+        detail,
+        (itemObj.window as Record<string, unknown> | undefined) || {},
+        i,
+      );
       const row = toRow(detail, label);
       if (row) items.push(row);
     }

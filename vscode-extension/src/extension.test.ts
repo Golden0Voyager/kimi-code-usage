@@ -19,12 +19,15 @@ vi.mocked(vscode.workspace.onDidChangeConfiguration).mockImplementation(
 let cfgStore: Record<string, any> = {};
 
 // Mock the configuration
-vi.mocked(vscode.workspace.getConfiguration).mockImplementation((section?: string) => ({
-  get: vi.fn((key: string, def?: any) => (key in cfgStore ? cfgStore[key] : def)),
-  update: vi.fn(),
-  has: vi.fn(),
-  inspect: vi.fn(),
-}) as any);
+vi.mocked(vscode.workspace.getConfiguration).mockImplementation(
+  (section?: string) =>
+    ({
+      get: vi.fn((key: string, def?: any) => (key in cfgStore ? cfgStore[key] : def)),
+      update: vi.fn(),
+      has: vi.fn(),
+      inspect: vi.fn(),
+    }) as any,
+);
 
 // Mock all extension dependency modules
 vi.mock('./i18n', () => ({
@@ -32,7 +35,9 @@ vi.mock('./i18n', () => ({
   updateActiveLanguage: vi.fn(),
   currentLang: vi.fn(() => 'en'),
   isZh: vi.fn(() => false),
-  Translator: vi.fn().mockImplementation(function () { return { t: (s: string) => s }; }),
+  Translator: vi.fn().mockImplementation(function () {
+    return { t: (s: string) => s };
+  }),
 }));
 
 vi.mock('./config', () => ({
@@ -53,23 +58,29 @@ vi.mock('./statusBar', () => ({
 }));
 
 vi.mock('./storage', () => ({
-  SnapshotStore: vi.fn().mockImplementation(function () { return {
-    append: vi.fn(),
-    list: vi.fn(),
-    prune: vi.fn(),
-    clear: vi.fn(),
-  }; }),
+  SnapshotStore: vi.fn().mockImplementation(function () {
+    return {
+      append: vi.fn(),
+      list: vi.fn(),
+      prune: vi.fn(),
+      clear: vi.fn(),
+    };
+  }),
   buildSnapshotPath: vi.fn((p: string) => `${p}/history.jsonl`),
 }));
 
 vi.mock('./historyPanel', () => ({
-  HistoryPanel: vi.fn().mockImplementation(function () { return {
-    show: vi.fn(),
-  }; }),
+  HistoryPanel: vi.fn().mockImplementation(function () {
+    return {
+      show: vi.fn(),
+    };
+  }),
 }));
 
 vi.mock('./notifier', () => ({
-  Notifier: vi.fn().mockImplementation(function () { return {}; }),
+  Notifier: vi.fn().mockImplementation(function () {
+    return {};
+  }),
 }));
 
 vi.mock('./apiCache', () => ({
@@ -89,11 +100,10 @@ function makeConfigEvent(...changedKeys: string[]) {
   return {
     affectsConfiguration: vi.fn((target: string) => {
       // Real VS Code API does prefix matching
-      return changedKeys.some(key => key === target || key.startsWith(target + '.'));
+      return changedKeys.some((key) => key === target || key.startsWith(target + '.'));
     }),
   };
 }
-
 
 describe('Extension activation and deactivation', () => {
   let mockContext: any;
@@ -275,9 +285,9 @@ describe('Extension activation and deactivation', () => {
     activate(mockContext);
 
     // Find the refresh command handler and call it
-    const refreshCall = vi.mocked(vscode.commands.registerCommand).mock.calls.find(
-      ([name]) => name === 'kimiCodeUsage.refresh',
-    );
+    const refreshCall = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.find(([name]) => name === 'kimiCodeUsage.refresh');
     expect(refreshCall).toBeDefined();
     const [, handler] = refreshCall!;
 
@@ -294,9 +304,9 @@ describe('Extension activation and deactivation', () => {
     const { activate } = await import('./extension');
     activate(mockContext);
 
-    const detailsCall = vi.mocked(vscode.commands.registerCommand).mock.calls.find(
-      ([name]) => name === 'kimiCodeUsage.showDetails',
-    );
+    const detailsCall = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.find(([name]) => name === 'kimiCodeUsage.showDetails');
     expect(detailsCall).toBeDefined();
     const [, handler] = detailsCall!;
 
@@ -310,9 +320,9 @@ describe('Extension activation and deactivation', () => {
     const { activate } = await import('./extension');
     activate(mockContext);
 
-    const historyCall = vi.mocked(vscode.commands.registerCommand).mock.calls.find(
-      ([name]) => name === 'kimiCodeUsage.showHistory',
-    );
+    const historyCall = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.find(([name]) => name === 'kimiCodeUsage.showHistory');
     expect(historyCall).toBeDefined();
     const [, handler] = historyCall!;
 
@@ -561,12 +571,9 @@ describe('Extension activation and deactivation', () => {
       await listener(makeConfigEvent('kimiCodeUsage.historyRetentionDays'));
 
       // Flush microtasks so the rejected promise from pruneSnapshotStore propagates
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        '[KimiCodeUsage] Failed to prune history',
-        expect.any(Error),
-      );
+      expect(consoleSpy).toHaveBeenCalledWith('[KimiCodeUsage] Failed to prune history', expect.any(Error));
     } finally {
       consoleSpy.mockRestore();
     }

@@ -4,9 +4,7 @@ vi.mock('fs/promises', async (importOriginal) => {
   const actual: any = await importOriginal();
   return {
     ...actual,
-    unlink: vi.fn().mockRejectedValue(
-      Object.assign(new Error('EACCES'), { code: 'EACCES' }),
-    ),
+    unlink: vi.fn().mockRejectedValue(Object.assign(new Error('EACCES'), { code: 'EACCES' })),
   };
 });
 
