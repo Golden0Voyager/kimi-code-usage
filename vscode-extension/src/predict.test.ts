@@ -299,9 +299,45 @@ describe('predictExhaustion', () => {
     // This hits line 100-102 of predict.ts
     // Need 3+ snapshots so hasEnoughData becomes true and windowDays is called
     const snapshots = [
-      { ts: 1000, items: [{ label: 'Custom window', windowType: 'other', used: 10, limit: 100, percent_left: 90, paceRatio: null }] },
-      { ts: 2000, items: [{ label: 'Custom window', windowType: 'other', used: 20, limit: 100, percent_left: 80, paceRatio: null }] },
-      { ts: 3000, items: [{ label: 'Custom window', windowType: 'other', used: 30, limit: 100, percent_left: 70, paceRatio: null }] },
+      {
+        ts: 1000,
+        items: [
+          {
+            label: 'Custom window',
+            windowType: 'other',
+            used: 10,
+            limit: 100,
+            percent_left: 90,
+            paceRatio: null,
+          },
+        ],
+      },
+      {
+        ts: 2000,
+        items: [
+          {
+            label: 'Custom window',
+            windowType: 'other',
+            used: 20,
+            limit: 100,
+            percent_left: 80,
+            paceRatio: null,
+          },
+        ],
+      },
+      {
+        ts: 3000,
+        items: [
+          {
+            label: 'Custom window',
+            windowType: 'other',
+            used: 30,
+            limit: 100,
+            percent_left: 70,
+            paceRatio: null,
+          },
+        ],
+      },
     ];
     const result = predictExhaustion(snapshots, 'other');
     expect(result.hasEnoughData).toBe(true);
@@ -321,9 +357,45 @@ describe('predictExhaustion', () => {
 describe('windowDays', () => {
   it('returns 30 for monthly window type', () => {
     const items = [
-      { ts: 1000, items: [{ label: 'Monthly', windowType: 'monthly', used: 10, limit: 100, percent_left: 90, paceRatio: null }] },
-      { ts: 2000, items: [{ label: 'Monthly', windowType: 'monthly', used: 20, limit: 100, percent_left: 80, paceRatio: null }] },
-      { ts: 3000, items: [{ label: 'Monthly', windowType: 'monthly', used: 30, limit: 100, percent_left: 70, paceRatio: null }] },
+      {
+        ts: 1000,
+        items: [
+          {
+            label: 'Monthly',
+            windowType: 'monthly',
+            used: 10,
+            limit: 100,
+            percent_left: 90,
+            paceRatio: null,
+          },
+        ],
+      },
+      {
+        ts: 2000,
+        items: [
+          {
+            label: 'Monthly',
+            windowType: 'monthly',
+            used: 20,
+            limit: 100,
+            percent_left: 80,
+            paceRatio: null,
+          },
+        ],
+      },
+      {
+        ts: 3000,
+        items: [
+          {
+            label: 'Monthly',
+            windowType: 'monthly',
+            used: 30,
+            limit: 100,
+            percent_left: 70,
+            paceRatio: null,
+          },
+        ],
+      },
     ];
     const result = predictExhaustion(items, 'monthly');
     expect(result.hasEnoughData).toBe(true);
@@ -333,9 +405,24 @@ describe('windowDays', () => {
 describe('linearRegression edge case', () => {
   it('handles zero denominator with same timestamps', () => {
     const samples = [
-      { ts: 1000, items: [{ label: 'T', windowType: 'weekly', used: 10, limit: 100, percent_left: 90, paceRatio: null }] },
-      { ts: 1000, items: [{ label: 'T', windowType: 'weekly', used: 20, limit: 100, percent_left: 80, paceRatio: null }] },
-      { ts: 1000, items: [{ label: 'T', windowType: 'weekly', used: 30, limit: 100, percent_left: 70, paceRatio: null }] },
+      {
+        ts: 1000,
+        items: [
+          { label: 'T', windowType: 'weekly', used: 10, limit: 100, percent_left: 90, paceRatio: null },
+        ],
+      },
+      {
+        ts: 1000,
+        items: [
+          { label: 'T', windowType: 'weekly', used: 20, limit: 100, percent_left: 80, paceRatio: null },
+        ],
+      },
+      {
+        ts: 1000,
+        items: [
+          { label: 'T', windowType: 'weekly', used: 30, limit: 100, percent_left: 70, paceRatio: null },
+        ],
+      },
     ];
     const result = predictExhaustion(samples, 'weekly');
     expect(result).toBeDefined();
@@ -344,9 +431,24 @@ describe('linearRegression edge case', () => {
 
   it('handles zero denominator gracefully', () => {
     const samples = [
-      { ts: 1000, items: [{ label: 'Test', windowType: 'weekly', used: 10, limit: 100, percent_left: 90, paceRatio: null }] },
-      { ts: 2000, items: [{ label: 'Test', windowType: 'weekly', used: 20, limit: 100, percent_left: 80, paceRatio: null }] },
-      { ts: 3000, items: [{ label: 'Test', windowType: 'weekly', used: 30, limit: 100, percent_left: 70, paceRatio: null }] },
+      {
+        ts: 1000,
+        items: [
+          { label: 'Test', windowType: 'weekly', used: 10, limit: 100, percent_left: 90, paceRatio: null },
+        ],
+      },
+      {
+        ts: 2000,
+        items: [
+          { label: 'Test', windowType: 'weekly', used: 20, limit: 100, percent_left: 80, paceRatio: null },
+        ],
+      },
+      {
+        ts: 3000,
+        items: [
+          { label: 'Test', windowType: 'weekly', used: 30, limit: 100, percent_left: 70, paceRatio: null },
+        ],
+      },
     ];
     const result = predictExhaustion(samples, 'weekly');
     expect(result).toBeDefined();
@@ -355,9 +457,45 @@ describe('linearRegression edge case', () => {
   it('dedupeByTimestamp removes duplicate timestamp points', () => {
     const base = Date.UTC(2025, 0, 1);
     const snaps = [
-      { ts: base, items: [{ label: 'Weekly limit', windowType: 'weekly' as const, used: 10, limit: 100, percent_left: 90, paceRatio: null }] },
-      { ts: base, items: [{ label: 'Weekly limit', windowType: 'weekly' as const, used: 20, limit: 100, percent_left: 80, paceRatio: null }] },
-      { ts: base + DAY, items: [{ label: 'Weekly limit', windowType: 'weekly' as const, used: 30, limit: 100, percent_left: 70, paceRatio: null }] },
+      {
+        ts: base,
+        items: [
+          {
+            label: 'Weekly limit',
+            windowType: 'weekly' as const,
+            used: 10,
+            limit: 100,
+            percent_left: 90,
+            paceRatio: null,
+          },
+        ],
+      },
+      {
+        ts: base,
+        items: [
+          {
+            label: 'Weekly limit',
+            windowType: 'weekly' as const,
+            used: 20,
+            limit: 100,
+            percent_left: 80,
+            paceRatio: null,
+          },
+        ],
+      },
+      {
+        ts: base + DAY,
+        items: [
+          {
+            label: 'Weekly limit',
+            windowType: 'weekly' as const,
+            used: 30,
+            limit: 100,
+            percent_left: 70,
+            paceRatio: null,
+          },
+        ],
+      },
     ];
     const result = predictExhaustion(snaps, 'weekly');
     expect(result.sampleSize).toBe(2);
@@ -366,11 +504,71 @@ describe('linearRegression edge case', () => {
   it('isResetBoundary detects reset when limit changes', () => {
     const base = Date.UTC(2025, 0, 1);
     const snaps = [
-      { ts: base, items: [{ label: 'Weekly limit', windowType: 'weekly' as const, used: 10, limit: 100, percent_left: 90, paceRatio: null }] },
-      { ts: base + DAY, items: [{ label: 'Weekly limit', windowType: 'weekly' as const, used: 20, limit: 100, percent_left: 80, paceRatio: null }] },
-      { ts: base + 2 * DAY, items: [{ label: 'Weekly limit', windowType: 'weekly' as const, used: 5, limit: 200, percent_left: 97.5, paceRatio: null }] },
-      { ts: base + 3 * DAY, items: [{ label: 'Weekly limit', windowType: 'weekly' as const, used: 10, limit: 200, percent_left: 95, paceRatio: null }] },
-      { ts: base + 4 * DAY, items: [{ label: 'Weekly limit', windowType: 'weekly' as const, used: 15, limit: 200, percent_left: 92.5, paceRatio: null }] },
+      {
+        ts: base,
+        items: [
+          {
+            label: 'Weekly limit',
+            windowType: 'weekly' as const,
+            used: 10,
+            limit: 100,
+            percent_left: 90,
+            paceRatio: null,
+          },
+        ],
+      },
+      {
+        ts: base + DAY,
+        items: [
+          {
+            label: 'Weekly limit',
+            windowType: 'weekly' as const,
+            used: 20,
+            limit: 100,
+            percent_left: 80,
+            paceRatio: null,
+          },
+        ],
+      },
+      {
+        ts: base + 2 * DAY,
+        items: [
+          {
+            label: 'Weekly limit',
+            windowType: 'weekly' as const,
+            used: 5,
+            limit: 200,
+            percent_left: 97.5,
+            paceRatio: null,
+          },
+        ],
+      },
+      {
+        ts: base + 3 * DAY,
+        items: [
+          {
+            label: 'Weekly limit',
+            windowType: 'weekly' as const,
+            used: 10,
+            limit: 200,
+            percent_left: 95,
+            paceRatio: null,
+          },
+        ],
+      },
+      {
+        ts: base + 4 * DAY,
+        items: [
+          {
+            label: 'Weekly limit',
+            windowType: 'weekly' as const,
+            used: 15,
+            limit: 200,
+            percent_left: 92.5,
+            paceRatio: null,
+          },
+        ],
+      },
     ];
     const result = predictExhaustion(snaps, 'weekly');
     expect(result.hasEnoughData).toBe(true);

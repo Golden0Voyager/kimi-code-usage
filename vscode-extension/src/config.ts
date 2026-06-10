@@ -47,7 +47,8 @@ export function readPaceThresholds(cfg: vscode.WorkspaceConfiguration): Threshol
   const preset =
     sensitivity === 'Custom'
       ? SENSITIVITY_THRESHOLDS.Normal
-      : (SENSITIVITY_THRESHOLDS[sensitivity] ?? SENSITIVITY_THRESHOLDS.Normal);
+      : ((SENSITIVITY_THRESHOLDS[sensitivity] as typeof SENSITIVITY_THRESHOLDS.Normal | undefined) ??
+        SENSITIVITY_THRESHOLDS.Normal);
 
   const customFast = cfg.get<number>('paceThresholdFast');
   const customSlow = cfg.get<number>('paceThresholdSlow');
@@ -72,7 +73,9 @@ export async function syncSensitivityToThresholds(
   sensitivity: PaceSensitivity,
 ): Promise<void> {
   if (sensitivity === 'Custom') return;
-  const preset = SENSITIVITY_THRESHOLDS[sensitivity] ?? SENSITIVITY_THRESHOLDS.Normal;
+  const preset =
+    (SENSITIVITY_THRESHOLDS[sensitivity] as typeof SENSITIVITY_THRESHOLDS.Normal | undefined) ??
+    SENSITIVITY_THRESHOLDS.Normal;
   await cfg.update('paceThresholdFast', preset.fast, true);
   await cfg.update('paceThresholdSlow', preset.slow, true);
 }
@@ -93,8 +96,8 @@ export async function resolveApiKey(): Promise<string> {
         for (const line of lines) {
           const match = line.match(/^\s*(KIMI_CODING_API_KEY|KIMI_API_KEY)\s*=\s*['"]?([^'"\s]+)['"]?/);
           if (match) {
-            if (match[1] === 'KIMI_CODING_API_KEY') return match[2];
-            if (!fallbackKey) fallbackKey = match[2];
+            if (match[1]! === 'KIMI_CODING_API_KEY') return match[2]!;
+            if (!fallbackKey) fallbackKey = match[2]!;
           }
         }
         if (fallbackKey) return fallbackKey;

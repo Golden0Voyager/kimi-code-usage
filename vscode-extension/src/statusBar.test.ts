@@ -3,9 +3,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // ---- Mock all dependencies ----
 vi.mock('vscode', () => ({
   StatusBarAlignment: { Left: 1, Right: 2 },
-  ThemeColor: vi.fn(function(this: any, id: string) { this.id = id; }),
-  ThemeIcon: vi.fn(function(this: any, id: string) { this.id = id; }),
-  MarkdownString: vi.fn(function(this: any, text: string) { this.value = text; this.isTrusted = false; }),
+  ThemeColor: vi.fn(function (this: any, id: string) {
+    this.id = id;
+  }),
+  ThemeIcon: vi.fn(function (this: any, id: string) {
+    this.id = id;
+  }),
+  MarkdownString: vi.fn(function (this: any, text: string) {
+    this.value = text;
+    this.isTrusted = false;
+  }),
   window: {
     createStatusBarItem: vi.fn(() => ({
       show: vi.fn(),
@@ -26,9 +33,18 @@ vi.mock('vscode', () => ({
         dispose: vi.fn(),
         hide: vi.fn(),
       };
-      qp.onDidTriggerButton = vi.fn((cb: any) => { qp._btnCb = cb; return undefined as any; });
-      qp.onDidAccept = vi.fn((cb: any) => { qp._acceptCb = cb; return undefined as any; });
-      qp.onDidHide = vi.fn((cb: any) => { qp._hideCb = cb; return undefined as any; });
+      qp.onDidTriggerButton = vi.fn((cb: any) => {
+        qp._btnCb = cb;
+        return undefined as any;
+      });
+      qp.onDidAccept = vi.fn((cb: any) => {
+        qp._acceptCb = cb;
+        return undefined as any;
+      });
+      qp.onDidHide = vi.fn((cb: any) => {
+        qp._hideCb = cb;
+        return undefined as any;
+      });
       return qp;
     }),
     showErrorMessage: vi.fn(),
@@ -61,8 +77,7 @@ vi.mock('vscode', () => ({
 }));
 
 vi.mock('./apiCache', () => ({
-  fetchUsageCached: vi.fn(() =>
-    Promise.resolve({ payload: { usage: { used: 50, limit: 100 } } })),
+  fetchUsageCached: vi.fn(() => Promise.resolve({ payload: { usage: { used: 50, limit: 100 } } })),
 }));
 
 vi.mock('./config', () => ({
@@ -73,15 +88,32 @@ vi.mock('./config', () => ({
 
 vi.mock('./pace', () => ({
   computePace: vi.fn(() => ({ state: 'normal', ratio: 0.9 })),
-  computePace: vi.fn(() => ({ state: 'normal', ratio: 0.9 })),
   formatPaceBar: vi.fn(() => '[===]'),
   getPacePresentation: vi.fn(() => ({ icon: 'circle', label: 'Normal' })),
 }));
 
 vi.mock('./api', () => ({
   parsePayload: vi.fn(() => [
-    { label: 'Weekly', used: 50, limit: 100, remaining: 50, percent_left: 50, reset_hint: null, reset_seconds: 3600, reset_at: null },
-    { label: '5 Hours', used: 10, limit: 50, remaining: 40, percent_left: 80, reset_hint: null, reset_seconds: 1800, reset_at: null },
+    {
+      label: 'Weekly',
+      used: 50,
+      limit: 100,
+      remaining: 50,
+      percent_left: 50,
+      reset_hint: null,
+      reset_seconds: 3600,
+      reset_at: null,
+    },
+    {
+      label: '5 Hours',
+      used: 10,
+      limit: 50,
+      remaining: 40,
+      percent_left: 80,
+      reset_hint: null,
+      reset_seconds: 1800,
+      reset_at: null,
+    },
   ]),
   findWindowItem: vi.fn((items: any[], type: string) => {
     if (type === 'weekly') return items.length > 0 ? items[0] : undefined;
@@ -223,8 +255,12 @@ describe('setStatusBarCommand', () => {
 // ===================================================================
 
 describe('restartInterval', () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it('sets an interval based on config', () => {
     const spy = vi.spyOn(global, 'setInterval');
@@ -259,8 +295,12 @@ describe('restartInterval', () => {
 });
 
 describe('stopInterval', () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it('clears a running interval', () => {
     restartInterval();
@@ -403,7 +443,16 @@ describe('refresh', () => {
 
   it('handles reset_hint in tooltip when reset_at is null', async () => {
     vi.mocked(parsePayload).mockReturnValueOnce([
-      { label: 'Weekly', used: 50, limit: 100, remaining: 50, percent_left: 50, reset_hint: 'Custom Reset Hint', reset_seconds: 3600, reset_at: null },
+      {
+        label: 'Weekly',
+        used: 50,
+        limit: 100,
+        remaining: 50,
+        percent_left: 50,
+        reset_hint: 'Custom Reset Hint',
+        reset_seconds: 3600,
+        reset_at: null,
+      },
     ]);
     await refresh();
     const item = getStatusBarItem()!;
@@ -419,7 +468,16 @@ describe('refresh', () => {
 
   it('handles reset_at in tooltip when reset_at is provided', async () => {
     vi.mocked(parsePayload).mockReturnValueOnce([
-      { label: 'Weekly', used: 50, limit: 100, remaining: 50, percent_left: 50, reset_hint: null, reset_seconds: 3600, reset_at: '2026-06-10T22:00:00Z' },
+      {
+        label: 'Weekly',
+        used: 50,
+        limit: 100,
+        remaining: 50,
+        percent_left: 50,
+        reset_hint: null,
+        reset_seconds: 3600,
+        reset_at: '2026-06-10T22:00:00Z',
+      },
     ]);
     await refresh();
     const item = getStatusBarItem()!;
@@ -500,7 +558,16 @@ describe('refresh', () => {
   // ---- Additional Coverage Tests ----
   it('shows full moon emoji when percent_left >= 99', async () => {
     vi.mocked(parsePayload).mockReturnValueOnce([
-      { label: 'Weekly', used: 0, limit: 100, remaining: 100, percent_left: 99, reset_hint: null, reset_seconds: 3600, reset_at: null }
+      {
+        label: 'Weekly',
+        used: 0,
+        limit: 100,
+        remaining: 100,
+        percent_left: 99,
+        reset_hint: null,
+        reset_seconds: 3600,
+        reset_at: null,
+      },
     ]);
     await refresh();
     const item = getStatusBarItem()!;
@@ -509,7 +576,16 @@ describe('refresh', () => {
 
   it('shows new moon emoji when percent_left <= 1', async () => {
     vi.mocked(parsePayload).mockReturnValueOnce([
-      { label: 'Weekly', used: 99.5, limit: 100, remaining: 0.5, percent_left: 0.5, reset_hint: null, reset_seconds: 3600, reset_at: null }
+      {
+        label: 'Weekly',
+        used: 99.5,
+        limit: 100,
+        remaining: 0.5,
+        percent_left: 0.5,
+        reset_hint: null,
+        reset_seconds: 3600,
+        reset_at: null,
+      },
     ]);
     await refresh();
     const item = getStatusBarItem()!;
@@ -636,7 +712,6 @@ describe('refresh', () => {
   });
 });
 
-
 // ===================================================================
 // showDetails
 // ===================================================================
@@ -705,7 +780,10 @@ describe('showDetails', () => {
     const qp = vi.mocked(vscode.window.createQuickPick).mock.results[0]?.value;
     expect(qp._btnCb).toBeDefined();
     qp._btnCb({ tooltip: 'Open Settings' });
-    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('workbench.action.openSettings', 'kimiCodeUsage');
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      'workbench.action.openSettings',
+      'kimiCodeUsage',
+    );
     expect(qp.hide).toHaveBeenCalled();
   });
 
@@ -729,7 +807,16 @@ describe('showDetails', () => {
 
   it('formats reset_at as detail when available', async () => {
     vi.mocked(parsePayload).mockReturnValueOnce([
-      { label: 'Weekly', used: 50, limit: 100, remaining: 50, percent_left: 50, reset_hint: null, reset_seconds: 3600, reset_at: '2025-06-15T14:00:00Z' },
+      {
+        label: 'Weekly',
+        used: 50,
+        limit: 100,
+        remaining: 50,
+        percent_left: 50,
+        reset_hint: null,
+        reset_seconds: 3600,
+        reset_at: '2025-06-15T14:00:00Z',
+      },
     ]);
     await showDetails();
     const qp = vi.mocked(vscode.window.createQuickPick).mock.results[0]?.value;
@@ -739,7 +826,16 @@ describe('showDetails', () => {
 
   it('uses reset_hint as detail when reset_at is missing', async () => {
     vi.mocked(parsePayload).mockReturnValueOnce([
-      { label: 'Weekly', used: 50, limit: 100, remaining: 50, percent_left: 50, reset_hint: 'Resets weekly', reset_seconds: null, reset_at: null },
+      {
+        label: 'Weekly',
+        used: 50,
+        limit: 100,
+        remaining: 50,
+        percent_left: 50,
+        reset_hint: 'Resets weekly',
+        reset_seconds: null,
+        reset_at: null,
+      },
     ]);
     await showDetails();
     const qp = vi.mocked(vscode.window.createQuickPick).mock.results[0]?.value;
@@ -749,7 +845,16 @@ describe('showDetails', () => {
 
   it('uses reset_at formatted details when reset_at is provided', async () => {
     vi.mocked(parsePayload).mockReturnValueOnce([
-      { label: 'Weekly', used: 50, limit: 100, remaining: 50, percent_left: 50, reset_hint: null, reset_seconds: 3600, reset_at: '2026-06-10T22:00:00Z' },
+      {
+        label: 'Weekly',
+        used: 50,
+        limit: 100,
+        remaining: 50,
+        percent_left: 50,
+        reset_hint: null,
+        reset_seconds: 3600,
+        reset_at: '2026-06-10T22:00:00Z',
+      },
     ]);
     await showDetails();
     const qp = vi.mocked(vscode.window.createQuickPick).mock.results[0]?.value;
@@ -840,4 +945,3 @@ describe('refresh without statusBarItem', () => {
     await refresh();
   });
 });
-

@@ -222,7 +222,7 @@ describe('SnapshotStore edge cases', () => {
   it('list handles writeQueue rejection gracefully', async () => {
     // Override clearUnsafe to throw an error, causing enqueue to reject
     (store as any).clearUnsafe = () => Promise.reject(new Error('Unlink failed'));
-    
+
     const clearPromise = store.clear();
     await expect(clearPromise).rejects.toThrow('Unlink failed');
 

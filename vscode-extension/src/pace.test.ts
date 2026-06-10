@@ -132,21 +132,25 @@ describe('getPacePresentation', () => {
   });
 
   it('handles missing paceLabels config (null/undefined fallback)', () => {
-    const cfg = { get: vi.fn((key: string) => {
-      if (key === 'paceTheme') return 'Simple';
-      if (key === 'paceLabels') return null;
-      return undefined;
-    }) } as any;
+    const cfg = {
+      get: vi.fn((key: string) => {
+        if (key === 'paceTheme') return 'Simple';
+        if (key === 'paceLabels') return null;
+        return undefined;
+      }),
+    } as any;
     const result = getPacePresentation(cfg, 'fast');
     expect(result.label).toBeTruthy();
   });
 
   it('falls back to Simple theme for unknown theme', () => {
-    const cfg = { get: vi.fn((key: string, def?: unknown) => {
-      if (key === 'paceTheme') return 'NonExistent' as any;
-      if (key === 'paceLabels') return {};
-      return def;
-    }) } as any;
+    const cfg = {
+      get: vi.fn((key: string, def?: unknown) => {
+        if (key === 'paceTheme') return 'NonExistent' as any;
+        if (key === 'paceLabels') return {};
+        return def;
+      }),
+    } as any;
     const result = getPacePresentation(cfg, 'fast');
     expect(result.label).toBeTruthy();
   });
@@ -158,24 +162,28 @@ describe('getPacePresentation', () => {
   });
 
   it('handles missing paceIcons config (null/undefined fallback)', () => {
-    const cfg = { get: vi.fn((key: string) => {
-      if (key === 'paceTheme') return 'Simple';
-      if (key === 'paceLabels') return {};
-      if (key === 'paceIcons') return null;
-      return undefined;
-    }) } as any;
+    const cfg = {
+      get: vi.fn((key: string) => {
+        if (key === 'paceTheme') return 'Simple';
+        if (key === 'paceLabels') return {};
+        if (key === 'paceIcons') return null;
+        return undefined;
+      }),
+    } as any;
     // When paceIcons returns null, ?? {} fallback should provide empty object
     const result = getPacePresentation(cfg, 'fast');
     expect(result.icon).toBe('warning');
   });
 
   it('uses icon from paceIcons object when present', () => {
-    const cfg = { get: vi.fn((key: string) => {
-      if (key === 'paceTheme') return 'Simple';
-      if (key === 'paceLabels') return {};
-      if (key === 'paceIcons') return { fast: 'custom-icon' };
-      return undefined;
-    }) } as any;
+    const cfg = {
+      get: vi.fn((key: string) => {
+        if (key === 'paceTheme') return 'Simple';
+        if (key === 'paceLabels') return {};
+        if (key === 'paceIcons') return { fast: 'custom-icon' };
+        return undefined;
+      }),
+    } as any;
     // When paceIcons returns a value, ?? {} should NOT trigger
     const result = getPacePresentation(cfg, 'fast');
     expect(result.icon).toBe('custom-icon');
@@ -186,14 +194,16 @@ describe('getPacePresentation', () => {
       t: (msg: string) => {
         if (msg === 'Cheetah') return '';
         return msg;
-      }
+      },
     } as any;
     setTranslator(mockT);
     try {
-      const cfg = { get: vi.fn((key: string, def?: unknown) => {
-        if (key === 'paceTheme') return 'Animals';
-        return def;
-      }) } as any;
+      const cfg = {
+        get: vi.fn((key: string, def?: unknown) => {
+          if (key === 'paceTheme') return 'Animals';
+          return def;
+        }),
+      } as any;
       const result = getPacePresentation(cfg, 'fast');
       expect(result.label).toBe('Fast');
     } finally {
@@ -208,12 +218,16 @@ describe('FIVE_HOURS_WINDOW_SECONDS', () => {
   });
 });
 
-
 describe('computePace edge cases', () => {
   it('handles zero elapsedRatio', () => {
     const item = {
-      label: 'Weekly', used: 0, limit: 100, remaining: 100,
-      percent_left: 100, reset_seconds: 604800, reset_hint: null,
+      label: 'Weekly',
+      used: 0,
+      limit: 100,
+      remaining: 100,
+      percent_left: 100,
+      reset_seconds: 604800,
+      reset_hint: null,
       reset_at: null,
     };
     // reset_seconds === windowSeconds => elapsed = 0 => elapsedRatio = 0

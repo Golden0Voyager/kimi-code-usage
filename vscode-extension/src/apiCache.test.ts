@@ -84,7 +84,7 @@ describe('cacheStats', () => {
     vi.setSystemTime(new Date(2025, 0, 1, 12, 0, 0));
     vi.spyOn(api, 'fetchUsage').mockResolvedValue(fakePayload);
     await fetchUsageCached('https://api.example.com', 'k1');
-    
+
     const stats = cacheStats();
     expect(stats.hasEntry).toBe(true);
     expect(stats.ageMs).toBeGreaterThanOrEqual(0);
@@ -95,11 +95,11 @@ describe('cacheStats', () => {
   it('clearCache forces refetch via generation check', async () => {
     vi.useFakeTimers();
     const spy = vi.spyOn(api, 'fetchUsage').mockResolvedValue(fakePayload);
-    
+
     await fetchUsageCached('https://api.example.com', 'k1');
     clearCache();
     vi.advanceTimersByTime(1000);
-    
+
     await fetchUsageCached('https://api.example.com', 'k1');
     expect(spy).toHaveBeenCalledTimes(2);
     vi.useRealTimers();

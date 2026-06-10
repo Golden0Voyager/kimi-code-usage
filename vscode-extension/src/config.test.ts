@@ -30,7 +30,9 @@ vi.mock('vscode', () => ({
       has: vi.fn(),
       inspect: vi.fn(),
     })),
-    get workspaceFolders() { return mockWsFolders; },
+    get workspaceFolders() {
+      return mockWsFolders;
+    },
     fs: {
       readFile: vi.fn(() => {
         if (mockReadFileReject) return Promise.reject(new Error('ENOENT'));
@@ -45,8 +47,6 @@ vi.mock('vscode', () => ({
   },
   l10n: { t: (msg: string) => msg },
 }));
-
-
 
 function mockCfg(values: Record<string, unknown>) {
   return {
@@ -147,7 +147,6 @@ describe('detectSensitivityFromThresholds', () => {
   });
 });
 
-
 describe('resolveApiKey', () => {
   beforeEach(() => {
     mockWsFolders = undefined;
@@ -222,10 +221,7 @@ describe('resolveApiKey', () => {
   });
 
   it('tries multiple workspace folders', async () => {
-    mockWsFolders = [
-      { uri: { fsPath: '/first' } },
-      { uri: { fsPath: '/second' } },
-    ];
+    mockWsFolders = [{ uri: { fsPath: '/first' } }, { uri: { fsPath: '/second' } }];
     vi.mocked(vscode.workspace.fs.readFile)
       .mockImplementationOnce(() => Promise.resolve(new TextEncoder().encode('')))
       .mockImplementationOnce(() => Promise.resolve(new TextEncoder().encode('KIMI_API_KEY=sk-second')));
@@ -262,7 +258,6 @@ describe('resolveApiKey', () => {
   });
 });
 
-
 describe('syncSensitivityToThresholds', () => {
   it('returns early when sensitivity is Custom', async () => {
     const update = vi.fn();
@@ -293,7 +288,8 @@ describe('syncSensitivityToThresholds', () => {
         if (k === 'paceSensitivity') return 'UnknownPreset';
         return undefined;
       }),
-      has: vi.fn(), inspect: vi.fn(),
+      has: vi.fn(),
+      inspect: vi.fn(),
     } as any;
     const result = readPaceThresholds(cfg);
     expect(result.fast).toBeGreaterThan(0);

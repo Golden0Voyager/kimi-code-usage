@@ -65,7 +65,7 @@ export class Translator {
     if (lang === 'Auto') {
       this.currentLang = this.mapEnvLanguage(vscode.env.language.toLowerCase());
     } else {
-      this.currentLang = CHOICE_TO_CODE[lang] ?? 'en';
+      this.currentLang = (CHOICE_TO_CODE[lang] as LanguageCode | undefined) ?? 'en';
     }
   }
 

@@ -47,7 +47,15 @@ vi.mock('vscode', () => ({
   l10n: { t: (message: string) => message },
 }));
 
-import { mapEnvLanguageToCode, Translator, setTranslator, t, currentLang, isZh, updateActiveLanguage } from './i18n';
+import {
+  mapEnvLanguageToCode,
+  Translator,
+  setTranslator,
+  t,
+  currentLang,
+  isZh,
+  updateActiveLanguage,
+} from './i18n';
 import type { Translator as TranslatorType } from './i18n';
 
 // Test i18n module
@@ -207,7 +215,6 @@ describe('Translator class', () => {
     expect(tr.lang()).toBe('en');
   });
 });
-
 
 describe('module-level helpers', () => {
   beforeEach(() => {
