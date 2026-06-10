@@ -13,6 +13,9 @@
 
 **Manifesting your AI quota with aesthetic precision across CLI, MCP, and VS Code.**
 
+![CLI & MCP (Python) Coverage](https://img.shields.io/badge/CLI%20%26%20MCP%20(Python)-100%25%20coverage-brightgreen)
+![VS Code Extension Coverage](https://img.shields.io/badge/VS%20Code%20Extension-100%25%20coverage-brightgreen)
+
 ---
 
 ### 🌟 Project Vision
@@ -78,16 +81,19 @@ Then simply ask your AI: *"Check my Kimi quota."*
 code --install-extension HainingYu.kimi-code-usage
 ```
 
-**Configure** (`Settings > kimiUsage`):
+**Configure** (`Settings > Kimi Code Usage`):
 
 | Setting | Description | Default |
 | :--- | :--- | :--- |
-| `apiKey` | API key (or reads `KIMI_API_KEY` env) | `""` |
-| `refreshInterval` | Auto-refresh in minutes | `5` |
-| `warnPercent` | Yellow caution threshold | `30%` |
-| `criticalPercent` | Red alert threshold | `10%` |
+| `kimiCodeUsage.apiKey` | API key (or reads `KIMI_CODING_API_KEY`/`KIMI_API_KEY` env) | `""` |
+| `kimiCodeUsage.baseUrl` | API Base URL | `"https://api.kimi.com/coding/v1"` |
+| `kimiCodeUsage.refreshIntervalMinutes` | Auto-refresh interval in minutes | `5` |
+| `kimiCodeUsage.weeklyLowThresholdPercent` | Weekly low quota warning threshold (%) | `30` |
+| `kimiCodeUsage.fiveHourLowThresholdPercent` | 5-hour low quota warning threshold (%) | `15` |
+| `kimiCodeUsage.showPaceIndicator` | Show pace indicator (Fast/Normal/Slow) | `true` |
+| `kimiCodeUsage.showPaceBar` | Show pace bar in status bar | `true` |
 
-**Usage:** Status bar shows `⬡ W:96% 5H:99%`. Hover for details. `Cmd+Shift+P → Kimi: Refresh`.
+**Usage:** Status bar shows `🌕  [===]  Wee:96% 5Ho:99%`. Hover for details. `Cmd+Shift+P → Kimi: Refresh`.
 
 ---
 
