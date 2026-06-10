@@ -3,7 +3,11 @@ from typing import List
 from . import ProviderUsage
 
 async def fetch_openrouter_usage(api_key: str, base_url: str) -> List[ProviderUsage]:
-    url = f"{base_url.rstrip('/')}/v1/auth/key"
+    base_url_stripped = base_url.rstrip('/')
+    if base_url_stripped.endswith('/v1'):
+        url = f"{base_url_stripped}/auth/key"
+    else:
+        url = f"{base_url_stripped}/v1/auth/key"
     headers = {"Authorization": f"Bearer {api_key}"}
 
     async with aiohttp.ClientSession() as session:

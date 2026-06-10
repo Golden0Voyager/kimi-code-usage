@@ -89,7 +89,7 @@ async def test_fetch_openai_usage_costs_fails_gracefully():
     mock_session.__aexit__ = AsyncMock(return_value=None)
 
     with patch("aiohttp.ClientSession", return_value=mock_session):
-        res = await fetch_openai_usage("org-admin-key", "https://api.openai.com")
+        res = await fetch_openai_usage("org-admin-key", "https://api.openai.com/v1")
         assert len(res) == 2
         assert res[0].used == 150.0
         assert res[1].used == 0.0

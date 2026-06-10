@@ -60,7 +60,7 @@ async def test_fetch_openrouter_usage_no_limit():
     mock_session.__aexit__ = AsyncMock(return_value=None)
 
     with patch("aiohttp.ClientSession", return_value=mock_session):
-        res = await fetch_openrouter_usage("or-key", "https://openrouter.ai/api")
+        res = await fetch_openrouter_usage("or-key", "https://openrouter.ai/api/v1")
         assert len(res) == 1
         assert res[0].used == 2.5
         assert res[0].limit is None
