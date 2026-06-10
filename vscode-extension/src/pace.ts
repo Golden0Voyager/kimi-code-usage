@@ -76,7 +76,7 @@ export function computePace(
   const actualUsedRatio = item.used / item.limit;
   const elapsedRatio = elapsed / windowSeconds;
 
-  const rawRatio = elapsedRatio > 0 ? actualUsedRatio / elapsedRatio : 0;
+  const rawRatio = actualUsedRatio / elapsedRatio;
   const ratio = Math.min(rawRatio, PACE_RATIO_CAP);
 
   let state: PaceStateLabel;
