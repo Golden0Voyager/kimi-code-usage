@@ -60,7 +60,6 @@ export function readPaceThresholds(cfg: vscode.WorkspaceConfiguration): Threshol
 
 export function detectSensitivityFromThresholds(fast: number, slow: number): PaceSensitivity {
   for (const [key, preset] of Object.entries(SENSITIVITY_THRESHOLDS)) {
-    if (key === 'Custom') continue;
     if (preset.fast === fast && preset.slow === slow) {
       return key as PaceSensitivity;
     }
