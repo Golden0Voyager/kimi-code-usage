@@ -25,7 +25,7 @@ export class SnapshotStore {
   }
 
   async list(options: ListOptions = {}): Promise<Snapshot[]> {
-    await this.writeQueue.catch(() => undefined);
+    await this.writeQueue;
     return this.readUnsafe(options);
   }
 

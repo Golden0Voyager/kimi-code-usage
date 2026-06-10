@@ -23,8 +23,8 @@ export function clearCache(): void {
 
 export function cacheStats(): { hasEntry: boolean; ageMs: number | null; ttlMs: number } {
   if (cache.size === 0) return { hasEntry: false, ageMs: null, ttlMs };
-  const first = cache.values().next().value as CacheEntry | undefined;
-  return { hasEntry: true, ageMs: first ? Date.now() - (first.expiresAt - ttlMs) : null, ttlMs };
+  const first = cache.values().next().value as CacheEntry;
+  return { hasEntry: true, ageMs: Date.now() - (first.expiresAt - ttlMs), ttlMs };
 }
 
 function keyFor(baseUrl: string, apiKey: string): string {

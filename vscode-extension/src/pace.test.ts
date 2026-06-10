@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { ThresholdConfig, UsageItem } from './types';
 import { WEEKLY_WINDOW_SECONDS, FIVE_HOURS_WINDOW_SECONDS } from './types';
-import { computePace, formatPaceBar, normalizeIconName, getPacePresentation } from './pace';
+import { computePace, formatPaceBar, normalizeIconName, getPacePresentation, paceConfigFor } from './pace';
+import { setTranslator } from './i18n';
 
 const thresholds: ThresholdConfig = { fast: 1.12, slow: 0.88 };
 
@@ -99,47 +100,133 @@ describe('normalizeIconName', () => {
 });
 
 describe('getPacePresentation', () => {
+  function mockCfg(overrides: Record<string, unknown> = {}) {
+    const get = vi.fn((key: string, def?: unknown) => {
+      if (key === 'paceTheme') return overrides.theme ?? 'Simple';
+      if (key === 'paceLabels') return overrides.labels ?? {};
+      if (key === 'paceIcons') return overrides.icons ?? {};
+      if (key === 'paceLabels.fast') return overrides.legacyLabel ?? '';
+      if (key === 'paceIcons.fast') return overrides.legacyIcon ?? '';
+      return def;
+    });
+    return { get } as unknown as Parameters<typeof getPacePresentation>[0];
+  }
+
   it('uses explicit per-state override when present', () => {
-    const cfg = {
-      get: vi.fn((key: string, def?: unknown) => {
-        if (key === 'paceTheme') return 'Simple';
-        if (key === 'paceLabels') return { fast: 'Bolt', normal: '', slow: '' };
-        return def;
-      }),
-    } as unknown as Parameters<typeof getPacePresentation>[0];
+    const cfg = mockCfg({ labels: { fast: 'Bolt', normal: '', slow: '' } });
     const result = getPacePresentation(cfg, 'fast');
     expect(result.label).toBe('Bolt');
   });
 
   it('falls back to theme label when no override', () => {
-    const cfg = {
-      get: vi.fn((key: string, def?: unknown) => {
-        if (key === 'paceTheme') return 'Running';
-        if (key === 'paceLabels') return {};
-        return def;
-      }),
-    } as unknown as Parameters<typeof getPacePresentation>[0];
+    const cfg = mockCfg({ theme: 'Running' });
     const result = getPacePresentation(cfg, 'fast');
     expect(result.label).toBe('Sprint');
   });
 
   it('returns default icon when no override', () => {
-    const cfg = {
-      get: vi.fn((key: string, def?: unknown) => {
-        if (key === 'paceTheme') return 'Simple';
-        if (key === 'paceLabels') return {};
-        if (key === 'paceIcons') return {};
-        return def;
-      }),
-    } as unknown as Parameters<typeof getPacePresentation>[0];
+    const cfg = mockCfg({});
     expect(getPacePresentation(cfg, 'fast').icon).toBe('warning');
     expect(getPacePresentation(cfg, 'normal').icon).toBe('dashboard');
     expect(getPacePresentation(cfg, 'slow').icon).toBe('coffee');
+  });
+
+  it('handles missing paceLabels config (null/undefined fallback)', () => {
+    const cfg = { get: vi.fn((key: string) => {
+      if (key === 'paceTheme') return 'Simple';
+      if (key === 'paceLabels') return null;
+      return undefined;
+    }) } as any;
+    const result = getPacePresentation(cfg, 'fast');
+    expect(result.label).toBeTruthy();
+  });
+
+  it('falls back to Simple theme for unknown theme', () => {
+    const cfg = { get: vi.fn((key: string, def?: unknown) => {
+      if (key === 'paceTheme') return 'NonExistent' as any;
+      if (key === 'paceLabels') return {};
+      return def;
+    }) } as any;
+    const result = getPacePresentation(cfg, 'fast');
+    expect(result.label).toBeTruthy();
+  });
+
+  it('falls back to default label when all config is empty', () => {
+    const cfg = { get: vi.fn((key: string, def?: unknown) => def) } as any;
+    const result = getPacePresentation(cfg, 'fast');
+    expect(result.label).toBe('Fast');
+  });
+
+  it('handles missing paceIcons config (null/undefined fallback)', () => {
+    const cfg = { get: vi.fn((key: string) => {
+      if (key === 'paceTheme') return 'Simple';
+      if (key === 'paceLabels') return {};
+      if (key === 'paceIcons') return null;
+      return undefined;
+    }) } as any;
+    // When paceIcons returns null, ?? {} fallback should provide empty object
+    const result = getPacePresentation(cfg, 'fast');
+    expect(result.icon).toBe('warning');
+  });
+
+  it('uses icon from paceIcons object when present', () => {
+    const cfg = { get: vi.fn((key: string) => {
+      if (key === 'paceTheme') return 'Simple';
+      if (key === 'paceLabels') return {};
+      if (key === 'paceIcons') return { fast: 'custom-icon' };
+      return undefined;
+    }) } as any;
+    // When paceIcons returns a value, ?? {} should NOT trigger
+    const result = getPacePresentation(cfg, 'fast');
+    expect(result.icon).toBe('custom-icon');
+  });
+
+  it('falls back to default label when translator returns empty string for theme label', () => {
+    const mockT = {
+      t: (msg: string) => {
+        if (msg === 'Cheetah') return '';
+        return msg;
+      }
+    } as any;
+    setTranslator(mockT);
+    try {
+      const cfg = { get: vi.fn((key: string, def?: unknown) => {
+        if (key === 'paceTheme') return 'Animals';
+        return def;
+      }) } as any;
+      const result = getPacePresentation(cfg, 'fast');
+      expect(result.label).toBe('Fast');
+    } finally {
+      setTranslator(undefined as any);
+    }
   });
 });
 
 describe('FIVE_HOURS_WINDOW_SECONDS', () => {
   it('equals 5 hours', () => {
     expect(FIVE_HOURS_WINDOW_SECONDS).toBe(5 * 3600);
+  });
+});
+
+
+describe('computePace edge cases', () => {
+  it('handles zero elapsedRatio', () => {
+    const item = {
+      label: 'Weekly', used: 0, limit: 100, remaining: 100,
+      percent_left: 100, reset_seconds: 604800, reset_hint: null,
+      reset_at: null,
+    };
+    // reset_seconds === windowSeconds => elapsed = 0 => elapsedRatio = 0
+    const result = computePace(item, 604800, { fast: 1.2, slow: 0.8 });
+    expect(result).toBeNull();
+  });
+});
+
+describe('paceConfigFor', () => {
+  it('returns PACE_CONFIG for each state', () => {
+    expect(paceConfigFor('fast')).toBeDefined();
+    expect(paceConfigFor('slow')).toBeDefined();
+    expect(paceConfigFor('normal')).toBeDefined();
+    expect(paceConfigFor('fast').labelKey).toBeDefined();
   });
 });

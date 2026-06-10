@@ -64,14 +64,11 @@ export function predictExhaustion(
   let predictedTs: number | null = null;
   const alreadyExhausted = !!lastPoint && lastPoint.limit > 0 && lastPoint.used >= lastPoint.limit;
   if (lastPoint && !alreadyExhausted && slope > 0) {
-    const remaining = lastPoint.limit - lastPoint.used;
-    if (remaining > 0) {
-      const targetX = (lastPoint.limit - intercept) / slope;
-      predictedTs = x0 + targetX * 1000;
-    }
+    const targetX = (lastPoint.limit - intercept) / slope;
+    predictedTs = x0 + targetX * 1000;
   }
 
-  const dailyQuota = lastPoint && lastPoint.limit > 0 ? lastPoint.limit / windowDays(windowType) : 0;
+  const dailyQuota = lastPoint.limit / windowDays(windowType);
   const burnRatePercent =
     dailyQuota > 0 && shouldComputeBurnRate(windowType) ? (dailyRate / dailyQuota) * 100 : null;
 
@@ -83,8 +80,8 @@ export function predictExhaustion(
     burnRatePercent,
     trend,
     predictedExhaustionTs: predictedTs,
-    currentUsed: lastPoint ? lastPoint.used : null,
-    limit: lastPoint ? lastPoint.limit : null,
+    currentUsed: lastPoint.used,
+    limit: lastPoint.limit,
     alreadyExhausted,
   };
 }

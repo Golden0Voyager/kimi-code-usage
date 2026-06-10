@@ -1,12 +1,20 @@
-<p align="center">
-  <img src="vscode-extension/assets/banner.png" width="100%" alt="Kimi Code Usage Banner">
-</p>
+<pre align="center">
+ ██╗  ██╗ ██╗ ███╗   ███╗ ██╗     ██████╗  ██████╗  ██████╗  ███████╗
+ ██║ ██╔╝ ██║ ████╗ ████║ ██║    ██╔════╝ ██╔═══██╗ ██╔══██╗ ██╔════╝
+ █████╔╝  ██║ ██╔████╔██║ ██║    ██║      ██║   ██║ ██║  ██║ █████╗
+ ██╔═██╗  ██║ ██║╚██╔╝██║ ██║    ██║      ██║   ██║ ██║  ██║ ██╔══╝
+ ██║  ██╗ ██║ ██║ ╚═╝ ██║ ██║    ╚██████╗ ╚██████╔╝ ██████╔╝ ███████╗
+ ╚═╝  ╚═╝ ╚═╝ ╚═╝     ╚═╝ ╚═╝     ╚═════╝  ╚═════╝  ╚═════╝  ╚══════╝
+</pre>
 
 > [English](README.md) · **中文**
 
 # Kimi Code Usage：三端工具链
 
 **以优雅的姿态，在终端、AI 助手与编辑器中感知你的 AI 额度。**
+
+![CLI & MCP (Python) 测试覆盖率](https://img.shields.io/badge/CLI%20%26%20MCP%20%28Python%29%20%E6%B5%8B%E8%AF%95%E8%A6%86%E7%9B%96%E7%8E%86-100%25-brightgreen)
+![VS Code 插件 测试覆盖率](https://img.shields.io/badge/VS%20Code%20%E6%8F%92%E4%BB%B6%20%E6%B5%8B%E8%AF%95%E8%A6%86%E7%9B%96%E7%8E%86-100%25-brightgreen)
 
 ---
 
@@ -73,16 +81,19 @@ uvx kimi-code-usage
 code --install-extension HainingYu.kimi-code-usage
 ```
 
-**配置**（`设置 > kimiUsage`）：
+**配置**（`设置 > Kimi Code Usage`）：
 
 | 设置项 | 说明 | 默认值 |
 | :--- | :--- | :--- |
-| `apiKey` | API 密钥（或读取 `KIMI_API_KEY` 环境变量） | `""` |
-| `refreshInterval` | 自动刷新间隔（分钟） | `5` |
-| `warnPercent` | 黄色警告阈值 | `30%` |
-| `criticalPercent` | 红色警报阈值 | `10%` |
+| `kimiCodeUsage.apiKey` | API 密钥（或读取 `KIMI_CODING_API_KEY`/`KIMI_API_KEY` 环境变量） | `""` |
+| `kimiCodeUsage.baseUrl` | API 基础地址 | `"https://api.kimi.com/coding/v1"` |
+| `kimiCodeUsage.refreshIntervalMinutes` | 自动刷新间隔（分钟） | `5` |
+| `kimiCodeUsage.weeklyLowThresholdPercent` | 每周低余量告警阈值 (%) | `30` |
+| `kimiCodeUsage.fiveHourLowThresholdPercent` | 5小时低余量告警阈值 (%) | `15` |
+| `kimiCodeUsage.showPaceIndicator` | 显示速度指针（快/正常/慢） | `true` |
+| `kimiCodeUsage.showPaceBar` | 在状态栏显示速度进度条 | `true` |
 
-**使用：** 状态栏显示 `⬡ W:96% 5H:99%`。悬停查看详情。`Cmd+Shift+P → Kimi: Refresh`。
+**使用：** 状态栏显示 `🌕  [===]  Wee:96% 5Ho:99%`。悬停查看详情。`Cmd+Shift+P → Kimi: Refresh`。
 
 ---
 

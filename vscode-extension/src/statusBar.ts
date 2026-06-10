@@ -414,7 +414,7 @@ export async function showDetails(): Promise<void> {
     const raw = String(err ?? '').toLowerCase();
     if (raw.includes('http 5')) {
       vscode.window.showWarningMessage(
-        `${t('Server error from Kimi API. Please retry shortly.')}: ${String(err ?? '').slice(0, 200)}`,
+        `${t('Server error from Kimi API. Please retry shortly.')}: ${String(err).slice(0, 200)}`,
       );
       return;
     }

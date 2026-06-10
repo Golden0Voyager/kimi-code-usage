@@ -79,6 +79,7 @@ export class HistoryPanel {
     const cfg = vscode.workspace.getConfiguration('kimiCodeUsage');
     const retentionDays = readHistoryRetentionDays(cfg);
     const snapshots = await this.store.list({ sinceMs: Date.now() - retentionDays * DAY_MS });
+    if (!this.panel) return;
     const payload = buildPayload(snapshots, retentionDays);
     const isDark =
       vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ||
@@ -620,7 +621,7 @@ function buildSeries(snapshots: Snapshot[], windowType: WindowType): Series | nu
   };
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => {
     switch (c) {
       case '&':

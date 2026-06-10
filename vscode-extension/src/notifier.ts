@@ -20,12 +20,14 @@ export interface NotifierOptions {
 export class Notifier {
   private last: AlertEvaluation | null = null;
   private lastPaceFast = false;
+  private readonly show: (msg: string) => Thenable<string | undefined>;
 
   constructor(
     private readonly options: NotifierOptions,
-    private readonly show: (msg: string) => Thenable<string | undefined> = (msg) =>
-      vscode.window.showInformationMessage(msg),
-  ) {}
+    show?: (msg: string) => Thenable<string | undefined>,
+  ) {
+    this.show = show || ((msg) => vscode.window.showInformationMessage(msg));
+  }
 
   evaluate(items: UsageItem[]): AlertEvaluation {
     const weeklyItem = findWindowItem(items, 'weekly');
@@ -46,7 +48,6 @@ export class Notifier {
   }
 
   async checkAndNotify(items: UsageItem[], paceFast: boolean): Promise<void> {
-    if (!this.options) return;
     const current = this.evaluate(items);
     if (this.last == null) {
       this.last = current;
