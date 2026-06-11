@@ -688,6 +688,14 @@ def test_localization_helpers():
     assert _get_localized_label("速率限制", lang_zh=False) == "Rate Limit"
     assert _get_localized_label("Usage", lang_zh=True) == "周期已用"
     assert _get_localized_label("周期已用", lang_zh=False) == "Usage"
+    assert _get_localized_label("Free Tier", lang_zh=True) == "免费额度"
+    assert _get_localized_label("免费额度", lang_zh=False) == "Free Tier"
+    assert _get_localized_label("Limit Reset", lang_zh=True) == "限额重置周期"
+    assert _get_localized_label("限额重置周期", lang_zh=False) == "Limit Reset"
+    assert _get_localized_label("Expires At", lang_zh=True) == "过期时间"
+    assert _get_localized_label("过期时间", lang_zh=False) == "Expires At"
+    assert _get_localized_label("Is Provisioning", lang_zh=True) == "配给密钥"
+    assert _get_localized_label("配给密钥", lang_zh=False) == "Is Provisioning"
     assert _get_localized_label("SomeOtherLabel", lang_zh=True) == "SomeOtherLabel"
 
     # 2. Test _get_localized_text_value
@@ -704,6 +712,13 @@ def test_localization_helpers():
     assert _get_localized_text_value(val_bad_floats, lang_zh=True) == val_bad_floats
 
     assert _get_localized_text_value("Other normal text", lang_zh=True) == "Other normal text"
+    assert _get_localized_text_value("Other normal text", lang_zh=False) == "Other normal text"
+    
+    # Yes/No localization
+    assert _get_localized_text_value("Yes", lang_zh=True) == "是"
+    assert _get_localized_text_value("No", lang_zh=True) == "否"
+    assert _get_localized_text_value("是", lang_zh=False) == "Yes"
+    assert _get_localized_text_value("否", lang_zh=False) == "No"
 
 
 def test_format_aggregated_results_edge_cases():

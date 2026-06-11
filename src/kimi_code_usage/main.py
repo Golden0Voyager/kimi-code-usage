@@ -63,6 +63,10 @@ def _get_localized_label(label: str, lang_zh: bool = IS_ZH) -> str:
             "Rate Limit": "速率限制",
             "Usage": "周期已用",
             "周期已用": "周期已用",
+            "Free Tier": "免费额度",
+            "Limit Reset": "限额重置周期",
+            "Expires At": "过期时间",
+            "Is Provisioning": "配给密钥",
         }
         if label in translations:
             return translations[label]
@@ -73,6 +77,10 @@ def _get_localized_label(label: str, lang_zh: bool = IS_ZH) -> str:
             "速率限制": "Rate Limit",
             "周期已用": "Usage",
             "Usage": "Usage",
+            "免费额度": "Free Tier",
+            "限额重置周期": "Limit Reset",
+            "过期时间": "Expires At",
+            "配给密钥": "Is Provisioning",
         }
         if label in translations:
             return translations[label]
@@ -98,6 +106,19 @@ def _get_localized_text_value(text_val: str, lang_zh: bool) -> str:
                 return f"今日: ${u_daily:.4f} | 本周: ${u_weekly:.4f} | 本月: ${u_monthly:.4f}"
             else:
                 return f"Daily: ${u_daily:.4f} | Weekly: ${u_weekly:.4f} | Monthly: ${u_monthly:.4f}"
+    
+    # Yes/No localization
+    if lang_zh:
+        if text_val == "Yes":
+            return "是"
+        if text_val == "No":
+            return "否"
+    else:
+        if text_val == "是":
+            return "Yes"
+        if text_val == "否":
+            return "No"
+            
     return text_val
 
 # (typing already imported at top)

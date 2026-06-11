@@ -126,6 +126,66 @@ async def fetch_openrouter_usage(api_key: str, base_url: str) -> List[ProviderUs
             text_value=key_label
         ))
 
+    # 3.1. Free Tier
+    is_free_tier = key_data.get("is_free_tier")
+    if is_free_tier is not None:
+        res.append(ProviderUsage(
+            provider="openrouter",
+            label="Free Tier",
+            used=0.0,
+            limit=None,
+            remaining=None,
+            percent=None,
+            reset_at=None,
+            unit="text",
+            text_value="Yes" if is_free_tier else "No"
+        ))
+
+    # 3.2. Limit Reset
+    limit_reset = key_data.get("limit_reset")
+    if limit_reset:
+        res.append(ProviderUsage(
+            provider="openrouter",
+            label="Limit Reset",
+            used=0.0,
+            limit=None,
+            remaining=None,
+            percent=None,
+            reset_at=None,
+            unit="text",
+            text_value=str(limit_reset)
+        ))
+
+    # 3.3. Expires At
+    expires_at = key_data.get("expires_at")
+    if expires_at:
+        res.append(ProviderUsage(
+            provider="openrouter",
+            label="Expires At",
+            used=0.0,
+            limit=None,
+            remaining=None,
+            percent=None,
+            reset_at=None,
+            unit="text",
+            text_value=str(expires_at)
+        ))
+
+    # 3.4. Is Provisioning
+    is_provisioning = key_data.get("is_provisioning_key")
+    if is_provisioning is not None:
+        res.append(ProviderUsage(
+            provider="openrouter",
+            label="Is Provisioning",
+            used=0.0,
+            limit=None,
+            remaining=None,
+            percent=None,
+            reset_at=None,
+            unit="text",
+            text_value="Yes" if is_provisioning else "No"
+        ))
+
     # 4. Rate Limit
     rate_limit = key_data.get("rate_limit", {})
     if isinstance(rate_limit, dict):

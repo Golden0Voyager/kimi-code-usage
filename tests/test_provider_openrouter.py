@@ -312,4 +312,51 @@ async def test_fetch_openrouter_usage_edge_cases(monkeypatch):
         assert res[0].limit == 5.0
 
 
+@pytest.mark.asyncio
+async def test_fetch_openrouter_usage_extra_metadata(monkeypatch):
+    monkeypatch.setenv("LANG", "en")
+    def mock_get(url, *args, **kwargs):
+        cm = AsyncMock()
+        cm.__aenter__ = AsyncMock(return_value=cm)
+        cm.__aexit__ = AsyncMock(return_value=None)
+        cm.status = 200
+        
+        if "credits" in url:
+            async def mock_credits_json():
+                return {"data": {"total_credits": 10.0, "total_usage": 4.5}}
+            cm.json = mock_credits_json
+        else:
+            async def mock_key_json():
+                return {
+                    "data": {
+                        "label": "meta-key",
+                        "usage": 2.5,
+                        "limit": 5.0,
+                        "is_free_tier": True,
+                        "limit_reset": "monthly",
+                        "expires_at": "2026-06-12T12:00:00Z",
+                        "is_provisioning_key": False
+                    }
+                }
+            cm.json = mock_key_json
+        return cm
+
+    mock_session = AsyncMock()
+    mock_session.get = mock_get
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("aiohttp.ClientSession", return_value=mock_session):
+        res = await fetch_openrouter_usage("or-key", "https://openrouter.ai/api")
+        assert len(res) == 8
+        assert res[3].label == "Free Tier"
+        assert res[3].text_value == "Yes"
+        assert res[4].label == "Limit Reset"
+        assert res[4].text_value == "monthly"
+        assert res[5].label == "Expires At"
+        assert res[5].text_value == "2026-06-12T12:00:00Z"
+        assert res[6].label == "Is Provisioning"
+        assert res[6].text_value == "No"
+
+
 
