@@ -404,7 +404,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
         hint.append("[1-4]", style="bold")
         hint.append(" 面板  " if lang_zh else " panels  ", style="dim")
         hint.append("[l]", style="bold")
-        hint.append(" EN" if lang_zh else " 中文", style="dim")
+        hint.append(" 英" if lang_zh else " ZH", style="dim")
         hint.append("  ", style="dim")
         hint.append("[⏎]", style="bold")
         hint.append(" 保存主题" if lang_zh else " Save theme", style="dim")
