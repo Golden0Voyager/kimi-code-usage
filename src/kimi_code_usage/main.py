@@ -67,6 +67,7 @@ def _get_localized_label(label: str, lang_zh: bool = IS_ZH) -> str:
             "Limit Reset": "限额重置周期",
             "Expires At": "过期时间",
             "Is Provisioning": "配给密钥",
+            "Management Key": "管理密钥",
         }
         if label in translations:
             return translations[label]
@@ -81,6 +82,7 @@ def _get_localized_label(label: str, lang_zh: bool = IS_ZH) -> str:
             "限额重置周期": "Limit Reset",
             "过期时间": "Expires At",
             "配给密钥": "Is Provisioning",
+            "管理密钥": "Management Key",
         }
         if label in translations:
             return translations[label]

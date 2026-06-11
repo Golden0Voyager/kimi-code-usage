@@ -114,16 +114,24 @@ async def fetch_openrouter_usage(api_key: str, base_url: str) -> List[ProviderUs
     # 3. Key Label (Name)
     key_label = key_data.get("label")
     if key_label:
+        is_mgmt = key_label.startswith("sk-") and "..." in key_label
+        if is_mgmt:
+            display_label = "Management Key"
+            display_value = key_label.replace("...", "*********")
+        else:
+            display_label = "Key Name"
+            display_value = key_label
+
         res.append(ProviderUsage(
             provider="openrouter",
-            label="Key Name",
+            label=display_label,
             used=0.0,
             limit=None,
             remaining=None,
             percent=None,
             reset_at=None,
             unit="text",
-            text_value=key_label
+            text_value=display_value
         ))
 
     # 3.1. Free Tier

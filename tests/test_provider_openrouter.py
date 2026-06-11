@@ -143,7 +143,7 @@ async def test_fetch_openrouter_usage_credits_failed_fallback(monkeypatch):
             async def mock_key_json():
                 return {
                     "data": {
-                        "label": "unlimited-key",
+                        "label": "sk-or-v1-276...eab",
                         "usage": 2.5,
                         "limit": None
                     }
@@ -161,7 +161,8 @@ async def test_fetch_openrouter_usage_credits_failed_fallback(monkeypatch):
         assert len(res) == 3
         assert res[0].label == "Credits"
         assert res[0].used == 2.5
-        assert res[1].label == "Key Name"
+        assert res[1].label == "Management Key"
+        assert res[1].text_value == "sk-or-v1-276*********eab"
         assert res[2].label == "Usage"
         assert res[2].text_value == "Daily: $0.0000 | Weekly: $0.0000 | Monthly: $0.0000"
 

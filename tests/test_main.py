@@ -696,6 +696,8 @@ def test_localization_helpers():
     assert _get_localized_label("过期时间", lang_zh=False) == "Expires At"
     assert _get_localized_label("Is Provisioning", lang_zh=True) == "配给密钥"
     assert _get_localized_label("配给密钥", lang_zh=False) == "Is Provisioning"
+    assert _get_localized_label("Management Key", lang_zh=True) == "管理密钥"
+    assert _get_localized_label("管理密钥", lang_zh=False) == "Management Key"
     assert _get_localized_label("SomeOtherLabel", lang_zh=True) == "SomeOtherLabel"
 
     # 2. Test _get_localized_text_value
