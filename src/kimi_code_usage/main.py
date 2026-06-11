@@ -408,25 +408,29 @@ def _format_aggregated_results(
 
     # Second pass: construct final result with uniform divider width in user-defined order
     for p in order:
+        body_text = provider_bodies.get(p)
+        err_msg = error_msgs.get(p)
+        
+
+
         title_str = "Kimi" if p == "kimi" else p.capitalize()
         base_line = f"──── {title_str} "
         divider_line = base_line + "─" * max(2, divider_width - len(base_line))
-        
-        body_text = provider_bodies.get(p)
-        err_msg = error_msgs.get(p)
         
         if body_text:
             result.append(f"{divider_line}\n", style=theme["title"])
             result.append("\n")  # Empty line between divider and text
             result.append(body_text)
-            result.append("\n")  # Space before potential error or next section
             
         if err_msg:
             if not body_text:
                 result.append(f"{divider_line}\n", style=theme["danger"])
                 result.append("\n")  # Empty line between divider and error
-            result.append(f"{err_msg}\n", style=theme["danger"])
-            result.append("\n")  # Empty line below provider section
+            else:
+                result.append("\n\n")  # Empty line between body and error
+            result.append(f"{err_msg}", style=theme["danger"])
+
+        result.append("\n\n")  # Empty line below provider section
 
     return result
 
