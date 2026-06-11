@@ -11,8 +11,13 @@ async def fetch_openai_usage(api_key: str, base_url: str) -> List[ProviderUsage]
     start_str = now.strftime("%Y-%m-01")
     end_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
 
-    completions_url = f"{base_url.rstrip('/')}/v1/organization/usage/completions?start_time={start_str}&end_time={end_str}"
-    costs_url = f"{base_url.rstrip('/')}/v1/organization/usage/costs?start_time={start_str}&end_time={end_str}"
+    base_url_stripped = base_url.rstrip('/')
+    if base_url_stripped.endswith('/v1'):
+        completions_url = f"{base_url_stripped}/organization/usage/completions?start_time={start_str}&end_time={end_str}"
+        costs_url = f"{base_url_stripped}/organization/usage/costs?start_time={start_str}&end_time={end_str}"
+    else:
+        completions_url = f"{base_url_stripped}/v1/organization/usage/completions?start_time={start_str}&end_time={end_str}"
+        costs_url = f"{base_url_stripped}/v1/organization/usage/costs?start_time={start_str}&end_time={end_str}"
 
     async with aiohttp.ClientSession() as session:
         async with session.get(completions_url, headers=headers) as resp:

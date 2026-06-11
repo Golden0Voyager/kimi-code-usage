@@ -45,12 +45,19 @@ def _get_reset_info(data: Mapping[str, Any]) -> Optional[Tuple[str, str]]:
 
 def _limit_label(window: Mapping[str, Any], idx: int) -> str:
     duration = _to_int(window.get("duration"))
-    time_unit = str(window.get("time_unit") or "").upper()
-    if duration and time_unit:
+    time_unit = str(window.get("timeUnit") or window.get("time_unit") or "").upper()
+    if duration is not None:
+        if "MINUTE" in time_unit:
+            if duration >= 60 and duration % 60 == 0:
+                return f"{duration // 60}h Limit"
+            return f"{duration}m Limit"
         if "HOUR" in time_unit:
             return f"{duration}h Limit"
         if "DAY" in time_unit:
             return f"{duration}d Limit"
+        if "MONTH" in time_unit:
+            return f"{duration}mo Limit"
+        return f"{duration}s Limit"
     return f"Limit #{idx + 1}"
 
 class KimiRow:

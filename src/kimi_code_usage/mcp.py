@@ -44,7 +44,7 @@ async def get_usage(provider: str | None = None) -> str:
             return L["no_data"]
 
         lines = []
-        order = ["kimi", "openai", "anthropic", "openrouter"]
+        order = config.provider_order
 
         for p in order:
             p_items = results.get(p)
@@ -54,7 +54,10 @@ async def get_usage(provider: str | None = None) -> str:
                 provider_title = "Kimi" if p == "kimi" else p.capitalize()
                 
                 if item.unit == "text":
-                    line = f"{provider_title} - {item.label}"
+                    if item.text_value:
+                        line = f"{provider_title} - {item.label}: {item.text_value}"
+                    else:
+                        line = f"{provider_title} - {item.label}"
                 else:
                     line = f"{provider_title} - {item.label}: "
 
@@ -77,9 +80,11 @@ async def get_usage(provider: str | None = None) -> str:
                     line += f" | Reset in {item.countdown} (at {item.reset_at})"
                 lines.append(line)
 
-        for p, err in errors.items():
-            provider_title = "Kimi" if p == "kimi" else p.capitalize()
-            lines.append(f"{provider_title} - Error: {err}")
+        for p in order:
+            err = errors.get(p)
+            if err:
+                provider_title = "Kimi" if p == "kimi" else p.capitalize()
+                lines.append(f"{provider_title} - Error: {err}")
 
         return "\n".join(lines)
 

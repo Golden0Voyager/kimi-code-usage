@@ -206,3 +206,42 @@ async def test_fetch_kimi_usage_fallback_fails():
         with pytest.raises(Exception) as exc:
             await fetch_kimi_usage("test-key", "https://api.example.com/v1")
         assert "500" in str(exc.value)
+
+
+def test_kimi_reset_info_short_delta():
+    from kimi_code_usage.providers.kimi import _get_reset_info
+    # delta is 30 minutes (1800s)
+    future = datetime.now() + timedelta(seconds=1800)
+    res = _get_reset_info({"resetTime": future.isoformat()})
+    assert res is not None
+    assert "m" in res[1] and "h" not in res[1] and "d" not in res[1]
+
+
+def test_kimi_limit_label_monthly():
+    from kimi_code_usage.providers.kimi import _limit_label
+    res = _limit_label({"duration": 1, "time_unit": "MONTH"}, 0)
+    assert res == "1mo Limit"
+
+def test_kimi_limit_label_minute():
+    from kimi_code_usage.providers.kimi import _limit_label
+    # divisible by 60
+    assert _limit_label({"duration": 300, "time_unit": "MINUTE"}, 0) == "5h Limit"
+    # not divisible by 60
+    assert _limit_label({"duration": 45, "time_unit": "MINUTE"}, 0) == "45m Limit"
+    assert _limit_label({"duration": 45, "timeUnit": "MINUTE"}, 0) == "45m Limit"
+
+def test_kimi_limit_label_second():
+    from kimi_code_usage.providers.kimi import _limit_label
+    assert _limit_label({"duration": 30, "time_unit": "SECOND"}, 0) == "30s Limit"
+
+
+
+def test_kimi_parse_payload_empty_items():
+    from kimi_code_usage.providers.kimi import _parse_usage_payload
+    summary, limits = _parse_usage_payload({"data": [{"model_name": "kimi", "used": None, "limit": None}]})
+    assert summary is None
+    assert len(limits) == 0
+
+    summary, limits = _parse_usage_payload({"limits": [{"detail": {"used": None, "limit": None}}]})
+    assert summary is None
+    assert len(limits) == 0

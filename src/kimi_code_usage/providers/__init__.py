@@ -14,6 +14,7 @@ class ProviderUsage:
     reset_at: Optional[str]    # ISO timestamp or formatted reset date
     unit: str                  # "%" | "tokens" | "$" | "credits"
     countdown: Optional[str] = None # Reset countdown, e.g. "5d 12h"
+    text_value: Optional[str] = None
 
 # We will dynamically import fetchers to avoid circular dependencies
 # and make it easier to load/mock them.

@@ -79,3 +79,16 @@ async def test_dispatch_all_not_configured_or_unknown():
         assert "kimi" not in results
         assert errors["kimi"] == "Not configured"
         assert errors["unknown"] == "Unknown provider unknown"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_all_returns_none():
+    config = AppConfig(
+        providers={
+            "kimi": ProviderConfig(api_key="kimi-key", base_url="https://api.kimi.com/coding/v1")
+        }
+    )
+    with patch("kimi_code_usage.providers.kimi.fetch_kimi_usage", AsyncMock(return_value=None)):
+        results, errors = await dispatch_all(config)
+        assert "kimi" not in results
+        assert len(errors) == 0

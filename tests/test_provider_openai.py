@@ -89,7 +89,7 @@ async def test_fetch_openai_usage_costs_fails_gracefully():
     mock_session.__aexit__ = AsyncMock(return_value=None)
 
     with patch("aiohttp.ClientSession", return_value=mock_session):
-        res = await fetch_openai_usage("org-admin-key", "https://api.openai.com")
+        res = await fetch_openai_usage("org-admin-key", "https://api.openai.com/v1")
         assert len(res) == 2
         assert res[0].used == 150.0
         assert res[1].used == 0.0
@@ -130,3 +130,58 @@ async def test_fetch_openai_usage_api_error():
         with pytest.raises(Exception) as exc:
             await fetch_openai_usage("key", "https://api.openai.com")
         assert "OpenAI API Error 502" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_fetch_openai_usage_costs_edge_cases():
+    async def mock_json_completions(*args, **kwargs):
+        return {"data": [{"input_tokens": 10, "output_tokens": 5}]}
+
+    async def mock_json_costs_bad_format(*args, **kwargs):
+        return {
+            "data": [
+                {"amount": "not-a-dict"},
+                {"amount": {}},
+                {"amount": {"value": 0.5}}
+            ]
+        }
+
+    def make_mock_cm(status, json_data=None):
+        cm = AsyncMock()
+        cm.__aenter__ = AsyncMock(return_value=cm)
+        cm.__aexit__ = AsyncMock(return_value=None)
+        cm.status = status
+        if json_data:
+            cm.json = AsyncMock(side_effect=json_data)
+        return cm
+
+    # Case 1: costs status != 200
+    mock_session1 = AsyncMock()
+    mock_session1.get = lambda url, **kw: (
+        make_mock_cm(200, mock_json_completions) if "completions" in url
+        else make_mock_cm(500)
+    )
+    mock_session1.__aenter__ = AsyncMock(return_value=mock_session1)
+    mock_session1.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("aiohttp.ClientSession", return_value=mock_session1):
+        res = await fetch_openai_usage("key", "https://api.openai.com")
+        assert len(res) == 2
+        assert res[0].used == 15.0
+        assert res[1].used == 0.0
+
+    # Case 2: costs returns 200 but has bad format items
+    mock_session2 = AsyncMock()
+    mock_session2.get = lambda url, **kw: (
+        make_mock_cm(200, mock_json_completions) if "completions" in url
+        else make_mock_cm(200, mock_json_costs_bad_format)
+    )
+    mock_session2.__aenter__ = AsyncMock(return_value=mock_session2)
+    mock_session2.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("aiohttp.ClientSession", return_value=mock_session2):
+        res = await fetch_openai_usage("key", "https://api.openai.com")
+        assert len(res) == 2
+        assert res[0].used == 15.0
+        # only the last item amount.value = 0.5 is parsed
+        assert res[1].used == 0.5
