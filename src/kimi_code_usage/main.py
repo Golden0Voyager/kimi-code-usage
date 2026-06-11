@@ -226,19 +226,13 @@ def _format_aggregated_results(
     if not theme:
         theme = THEME_MAP["default-dark"]
         
-    first_section = True
-
     for p in order:
         p_items = results.get(p)
         if not p_items:
             continue
 
-        if not first_section:
-            result.append("\n\n")
-        first_section = False
-
         title_str = "Kimi" if p == "kimi" else p.capitalize()
-        base_line = f"── {title_str} "
+        base_line = f"──── {title_str} "
         divider_line = base_line + "─" * max(2, 50 - len(base_line))
         result.append(f"{divider_line}\n", style=theme["title"])
 
@@ -291,15 +285,15 @@ def _format_aggregated_results(
                 result.append("\n")
                 result.append("  " + "  ".join(meta_parts), style=theme["meta"])
 
+        result.append("\n\n")
+
     for p, err in errors.items():
-        if not first_section:
-            result.append("\n\n")
-        first_section = False
         title_str = "Kimi" if p == "kimi" else p.capitalize()
-        base_line = f"── {title_str} "
+        base_line = f"──── {title_str} "
         divider_line = base_line + "─" * max(2, 50 - len(base_line))
         result.append(f"{divider_line}\n", style=theme["danger"])
         result.append(f"  ⚠ {err}", style=theme["danger"])
+        result.append("\n\n")
 
     return result
 
@@ -389,7 +383,6 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
             top_bar,
             Text(""),
             body,
-            Text(""),
             hint
         )
 
