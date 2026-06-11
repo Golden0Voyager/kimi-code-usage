@@ -285,6 +285,14 @@ def _format_aggregated_results(
             continue
 
         visual_widths = [_get_visual_width(_get_localized_label(r.label, lang_zh)) for r in p_items]
+        # Include metadata labels if applicable to ensure correct alignment padding
+        has_countdown = any(r.countdown for r in p_items)
+        has_reset = any(r.reset_at for r in p_items)
+        if has_countdown:
+            visual_widths.append(_get_visual_width(_L['countdown']))
+        if has_reset:
+            visual_widths.append(_get_visual_width(_L['reset']))
+
         max_visual_width = max(visual_widths) if visual_widths else 0
         max_visual_width = max(max_visual_width, 6)
         bar_width = 20
@@ -327,10 +335,16 @@ def _format_aggregated_results(
 
             if row.countdown:
                 body_text.append("\n")
-                body_text.append(f"  {_L['countdown']}: {row.countdown}", style=theme["meta"])
+                meta_label = _L['countdown']
+                meta_padding = " " * (max_visual_width - _get_visual_width(meta_label))
+                body_text.append(f"  {meta_label}{meta_padding}  ", style=theme["label"])
+                body_text.append(row.countdown, style="bold")
             if row.reset_at:
                 body_text.append("\n")
-                body_text.append(f"  {_L['reset']}: {row.reset_at}", style=theme["meta"])
+                meta_label = _L['reset']
+                meta_padding = " " * (max_visual_width - _get_visual_width(meta_label))
+                body_text.append(f"  {meta_label}{meta_padding}  ", style=theme["label"])
+                body_text.append(row.reset_at, style="bold")
 
         provider_bodies[p] = body_text
         lines = body_text.plain.split("\n")
