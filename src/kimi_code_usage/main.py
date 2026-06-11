@@ -54,11 +54,51 @@ def _get_visual_width(s: str) -> int:
 
 def _get_localized_label(label: str, lang_zh: bool = IS_ZH) -> str:
     _L = L_ZH if lang_zh else L_EN
+    
+    # 1. Dynamic translations first
+    if lang_zh:
+        translations = {
+            "Credits": "额度",
+            "Key Name": "密钥名称",
+            "Rate Limit": "速率限制",
+            "Usage": "周期已用",
+            "周期已用": "周期已用",
+        }
+        if label in translations:
+            return translations[label]
+    else:
+        translations = {
+            "额度": "Credits",
+            "密钥名称": "Key Name",
+            "速率限制": "Rate Limit",
+            "周期已用": "Usage",
+            "Usage": "Usage",
+        }
+        if label in translations:
+            return translations[label]
+
+    # 2. Standard rule replacements
     if label == "Weekly Usage":
         return _L["weekly_limit"]
     if "Limit" in label:
         return label.replace("Limit", _L["limit_fallback"])
     return label
+
+
+def _get_localized_text_value(text_val: str, lang_zh: bool) -> str:
+    if not text_val:
+        return text_val
+    # OpenRouter period usage pattern
+    if "Daily: $" in text_val or "今日: $" in text_val:
+        import re
+        floats = re.findall(r"\d+\.\d+", text_val)
+        if len(floats) == 3:
+            u_daily, u_weekly, u_monthly = float(floats[0]), float(floats[1]), float(floats[2])
+            if lang_zh:
+                return f"今日: ${u_daily:.4f} | 本周: ${u_weekly:.4f} | 本月: ${u_monthly:.4f}"
+            else:
+                return f"Daily: ${u_daily:.4f} | Weekly: ${u_weekly:.4f} | Monthly: ${u_monthly:.4f}"
+    return text_val
 
 # (typing already imported at top)
 
@@ -237,7 +277,8 @@ def _format_aggregated_results(
                     result.append(f"  ${row.used:.2f}", style="bold")
                 elif row.unit == "text":
                     if row.text_value:
-                        result.append(f"  {row.text_value}", style="bold")
+                        loc_val = _get_localized_text_value(row.text_value, lang_zh)
+                        result.append(f"  {loc_val}", style="bold")
                 else:
                     result.append(f"  {row.used:,.0f} {row.unit}", style="bold")
 

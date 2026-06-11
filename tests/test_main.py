@@ -676,6 +676,36 @@ async def test_interactive_mode_enter_saves_theme(monkeypatch, tmp_path):
     assert mock_live.update.call_count >= 2
 
 
+def test_localization_helpers():
+    from kimi_code_usage.main import _get_localized_label, _get_localized_text_value
+
+    # 1. Test _get_localized_label with translations
+    assert _get_localized_label("Credits", lang_zh=True) == "额度"
+    assert _get_localized_label("额度", lang_zh=False) == "Credits"
+    assert _get_localized_label("Key Name", lang_zh=True) == "密钥名称"
+    assert _get_localized_label("密钥名称", lang_zh=False) == "Key Name"
+    assert _get_localized_label("Rate Limit", lang_zh=True) == "速率限制"
+    assert _get_localized_label("速率限制", lang_zh=False) == "Rate Limit"
+    assert _get_localized_label("Usage", lang_zh=True) == "周期已用"
+    assert _get_localized_label("周期已用", lang_zh=False) == "Usage"
+    assert _get_localized_label("SomeOtherLabel", lang_zh=True) == "SomeOtherLabel"
+
+    # 2. Test _get_localized_text_value
+    assert _get_localized_text_value(None, lang_zh=True) is None
+    assert _get_localized_text_value("", lang_zh=True) == ""
+    
+    val_en = "Daily: $0.1234 | Weekly: $0.5678 | Monthly: $1.2345"
+    assert _get_localized_text_value(val_en, lang_zh=True) == "今日: $0.1234 | 本周: $0.5678 | 本月: $1.2345"
+    
+    val_zh = "今日: $0.1234 | 本周: $0.5678 | 本月: $1.2345"
+    assert _get_localized_text_value(val_zh, lang_zh=False) == "Daily: $0.1234 | Weekly: $0.5678 | Monthly: $1.2345"
+
+    val_bad_floats = "Daily: $abc | Weekly: $0.56 | Monthly: $1.23"
+    assert _get_localized_text_value(val_bad_floats, lang_zh=True) == val_bad_floats
+
+    assert _get_localized_text_value("Other normal text", lang_zh=True) == "Other normal text"
+
+
 def test_format_aggregated_results_edge_cases():
     # 1. Non-empty results with multiple errors
     results = {
