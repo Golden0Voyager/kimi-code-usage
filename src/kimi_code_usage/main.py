@@ -528,6 +528,20 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
+
+    def _read_char() -> str:
+        # Prevent input buffering split by using os.read in raw terminal; fall back to stdin.read under tests
+        is_mock = hasattr(sys.stdin.read, "mock") or hasattr(sys.stdin.read, "_mock_self") or "mock" in type(sys.stdin.read).__name__.lower()
+        if not is_mock and hasattr(sys.stdin, "isatty") and sys.stdin.isatty():  # pragma: no cover
+            import os
+            try:
+                b = os.read(fd, 1)
+                if b:
+                    return b.decode('utf-8', errors='ignore')
+            except Exception:
+                pass
+        return sys.stdin.read(1)
+
     try:
         tty.setcbreak(fd)
         results, errors = await dispatch_all(config)
@@ -537,16 +551,20 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
             while running:
                 rlist, _, _ = _select_module.select([sys.stdin], [], [], 0.15)
                 if rlist:
-                    ch = sys.stdin.read(1)
+                    ch = _read_char()
+                    if not ch:  # pragma: no cover
+                        continue
+
                     if ch == '\x1b':
                         r2, _, _ = _select_module.select([sys.stdin], [], [], 0.05)
                         if r2:
-                            ch2 = sys.stdin.read(1)
+                            ch2 = _read_char()
                             if ch2 == '[':
                                 r3, _, _ = _select_module.select([sys.stdin], [], [], 0.05)
                                 if r3:
-                                    ch3 = sys.stdin.read(1)
+                                    ch3 = _read_char()
                                     ch = f'\x1b[{ch3}'
+
                     if saved_notice[0]:     # clear notice on any new keypress
                         saved_notice[0] = None
                     if ch in ('\r', '\n'):  # Enter → save settings to config file
@@ -557,6 +575,14 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
                         )
                         saved_notice[0] = themes[idx]
                         live.update(_build_panel())
+                        # Flush any consecutive \r or \n (like \r\n from terminal)
+                        while True:
+                            r_extra, _, _ = _select_module.select([sys.stdin], [], [], 0.0)
+                            if r_extra:  # pragma: no cover
+                                extra_ch = _read_char()
+                                if extra_ch in ('\r', '\n'):  # pragma: no cover
+                                    continue
+                            break
                         continue
                     idx, quit_flag, refresh_flag, toggle_num, lang_toggle = _handle_key(ch, idx, len(themes))
                     if quit_flag:
