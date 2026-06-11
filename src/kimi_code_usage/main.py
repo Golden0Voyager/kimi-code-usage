@@ -440,8 +440,8 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
     saved_notice: list = [None]   # holds the saved theme name briefly, then None
 
     _SHORT = {
-        "anthropic": "Claude", "openai": "GPT",
-        "openrouter": "OR",    "kimi": "Kimi",
+        "anthropic": "anthropic", "openai": "openai",
+        "openrouter": "openrouter",    "kimi": "kimi",
     }
 
     def _build_panel() -> Panel:
