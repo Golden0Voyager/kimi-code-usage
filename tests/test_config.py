@@ -210,3 +210,20 @@ def test_config_resolver_language_and_visible_providers(tmp_path):
     assert config.visible_providers == ["openai", "kimi"]
 
 
+def test_config_resolver_unknown_provider(tmp_path):
+    config_path = tmp_path / "config.json"
+    data = {
+        "providers": {
+            "unknown-prov": { "apiKey": "some-key" },
+            "kimi": { "apiKey": "kimi-key" }
+        }
+    }
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+        
+    resolver = ConfigResolver(config_path=str(config_path))
+    config = resolver.resolve()
+    assert "unknown-prov" not in config.provider_order
+    assert "kimi" in config.provider_order
+
+

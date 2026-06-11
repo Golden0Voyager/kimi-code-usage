@@ -269,4 +269,47 @@ async def test_fetch_openrouter_usage_credits_raises_exception(monkeypatch):
         assert res[2].label == "Usage"
 
 
+@pytest.mark.asyncio
+async def test_fetch_openrouter_usage_edge_cases(monkeypatch):
+    monkeypatch.setenv("LANG", "en")
+    def mock_get(url, *args, **kwargs):
+        cm = AsyncMock()
+        cm.__aenter__ = AsyncMock(return_value=cm)
+        cm.__aexit__ = AsyncMock(return_value=None)
+        cm.status = 200
+        
+        if "credits" in url:
+            async def mock_credits_json():
+                # case 1: total_credits is missing (None)
+                return {"data": {"total_usage": 1.5}}
+            cm.json = mock_credits_json
+        else:
+            async def mock_key_json():
+                return {
+                    "data": {
+                        "usage": 2.5,
+                        "limit": 5.0,
+                        # case 2: label is missing
+                        # case 3: rate_limit is not a dict
+                        "rate_limit": "not-a-dict"
+                    }
+                }
+            cm.json = mock_key_json
+        return cm
+
+    mock_session = AsyncMock()
+    mock_session.get = mock_get
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("aiohttp.ClientSession", return_value=mock_session):
+        res = await fetch_openrouter_usage("or-key", "https://openrouter.ai/api")
+        # should fall back because total_credits was missing
+        # should have 2 items (Credits fallback from key usage, plus Period Usage)
+        assert len(res) == 2
+        assert res[0].label == "Credits"
+        assert res[0].used == 2.5
+        assert res[0].limit == 5.0
+
+
 

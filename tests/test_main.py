@@ -674,3 +674,98 @@ async def test_interactive_mode_enter_saves_theme(monkeypatch, tmp_path):
     assert "kimi" in saved_calls[0][2]
     # panel updated at least twice (Enter update + subsequent updates)
     assert mock_live.update.call_count >= 2
+
+
+def test_format_aggregated_results_edge_cases():
+    # 1. Non-empty results with multiple errors
+    results = {
+        "kimi": [
+            ProviderUsage(provider="kimi", label="API Plan", used=0, limit=None, remaining=None, percent=None, reset_at=None, unit="text", text_value=None)
+        ]
+    }
+    errors = {
+        "kimi": "error1",
+        "openai": "error2"
+    }
+    text = _format_aggregated_results(results, errors)
+    raw_text = str(text)
+    assert "error1" in raw_text
+    assert "error2" in raw_text
+    assert "None" not in raw_text
+
+    # 2. Empty results with errors (to cover if not first_section being False on first error)
+    text_empty = _format_aggregated_results({}, {"kimi": "error1", "openai": "error2"})
+    raw_text_empty = str(text_empty)
+    assert "error1" in raw_text_empty
+    assert "error2" in raw_text_empty
+
+
+@pytest.mark.asyncio
+async def test_main_json_output_no_errors(monkeypatch, capsys):
+    monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
+    monkeypatch.setattr("sys.argv", ["prog", "--json"])
+    
+    mock_results = {
+        "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")]
+    }
+    
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_results, {}))):
+        await main()
+        
+    captured = capsys.readouterr()
+    data = json.loads(captured.out.strip())
+    assert "kimi" in data
+    assert "errors" not in data
+
+
+@pytest.mark.asyncio
+async def test_interactive_mode_escape_keys(monkeypatch):
+    _mock_terminal(monkeypatch)
+    import kimi_code_usage.main as main_mod
+
+    # Case 1: Escape followed by non-'[' character (e.g. '\x1b', 'A', 'q')
+    inputs_1 = ['\x1b', 'A', 'q']
+    idx_1 = [0]
+    
+    def mock_select_1(rlist, wlist, xlist, timeout):
+        if idx_1[0] < len(inputs_1):
+            return ([sys.stdin], [], [])
+        return ([], [], [])
+
+    def mock_read_1(n):
+        val = inputs_1[idx_1[0]]
+        idx_1[0] += 1
+        return val
+
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select_1)
+    monkeypatch.setattr(sys.stdin, "read", mock_read_1)
+
+    cfg = _make_interactive_config(monkeypatch)
+    mock_res = {"kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=5, limit=100, remaining=95, percent=5, reset_at=None, unit="%")]}
+
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+        with patch("kimi_code_usage.main.Live"):
+            await _interactive_mode(cfg, "default-dark")
+
+    # Case 2: Escape followed by '[', but no 3rd character (timeout on r3)
+    inputs_2 = ['\x1b', '[', 'q']
+    idx_2 = [0]
+    
+    def mock_select_2(rlist, wlist, xlist, timeout):
+        if timeout == 0.05 and idx_2[0] == 2:
+            return ([], [], [])
+        if idx_2[0] < len(inputs_2):
+            return ([sys.stdin], [], [])
+        return ([], [], [])
+
+    def mock_read_2(n):
+        val = inputs_2[idx_2[0]]
+        idx_2[0] += 1
+        return val
+
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select_2)
+    monkeypatch.setattr(sys.stdin, "read", mock_read_2)
+
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+        with patch("kimi_code_usage.main.Live"):
+            await _interactive_mode(cfg, "default-dark")
