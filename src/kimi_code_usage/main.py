@@ -226,6 +226,11 @@ def _format_aggregated_results(
     if not theme:
         theme = THEME_MAP["default-dark"]
         
+    # First pass: pre-render all bodies and find global_max_width
+    provider_bodies = {}
+    error_msgs = {}
+    global_max_width = 0
+
     for p in order:
         p_items = results.get(p)
         if not p_items:
@@ -281,10 +286,26 @@ def _format_aggregated_results(
                 body_text.append("\n")
                 body_text.append("  " + "  ".join(meta_parts), style=theme["meta"])
 
-        # Calculate max line width of body_text
+        provider_bodies[p] = body_text
         lines = body_text.plain.split("\n")
         max_line_width = max((_get_visual_width(line) for line in lines), default=0)
-        divider_width = max(50, max_line_width + 4)
+        if max_line_width > global_max_width:
+            global_max_width = max_line_width
+
+    for p, err in errors.items():
+        err_msg = f"  ⚠ {err}"
+        error_msgs[p] = err_msg
+        err_width = _get_visual_width(err_msg)
+        if err_width > global_max_width:
+            global_max_width = err_width
+
+    divider_width = max(50, global_max_width + 4)
+
+    # Second pass: construct final result with uniform divider width
+    for p in order:
+        body_text = provider_bodies.get(p)
+        if not body_text:
+            continue
 
         title_str = "Kimi" if p == "kimi" else p.capitalize()
         base_line = f"──── {title_str} "
@@ -297,10 +318,7 @@ def _format_aggregated_results(
 
     for p, err in errors.items():
         title_str = "Kimi" if p == "kimi" else p.capitalize()
-        err_msg = f"  ⚠ {err}"
-
-        max_line_width = _get_visual_width(err_msg)
-        divider_width = max(50, max_line_width + 4)
+        err_msg = error_msgs[p]
 
         base_line = f"──── {title_str} "
         divider_line = base_line + "─" * max(2, divider_width - len(base_line))
