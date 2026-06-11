@@ -482,19 +482,19 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
         body = _format_aggregated_results(results, errors, visible_order, themes[idx], lang_zh)
 
         top_bar = Text()
-        # Theme name
-        top_bar.append(" 主题: " if lang_zh else " theme: ", style="dim")
-        top_bar.append(themes[idx], style="bold")
-        top_bar.append("  │  ", style="dim")
         # Provider toggles
         for i, p in enumerate(config.provider_order, 1):
             short = _SHORT.get(p, p[:4].title())
             if p in visible_providers:
-                top_bar.append("●", style="bold")
+                top_bar.append("● ", style="bold")
                 top_bar.append(f"[{i}]{short}  ", style="bold")
             else:
-                top_bar.append("○", style="dim")
+                top_bar.append("○ ", style="dim")
                 top_bar.append(f"[{i}]{short}  ", style="dim italic")
+        # Theme name
+        top_bar.append("│  ", style="dim")
+        top_bar.append("主题: " if lang_zh else "theme: ", style="dim")
+        top_bar.append(themes[idx], style="bold")
         top_bar.justify = "center"
 
         hint = Text()
