@@ -199,7 +199,23 @@ async def fetch_openrouter_usage(api_key: str, base_url: str) -> List[ProviderUs
     if isinstance(rate_limit, dict):
         reqs = rate_limit.get("requests")
         interval = rate_limit.get("interval")
-        if reqs is not None and interval is not None and reqs > 0:
+        if reqs is not None and interval is not None:
+            import os
+            lang = os.getenv("LANG", "en")
+            is_zh = "zh" in lang.lower()
+            if reqs == -1:
+                if is_zh:
+                    interval_zh = str(interval).replace("s", "秒").replace("m", "分钟").replace("h", "小时")
+                    val_str = f"无限制/{interval_zh}"
+                else:
+                    val_str = f"Unlimited/{interval}"
+            else:
+                if is_zh:
+                    interval_zh = str(interval).replace("s", "秒").replace("m", "分钟").replace("h", "小时")
+                    val_str = f"{reqs}次/{interval_zh}"
+                else:
+                    val_str = f"{reqs} req/{interval}"
+
             res.append(ProviderUsage(
                 provider="openrouter",
                 label="Rate Limit",
@@ -209,7 +225,7 @@ async def fetch_openrouter_usage(api_key: str, base_url: str) -> List[ProviderUs
                 percent=None,
                 reset_at=None,
                 unit="text",
-                text_value=f"{reqs} req/{interval}"
+                text_value=val_str
             ))
 
     # 5. Period Usage (Daily, Weekly, Monthly)

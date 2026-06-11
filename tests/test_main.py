@@ -729,6 +729,20 @@ def test_localization_helpers():
     assert _get_localized_text_value("Other normal text", lang_zh=True) == "Other normal text"
     assert _get_localized_text_value("Other normal text", lang_zh=False) == "Other normal text"
     
+    # Rate limit localization
+    assert _get_localized_text_value("Unlimited/10s", lang_zh=True) == "无限制/10秒"
+    assert _get_localized_text_value("无限制/10秒", lang_zh=False) == "Unlimited/10s"
+    assert _get_localized_text_value("20 req/1s", lang_zh=True) == "20次/1秒"
+    assert _get_localized_text_value("20次/1秒", lang_zh=False) == "20 req/1s"
+    assert _get_localized_text_value("Unlimited/1m", lang_zh=True) == "无限制/1分钟"
+    assert _get_localized_text_value("无限制/1分钟", lang_zh=False) == "Unlimited/1m"
+    assert _get_localized_text_value("Unlimited/1h", lang_zh=True) == "无限制/1小时"
+    assert _get_localized_text_value("无限制/1小时", lang_zh=False) == "Unlimited/1h"
+    assert _get_localized_text_value("5 req/2m", lang_zh=True) == "5次/2分钟"
+    assert _get_localized_text_value("5次/2分钟", lang_zh=False) == "5 req/2m"
+    assert _get_localized_text_value("5 req/2h", lang_zh=True) == "5次/2小时"
+    assert _get_localized_text_value("5次/2小时", lang_zh=False) == "5 req/2h"
+
     # Yes/No localization
     assert _get_localized_text_value("Yes", lang_zh=True) == "是"
     assert _get_localized_text_value("No", lang_zh=True) == "否"

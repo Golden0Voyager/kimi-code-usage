@@ -129,6 +129,82 @@ async def test_fetch_openrouter_usage_success_zh(monkeypatch):
         assert res[2].text_value == "今日: $0.1000 | 本周: $0.5000 | 本月: $1.5000"
 
 @pytest.mark.asyncio
+async def test_fetch_openrouter_usage_rate_limit_zh(monkeypatch):
+    monkeypatch.setenv("LANG", "zh_CN.UTF-8")
+    
+    # 1. Test positive rate limit
+    def mock_get(url, *args, **kwargs):
+        cm = AsyncMock()
+        cm.__aenter__ = AsyncMock(return_value=cm)
+        cm.__aexit__ = AsyncMock(return_value=None)
+        
+        if "credits" in url:
+            cm.status = 500
+        else:
+            cm.status = 200
+            async def mock_key_json():
+                return {
+                    "data": {
+                        "label": "my-key",
+                        "usage": 2.5,
+                        "limit": 5.0,
+                        "rate_limit": {
+                            "requests": 20,
+                            "interval": "10s"
+                        }
+                    }
+                }
+            cm.json = mock_key_json
+        return cm
+
+    mock_session = AsyncMock()
+    mock_session.get = mock_get
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("aiohttp.ClientSession", return_value=mock_session):
+        res = await fetch_openrouter_usage("or-key", "https://openrouter.ai/api")
+        assert len(res) == 4
+        assert res[2].label == "Rate Limit"
+        assert res[2].text_value == "20次/10秒"
+
+    # 2. Test unlimited rate limit (-1)
+    def mock_get_unlimited(url, *args, **kwargs):
+        cm = AsyncMock()
+        cm.__aenter__ = AsyncMock(return_value=cm)
+        cm.__aexit__ = AsyncMock(return_value=None)
+        
+        if "credits" in url:
+            cm.status = 500
+        else:
+            cm.status = 200
+            async def mock_key_json():
+                return {
+                    "data": {
+                        "label": "my-key",
+                        "usage": 2.5,
+                        "limit": 5.0,
+                        "rate_limit": {
+                            "requests": -1,
+                            "interval": "1m"
+                        }
+                    }
+                }
+            cm.json = mock_key_json
+        return cm
+
+    mock_session2 = AsyncMock()
+    mock_session2.get = mock_get_unlimited
+    mock_session2.__aenter__ = AsyncMock(return_value=mock_session2)
+    mock_session2.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("aiohttp.ClientSession", return_value=mock_session2):
+        res2 = await fetch_openrouter_usage("or-key", "https://openrouter.ai/api")
+        assert len(res2) == 4
+        assert res2[2].label == "Rate Limit"
+        assert res2[2].text_value == "无限制/1分钟"
+
+@pytest.mark.asyncio
 async def test_fetch_openrouter_usage_credits_failed_fallback(monkeypatch):
     monkeypatch.setenv("LANG", "en")
     def mock_get(url, *args, **kwargs):
@@ -194,7 +270,7 @@ async def test_fetch_openrouter_usage_api_error():
         assert "OpenRouter API Error 401" in str(exc.value)
 
 @pytest.mark.asyncio
-async def test_fetch_openrouter_usage_rate_limit_ignored_if_negative_or_missing(monkeypatch):
+async def test_fetch_openrouter_usage_rate_limit_unlimited(monkeypatch):
     monkeypatch.setenv("LANG", "en")
     def mock_get(url, *args, **kwargs):
         cm = AsyncMock()
@@ -227,10 +303,13 @@ async def test_fetch_openrouter_usage_rate_limit_ignored_if_negative_or_missing(
 
     with patch("aiohttp.ClientSession", return_value=mock_session):
         res = await fetch_openrouter_usage("or-key", "https://openrouter.ai/api")
-        assert len(res) == 3
+        assert len(res) == 4
         assert res[0].label == "Credits"
         assert res[1].label == "Key Name"
-        assert res[2].label == "Usage"
+        assert res[2].label == "Rate Limit"
+        assert res[2].text_value == "Unlimited/10s"
+        assert res[3].label == "Usage"
+
 
 @pytest.mark.asyncio
 async def test_fetch_openrouter_usage_credits_raises_exception(monkeypatch):

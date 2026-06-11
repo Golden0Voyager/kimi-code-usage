@@ -121,6 +121,26 @@ def _get_localized_text_value(text_val: str, lang_zh: bool) -> str:
             else:
                 return f"Daily: ${u_daily:.4f} | Weekly: ${u_weekly:.4f} | Monthly: ${u_monthly:.4f}"
     
+    # Rate limit localization (e.g., Unlimited/10s <-> 无限制/10秒, 20 req/1s <-> 20次/1秒)
+    if lang_zh:
+        if text_val.startswith("Unlimited/"):
+            interval = text_val.split("/", 1)[1]
+            interval_zh = interval.replace("s", "秒").replace("m", "分钟").replace("h", "小时")
+            return f"无限制/{interval_zh}"
+        elif " req/" in text_val:
+            reqs, interval = text_val.split(" req/", 1)
+            interval_zh = interval.replace("s", "秒").replace("m", "分钟").replace("h", "小时")
+            return f"{reqs}次/{interval_zh}"
+    else:
+        if text_val.startswith("无限制/"):
+            interval = text_val.split("/", 1)[1]
+            interval_en = interval.replace("秒", "s").replace("分钟", "m").replace("小时", "h")
+            return f"Unlimited/{interval_en}"
+        elif "次/" in text_val:
+            reqs, interval = text_val.split("次/", 1)
+            interval_en = interval.replace("秒", "s").replace("分钟", "m").replace("小时", "h")
+            return f"{reqs} req/{interval_en}"
+
     # Yes/No localization
     if lang_zh:
         if text_val == "Yes":
