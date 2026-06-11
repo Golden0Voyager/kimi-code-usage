@@ -700,6 +700,19 @@ def test_localization_helpers():
     assert _get_localized_label("管理密钥", lang_zh=False) == "Management Key"
     assert _get_localized_label("SomeOtherLabel", lang_zh=True) == "SomeOtherLabel"
 
+    # Test time unit limits
+    assert _get_localized_label("5h Limit", lang_zh=True) == "5小时限额"
+    assert _get_localized_label("5h Limit", lang_zh=False) == "5h Limit"
+    assert _get_localized_label("3d Limit", lang_zh=True) == "3天限额"
+    assert _get_localized_label("3d Limit", lang_zh=False) == "3d Limit"
+    assert _get_localized_label("6mo Limit", lang_zh=True) == "6个月限额"
+    assert _get_localized_label("6mo Limit", lang_zh=False) == "6mo Limit"
+    assert _get_localized_label("45m Limit", lang_zh=True) == "45分钟限额"
+    assert _get_localized_label("45m Limit", lang_zh=False) == "45m Limit"
+    assert _get_localized_label("30s Limit", lang_zh=True) == "30s 限额"  # falls back to replacing "Limit" with "限额"
+    assert _get_localized_label("30s Limit", lang_zh=False) == "30s Limit"
+
+
     # 2. Test _get_localized_text_value
     assert _get_localized_text_value(None, lang_zh=True) is None
     assert _get_localized_text_value("", lang_zh=True) == ""

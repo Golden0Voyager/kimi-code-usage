@@ -90,6 +90,18 @@ def _get_localized_label(label: str, lang_zh: bool = IS_ZH) -> str:
     # 2. Standard rule replacements
     if label == "Weekly Usage":
         return _L["weekly_limit"]
+    if "h Limit" in label:
+        h = label.split("h")[0]
+        return f"{h}小时限额" if lang_zh else label
+    if "d Limit" in label:
+        d = label.split("d")[0]
+        return f"{d}天限额" if lang_zh else label
+    if "mo Limit" in label:
+        mo = label.split("mo")[0]
+        return f"{mo}个月限额" if lang_zh else label
+    if "m Limit" in label:
+        m = label.split("m")[0]
+        return f"{m}分钟限额" if lang_zh else label
     if "Limit" in label:
         return label.replace("Limit", _L["limit_fallback"])
     return label

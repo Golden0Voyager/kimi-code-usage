@@ -220,7 +220,20 @@ def test_kimi_reset_info_short_delta():
 def test_kimi_limit_label_monthly():
     from kimi_code_usage.providers.kimi import _limit_label
     res = _limit_label({"duration": 1, "time_unit": "MONTH"}, 0)
-    assert res == "Limit #1"
+    assert res == "1mo Limit"
+
+def test_kimi_limit_label_minute():
+    from kimi_code_usage.providers.kimi import _limit_label
+    # divisible by 60
+    assert _limit_label({"duration": 300, "time_unit": "MINUTE"}, 0) == "5h Limit"
+    # not divisible by 60
+    assert _limit_label({"duration": 45, "time_unit": "MINUTE"}, 0) == "45m Limit"
+    assert _limit_label({"duration": 45, "timeUnit": "MINUTE"}, 0) == "45m Limit"
+
+def test_kimi_limit_label_second():
+    from kimi_code_usage.providers.kimi import _limit_label
+    assert _limit_label({"duration": 30, "time_unit": "SECOND"}, 0) == "30s Limit"
+
 
 
 def test_kimi_parse_payload_empty_items():
