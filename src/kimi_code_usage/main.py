@@ -377,7 +377,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
 
         hint = Text()
         # Keybindings
-        hint.append("[q]", style="bold red")
+        hint.append("[q]", style="bold")
         hint.append(" 退出  " if lang_zh else " quit  ", style="dim")
         hint.append("[r]", style="bold")
         hint.append(" 刷新  " if lang_zh else " refresh  ", style="dim")
