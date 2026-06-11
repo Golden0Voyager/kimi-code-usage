@@ -231,25 +231,21 @@ def _format_aggregated_results(
         if not p_items:
             continue
 
-        title_str = "Kimi" if p == "kimi" else p.capitalize()
-        base_line = f"──── {title_str} "
-        divider_line = base_line + "─" * max(2, 50 - len(base_line))
-        result.append(f"{divider_line}\n", style=theme["title"])
-
         visual_widths = [_get_visual_width(_get_localized_label(r.label, lang_zh)) for r in p_items]
         max_visual_width = max(visual_widths) if visual_widths else 0
         max_visual_width = max(max_visual_width, 6)
         bar_width = 20
 
+        body_text = Text()
         for i, row in enumerate(p_items):
             if i > 0:
-                result.append("\n")
+                body_text.append("\n")
 
             loc_label = _get_localized_label(row.label, lang_zh)
             label_v_width = _get_visual_width(loc_label)
             padding = " " * (max_visual_width - label_v_width)
 
-            result.append(f"  {loc_label}{padding}  ", style=theme["label"])
+            body_text.append(f"  {loc_label}{padding}  ", style=theme["label"])
 
             if row.limit is not None and row.limit > 0:
                 used_ratio = row.used / row.limit
@@ -257,24 +253,24 @@ def _format_aggregated_results(
                 color = theme["danger"] if used_ratio > 0.9 else theme["warning"] if used_ratio > 0.7 else theme["ok"]
                 filled = min(bar_width, int(used_ratio * bar_width))
 
-                result.append("█" * filled, style=color)
-                result.append("·" * (bar_width - filled), style="grey50")
+                body_text.append("█" * filled, style=color)
+                body_text.append("·" * (bar_width - filled), style="grey50")
 
                 if row.unit == "%":
-                    result.append(f"  {used_ratio * 100:.0f}%   {remaining_percent:.0f}% {_L['remaining']}", style="bold")
+                    body_text.append(f"  {used_ratio * 100:.0f}%   {remaining_percent:.0f}% {_L['remaining']}", style="bold")
                 elif row.unit == "$":
-                    result.append(f"  ${row.used:.2f} / ${row.limit:.2f} ({remaining_percent:.0f}% {_L['remaining']})", style="bold")
+                    body_text.append(f"  ${row.used:.2f} / ${row.limit:.2f} ({remaining_percent:.0f}% {_L['remaining']})", style="bold")
                 else:
-                    result.append(f"  {row.used:,.0f} / {row.limit:,.0f} {row.unit} ({remaining_percent:.0f}% {_L['remaining']})", style="bold")
+                    body_text.append(f"  {row.used:,.0f} / {row.limit:,.0f} {row.unit} ({remaining_percent:.0f}% {_L['remaining']})", style="bold")
             else:
                 if row.unit == "$":
-                    result.append(f"  ${row.used:.2f}", style="bold")
+                    body_text.append(f"  ${row.used:.2f}", style="bold")
                 elif row.unit == "text":
                     if row.text_value:
                         loc_val = _get_localized_text_value(row.text_value, lang_zh)
-                        result.append(f"  {loc_val}", style="bold")
+                        body_text.append(f"  {loc_val}", style="bold")
                 else:
-                    result.append(f"  {row.used:,.0f} {row.unit}", style="bold")
+                    body_text.append(f"  {row.used:,.0f} {row.unit}", style="bold")
 
             meta_parts = []
             if row.countdown:
@@ -282,18 +278,37 @@ def _format_aggregated_results(
             if row.reset_at:
                 meta_parts.append(f"{_L['reset']}: {row.reset_at}")
             if meta_parts:
-                result.append("\n")
-                result.append("  " + "  ".join(meta_parts), style=theme["meta"])
+                body_text.append("\n")
+                body_text.append("  " + "  ".join(meta_parts), style=theme["meta"])
 
-        result.append("\n\n")
+        # Calculate max line width of body_text
+        lines = body_text.plain.split("\n")
+        max_line_width = max((_get_visual_width(line) for line in lines), default=0)
+        divider_width = max(50, max_line_width + 4)
+
+        title_str = "Kimi" if p == "kimi" else p.capitalize()
+        base_line = f"──── {title_str} "
+        divider_line = base_line + "─" * max(2, divider_width - len(base_line))
+
+        result.append(f"{divider_line}\n", style=theme["title"])
+        result.append("\n")  # Empty line between divider and text
+        result.append(body_text)
+        result.append("\n\n")  # Empty line below provider section
 
     for p, err in errors.items():
         title_str = "Kimi" if p == "kimi" else p.capitalize()
+        err_msg = f"  ⚠ {err}"
+
+        max_line_width = _get_visual_width(err_msg)
+        divider_width = max(50, max_line_width + 4)
+
         base_line = f"──── {title_str} "
-        divider_line = base_line + "─" * max(2, 50 - len(base_line))
+        divider_line = base_line + "─" * max(2, divider_width - len(base_line))
+
         result.append(f"{divider_line}\n", style=theme["danger"])
-        result.append(f"  ⚠ {err}", style=theme["danger"])
-        result.append("\n\n")
+        result.append("\n")  # Empty line between divider and error
+        result.append(f"{err_msg}\n", style=theme["danger"])
+        result.append("\n")  # Empty line below provider section
 
     return result
 
