@@ -185,7 +185,7 @@ def test_main_guard_calls_run_cli():
 @pytest.mark.asyncio
 async def test_main_theme_cli(monkeypatch, capsys):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
-    monkeypatch.setattr("sys.argv", ["prog", "--theme", "matisse-dark"])
+    monkeypatch.setattr("sys.argv", ["prog", "--theme", "sky-dark"])
     
     mock_results = {
         "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")]
@@ -344,7 +344,7 @@ async def test_interactive_mode_quit(monkeypatch):
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live") as mock_live_cls:
             mock_live = mock_live_cls.return_value.__enter__.return_value
-            await _interactive_mode(cfg, "default-dark")
+            await _interactive_mode(cfg, "blue-dark")
             mock_live.update.assert_called()
 
 
@@ -363,7 +363,7 @@ async def test_interactive_mode_refresh(monkeypatch):
     dispatch_mock = AsyncMock(return_value=(mock_res, {}))
     with patch("kimi_code_usage.main.dispatch_all", dispatch_mock):
         with patch("kimi_code_usage.main.Live"):
-            await _interactive_mode(cfg, "default-dark")
+            await _interactive_mode(cfg, "blue-dark")
     assert dispatch_mock.call_count == 2  # initial + refresh
 
 
@@ -383,7 +383,7 @@ async def test_interactive_mode_next_prev_arrow(monkeypatch):
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live") as mock_live_cls:
             mock_live = mock_live_cls.return_value.__enter__.return_value
-            await _interactive_mode(cfg, "default-dark")
+            await _interactive_mode(cfg, "blue-dark")
             # 5 keys → 5 live.update() calls (one per key, including the quit one before running=False)
             assert mock_live.update.call_count >= 4
 
@@ -427,7 +427,7 @@ async def test_interactive_mode_lone_escape(monkeypatch):
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live"):
-            await _interactive_mode(cfg, "matisse-dark")
+            await _interactive_mode(cfg, "sky-dark")
 
 
 @pytest.mark.asyncio
@@ -456,7 +456,7 @@ async def test_interactive_mode_no_key_timeout(monkeypatch):
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live"):
-            await _interactive_mode(cfg, "default-dark")
+            await _interactive_mode(cfg, "blue-dark")
     assert call_count[0] >= 3
 
 
@@ -504,7 +504,7 @@ async def test_interactive_mode_toggle_provider(monkeypatch):
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live") as mock_live_cls:
             mock_live = mock_live_cls.return_value.__enter__.return_value
-            await _interactive_mode(cfg, "default-dark")
+            await _interactive_mode(cfg, "blue-dark")
             # Panel should be updated at least twice: once for '1' toggle, once for 'q'
             assert mock_live.update.call_count >= 2
 
@@ -529,7 +529,7 @@ async def test_interactive_mode_toggle_out_of_range(monkeypatch):
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live"):
             # toggle_num=3 (for '4'), but provider_order only has 1 item → no-op
-            await _interactive_mode(cfg, "default-dark")
+            await _interactive_mode(cfg, "blue-dark")
 
 
 @pytest.mark.asyncio
@@ -547,7 +547,7 @@ async def test_interactive_mode_toggle_reenable(monkeypatch):
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live") as mock_live_cls:
             mock_live = mock_live_cls.return_value.__enter__.return_value
-            await _interactive_mode(cfg, "default-dark")
+            await _interactive_mode(cfg, "blue-dark")
             # 3 keypresses → 3 update() calls
             assert mock_live.update.call_count >= 3
 
@@ -567,7 +567,7 @@ async def test_interactive_mode_lang_toggle(monkeypatch):
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live") as mock_live_cls:
             mock_live = mock_live_cls.return_value.__enter__.return_value
-            await _interactive_mode(cfg, "default-dark")
+            await _interactive_mode(cfg, "blue-dark")
             # 3 keypresses (l, l, q) → 3 live.update() calls
             assert mock_live.update.call_count >= 3
 
@@ -588,7 +588,7 @@ async def test_interactive_mode_initializes_from_config_en(monkeypatch):
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live") as mock_live_cls:
-            await _interactive_mode(cfg, "default-dark")
+            await _interactive_mode(cfg, "blue-dark")
 
 
 @pytest.mark.asyncio
@@ -606,7 +606,7 @@ async def test_interactive_mode_initializes_from_config_zh(monkeypatch):
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live") as mock_live_cls:
-            await _interactive_mode(cfg_zh, "default-dark")
+            await _interactive_mode(cfg_zh, "blue-dark")
 
 
 # ── save_theme (config.py) unit tests ─────────────────────────────────────
@@ -615,9 +615,9 @@ def test_save_theme_creates_config(tmp_path):
     """save_theme creates the config file and directory if they don't exist."""
     from kimi_code_usage.config import save_theme as cfg_save
     dest = tmp_path / "subdir" / "config.json"
-    cfg_save("matisse-dark", config_path=dest)
+    cfg_save("sky-dark", config_path=dest)
     data = json.loads(dest.read_text())
-    assert data["general"]["theme"] == "matisse-dark"
+    assert data["general"]["theme"] == "sky-dark"
 
 def test_save_theme_updates_existing(tmp_path):
     """save_theme updates general.theme while preserving other keys."""
@@ -665,11 +665,11 @@ async def test_interactive_mode_enter_saves_theme(monkeypatch, tmp_path):
         with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
             with patch("kimi_code_usage.main.Live") as mock_live_cls:
                 mock_live = mock_live_cls.return_value.__enter__.return_value
-                await _interactive_mode(cfg, "default-dark")
+                await _interactive_mode(cfg, "blue-dark")
 
     # save_theme must have been called exactly once (for Enter)
     assert len(saved_calls) == 1
-    assert saved_calls[0][0] == "default-dark"
+    assert saved_calls[0][0] == "blue-dark"
     assert saved_calls[0][1] in ("zh", "en")
     assert "kimi" in saved_calls[0][2]
     # panel updated at least twice (Enter update + subsequent updates)
@@ -775,7 +775,7 @@ async def test_interactive_mode_escape_keys(monkeypatch):
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live"):
-            await _interactive_mode(cfg, "default-dark")
+            await _interactive_mode(cfg, "blue-dark")
 
     # Case 2: Escape followed by '[', but no 3rd character (timeout on r3)
     inputs_2 = ['\x1b', '[', 'q']
@@ -798,4 +798,4 @@ async def test_interactive_mode_escape_keys(monkeypatch):
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live"):
-            await _interactive_mode(cfg, "default-dark")
+            await _interactive_mode(cfg, "blue-dark")

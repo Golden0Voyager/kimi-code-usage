@@ -103,8 +103,8 @@ def _get_localized_text_value(text_val: str, lang_zh: bool) -> str:
 # (typing already imported at top)
 
 THEME_MAP = {
-    # ── Matisse-inspired: cobalt blue on dark, vivid & flat ──
-    "default-dark": {
+    # ── Classic Blue on Dark ──
+    "blue-dark": {
         "title": "bold dodger_blue2",
         "label": "cornflower_blue",
         "meta": "grey62",
@@ -112,8 +112,8 @@ THEME_MAP = {
         "warning": "gold1",
         "danger": "indian_red1",
     },
-    # ── Matisse-inspired: warm cadmium tones on light bg ──
-    "default-light": {
+    # ── Classic Blue on Light ──
+    "blue-light": {
         "title": "bold blue",
         "label": "dark_blue",
         "meta": "grey35",
@@ -121,8 +121,8 @@ THEME_MAP = {
         "warning": "dark_orange",
         "danger": "red3",
     },
-    # ── Matisse: cobalt + viridian — Jazz interior palette ──
-    "matisse-dark": {
+    # ── Royal Sky Blue on Dark ──
+    "sky-dark": {
         "title": "bold royal_blue1",
         "label": "sky_blue1",
         "meta": "grey58",
@@ -130,8 +130,8 @@ THEME_MAP = {
         "warning": "orange1",
         "danger": "light_coral",
     },
-    # ── Matisse: warm coral & saffron — Fauve warmth ──
-    "matisse-warm": {
+    # ── Salmon Saffron on Dark ──
+    "salmon-dark": {
         "title": "bold light_salmon3",
         "label": "sandy_brown",
         "meta": "grey46",
@@ -139,8 +139,8 @@ THEME_MAP = {
         "warning": "gold3",
         "danger": "indian_red",
     },
-    # ── Matisse: deep viridian on near-black — La Musique ──
-    "viridian-dark": {
+    # ── Turquoise Aquamarine on Dark ──
+    "turquoise-dark": {
         "title": "bold turquoise2",
         "label": "medium_aquamarine",
         "meta": "grey53",
@@ -148,8 +148,8 @@ THEME_MAP = {
         "warning": "khaki1",
         "danger": "hot_pink",
     },
-    # ── Matisse: rose madder & ivory — Odalisque tones ──
-    "odalisque-light": {
+    # ── Rose Pink on Light ──
+    "pink-light": {
         "title": "bold deep_pink3",
         "label": "hot_pink3",
         "meta": "grey37",
@@ -157,7 +157,34 @@ THEME_MAP = {
         "warning": "dark_goldenrod",
         "danger": "red3",
     },
-    # ── High-contrast monochrome — for any terminal ──
+    # ── Deep Purple on Dark ──
+    "violet-dark": {
+        "title": "bold medium_purple2",
+        "label": "medium_purple1",
+        "meta": "grey54",
+        "ok": "spring_green3",
+        "warning": "orange1",
+        "danger": "plum1",
+    },
+    # ── Warm Saffron Orange on Dark ──
+    "amber-dark": {
+        "title": "bold dark_orange",
+        "label": "gold1",
+        "meta": "grey54",
+        "ok": "green_yellow",
+        "warning": "gold3",
+        "danger": "red1",
+    },
+    # ── Mint Teal on Dark ──
+    "mint-dark": {
+        "title": "bold dark_cyan",
+        "label": "light_sea_green",
+        "meta": "grey54",
+        "ok": "medium_spring_green",
+        "warning": "khaki1",
+        "danger": "indian_red1",
+    },
+    # ── Monochrome ──
     "monochrome": {
         "title": "bold white",
         "label": "white",
@@ -166,9 +193,8 @@ THEME_MAP = {
         "warning": "grey74",
         "danger": "bold reverse",
     },
-    # ── Accessibility: Deuteranopia (red-green blind) ──
-    # Uses blue/yellow contrast — no reliance on red or green
-    "deuteranopia": {
+    # ── Red-Green Blind Friendly ──
+    "blind-deuteranopia": {
         "title": "bold dodger_blue1",
         "label": "cornflower_blue",
         "meta": "grey62",
@@ -176,9 +202,8 @@ THEME_MAP = {
         "warning": "gold1",
         "danger": "dark_orange",
     },
-    # ── Accessibility: Tritanopia (blue-yellow blind) ──
-    # Uses red/green/magenta contrast — no reliance on blue or yellow
-    "tritanopia": {
+    # ── Blue-Yellow Blind Friendly ──
+    "blind-tritanopia": {
         "title": "bold red1",
         "label": "light_coral",
         "meta": "grey62",
@@ -214,7 +239,7 @@ def _format_aggregated_results(
     results: Dict[str, List[ProviderUsage]],
     errors: Dict[str, str],
     order: Optional[List[str]] = None,
-    theme_name: str = "default-dark",
+    theme_name: str = "blue-dark",
     lang_zh: bool = IS_ZH,
 ) -> Text:
     _L = L_ZH if lang_zh else L_EN
@@ -224,7 +249,7 @@ def _format_aggregated_results(
 
     theme = THEME_MAP.get(theme_name)
     if not theme:
-        theme = THEME_MAP["default-dark"]
+        theme = THEME_MAP["blue-dark"]
         
     # First pass: pre-render all bodies and find global_max_width
     provider_bodies = {}
@@ -484,7 +509,7 @@ async def main():
                         help="Interactive mode: ←/→ or [/] to cycle themes, r refresh, q quit")
     parser.add_argument("--provider", help="Comma-separated providers to query (kimi,openai,anthropic,openrouter)")
     parser.add_argument("--config", help="Custom configuration file path")
-    parser.add_argument("--theme", help="Specify color theme: default-dark, default-light, matisse-dark, matisse-warm, viridian-dark, odalisque-light, monochrome, deuteranopia, tritanopia")
+    parser.add_argument("--theme", help="Specify color theme: blue-dark, blue-light, sky-dark, salmon-dark, turquoise-dark, pink-light, violet-dark, amber-dark, mint-dark, monochrome, blind-deuteranopia, blind-tritanopia")
     args = parser.parse_args()
 
     resolver = ConfigResolver(config_path=args.config)

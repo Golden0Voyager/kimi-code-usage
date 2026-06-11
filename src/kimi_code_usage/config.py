@@ -18,7 +18,7 @@ class AppConfig:
     refresh_interval_minutes: int = 5
     output_mode: str = "rich"
     provider_order: List[str] = field(default_factory=list)
-    theme: str = "default-dark"
+    theme: str = "blue-dark"
     language: Optional[str] = None
     visible_providers: Optional[List[str]] = None
 
@@ -48,10 +48,10 @@ class ConfigResolver:
         self.config.refresh_interval_minutes = general_data.get("refreshIntervalMinutes", 5)
         self.config.output_mode = general_data.get("outputMode", "rich")
 
-        # Get theme from JSON, else ENV, default default-dark
+        # Get theme from JSON, else ENV, default blue-dark
         theme = general_data.get("theme")
         if not theme:
-            theme = os.getenv("KIMI_USAGE_THEME", "default-dark")
+            theme = os.getenv("KIMI_USAGE_THEME", "blue-dark")
         self.config.theme = theme
 
         # Get language and visible providers from JSON
