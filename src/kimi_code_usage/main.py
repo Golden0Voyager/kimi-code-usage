@@ -5,7 +5,7 @@ import os
 import select as _select_module
 import sys
 from dotenv import load_dotenv
-from rich.console import Console
+from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
@@ -198,7 +198,9 @@ def _format_aggregated_results(
         first_section = False
 
         title_str = "Kimi" if p == "kimi" else p.capitalize()
-        result.append(f"── {title_str} ──────────────────────\n", style=theme["title"])
+        base_line = f"── {title_str} "
+        divider_line = base_line + "─" * max(2, 50 - len(base_line))
+        result.append(f"{divider_line}\n", style=theme["title"])
 
         visual_widths = [_get_visual_width(_get_localized_label(r.label, lang_zh)) for r in p_items]
         max_visual_width = max(visual_widths) if visual_widths else 0
@@ -253,7 +255,9 @@ def _format_aggregated_results(
             result.append("\n\n")
         first_section = False
         title_str = "Kimi" if p == "kimi" else p.capitalize()
-        result.append(f"── {title_str} ──────────────────────\n", style=theme["danger"])
+        base_line = f"── {title_str} "
+        divider_line = base_line + "─" * max(2, 50 - len(base_line))
+        result.append(f"{divider_line}\n", style=theme["danger"])
         result.append(f"  ⚠ {err}", style=theme["danger"])
 
     return result
@@ -305,21 +309,23 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
         _L = L_ZH if lang_zh else L_EN
         body = _format_aggregated_results(results, errors, visible_order, themes[idx], lang_zh)
 
-        hint = Text()
+        top_bar = Text()
         # Theme name
-        hint.append(" 主题: " if lang_zh else " theme: ", style="dim")
-        hint.append(themes[idx], style="bold")
-        hint.append("  │  ", style="dim")
+        top_bar.append(" 主题: " if lang_zh else " theme: ", style="dim")
+        top_bar.append(themes[idx], style="bold")
+        top_bar.append("  │  ", style="dim")
         # Provider toggles
         for i, p in enumerate(config.provider_order, 1):
             short = _SHORT.get(p, p[:4].title())
             if p in visible_providers:
-                hint.append(f"[{i}]", style="bold")
-                hint.append(f"{short}● ", style="dim")
+                top_bar.append(f"[{i}]", style="bold")
+                top_bar.append(f"{short}● ", style="dim")
             else:
-                hint.append(f"[{i}]", style="dim")
-                hint.append(f"{short}○ ", style="dim italic")
-        hint.append(" │  ", style="dim")
+                top_bar.append(f"[{i}]", style="dim")
+                top_bar.append(f"{short}○ ", style="dim italic")
+        top_bar.justify = "center"
+
+        hint = Text()
         # Keybindings
         hint.append("[q]", style="bold red")
         hint.append(" 退出  " if lang_zh else " quit  ", style="dim")
@@ -336,7 +342,17 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
         hint.append(" 保存主题" if lang_zh else " Save theme", style="dim")
         if saved_notice[0]:
             hint.append(f"  ✓ {'已保存' if lang_zh else 'Saved'}: {saved_notice[0]}", style="bold green")
-        return Panel(body, title=f"[bold]{_L['title']}[/bold]", subtitle=hint,
+        hint.justify = "center"
+
+        panel_content = Group(
+            top_bar,
+            Text(""),
+            body,
+            Text(""),
+            hint
+        )
+
+        return Panel(panel_content, title=f"[bold]{_L['title']}[/bold]", subtitle=None,
                      expand=True, padding=(1, 2, 1, 2))
 
     fd = sys.stdin.fileno()
