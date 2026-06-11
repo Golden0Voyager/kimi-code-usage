@@ -384,41 +384,49 @@ def _format_aggregated_results(
         if max_line_width > global_max_width:
             global_max_width = max_line_width
 
-    for p, err in errors.items():
-        err_msg = f"  ⚠ {err}"
-        error_msgs[p] = err_msg
-        err_width = _get_visual_width(err_msg)
-        if err_width > global_max_width:
-            global_max_width = err_width
+    # 2. Process errors and unconfigured visible providers
+    for p in order:
+        if p in errors:
+            err = errors[p]
+            if err == "Not configured" and lang_zh:
+                translated_err = "未配置"
+            else:
+                translated_err = err
+            err_msg = f"  ⚠ {translated_err}"
+            error_msgs[p] = err_msg
+            err_width = _get_visual_width(err_msg)
+            if err_width > global_max_width:
+                global_max_width = err_width
+        elif p not in results:
+            err_msg = "  ⚠ 未配置" if lang_zh else "  ⚠ Not configured"
+            error_msgs[p] = err_msg
+            err_width = _get_visual_width(err_msg)
+            if err_width > global_max_width:
+                global_max_width = err_width
 
     divider_width = max(50, global_max_width + 4)
 
-    # Second pass: construct final result with uniform divider width
+    # Second pass: construct final result with uniform divider width in user-defined order
     for p in order:
+        title_str = "Kimi" if p == "kimi" else p.capitalize()
+        base_line = f"──── {title_str} "
+        divider_line = base_line + "─" * max(2, divider_width - len(base_line))
+        
         body_text = provider_bodies.get(p)
-        if not body_text:
-            continue
-
-        title_str = "Kimi" if p == "kimi" else p.capitalize()
-        base_line = f"──── {title_str} "
-        divider_line = base_line + "─" * max(2, divider_width - len(base_line))
-
-        result.append(f"{divider_line}\n", style=theme["title"])
-        result.append("\n")  # Empty line between divider and text
-        result.append(body_text)
-        result.append("\n\n")  # Empty line below provider section
-
-    for p, err in errors.items():
-        title_str = "Kimi" if p == "kimi" else p.capitalize()
-        err_msg = error_msgs[p]
-
-        base_line = f"──── {title_str} "
-        divider_line = base_line + "─" * max(2, divider_width - len(base_line))
-
-        result.append(f"{divider_line}\n", style=theme["danger"])
-        result.append("\n")  # Empty line between divider and error
-        result.append(f"{err_msg}\n", style=theme["danger"])
-        result.append("\n")  # Empty line below provider section
+        err_msg = error_msgs.get(p)
+        
+        if body_text:
+            result.append(f"{divider_line}\n", style=theme["title"])
+            result.append("\n")  # Empty line between divider and text
+            result.append(body_text)
+            result.append("\n")  # Space before potential error or next section
+            
+        if err_msg:
+            if not body_text:
+                result.append(f"{divider_line}\n", style=theme["danger"])
+                result.append("\n")  # Empty line between divider and error
+            result.append(f"{err_msg}\n", style=theme["danger"])
+            result.append("\n")  # Empty line below provider section
 
     return result
 

@@ -773,6 +773,22 @@ def test_format_aggregated_results_edge_cases():
     assert "error1" in raw_text_empty
     assert "error2" in raw_text_empty
 
+    # 3. Test "Not configured" error in Chinese and long error message width adjustment
+    results_edge = {
+        "kimi": [
+            ProviderUsage(provider="kimi", label="API Plan", used=0, limit=None, remaining=None, percent=None, reset_at=None, unit="text", text_value="Short")
+        ]
+    }
+    errors_edge = {
+        "openai": "Not configured",
+        "anthropic": "This is an extremely long error message that exceeds the maximum visual width of any successful panel rows"
+    }
+    text_zh = _format_aggregated_results(results_edge, errors_edge, lang_zh=True)
+    raw_text_zh = str(text_zh)
+    assert "未配置" in raw_text_zh
+    assert "This is an extremely long error message" in raw_text_zh
+
+
 
 @pytest.mark.asyncio
 async def test_main_json_output_no_errors(monkeypatch, capsys):
