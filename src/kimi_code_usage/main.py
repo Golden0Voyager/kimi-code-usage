@@ -325,14 +325,12 @@ def _format_aggregated_results(
                 else:
                     body_text.append(f"  {row.used:,.0f} {row.unit}", style="bold")
 
-            meta_parts = []
             if row.countdown:
-                meta_parts.append(f"{_L['countdown']}: {row.countdown}")
-            if row.reset_at:
-                meta_parts.append(f"{_L['reset']}: {row.reset_at}")
-            if meta_parts:
                 body_text.append("\n")
-                body_text.append("  " + "  ".join(meta_parts), style=theme["meta"])
+                body_text.append(f"  {_L['countdown']}: {row.countdown}", style=theme["meta"])
+            if row.reset_at:
+                body_text.append("\n")
+                body_text.append(f"  {_L['reset']}: {row.reset_at}", style=theme["meta"])
 
         provider_bodies[p] = body_text
         lines = body_text.plain.split("\n")
