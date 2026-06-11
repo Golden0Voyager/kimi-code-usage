@@ -472,8 +472,8 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
     saved_notice: list = [None]   # holds the saved theme name briefly, then None
 
     _SHORT = {
-        "anthropic": "anthropic", "openai": "openai",
-        "openrouter": "openrouter",    "kimi": "kimi",
+        "anthropic": "Anthropic", "openai": "Openai",
+        "openrouter": "Openrouter",    "kimi": "Kimi",
     }
 
     def _build_panel() -> Panel:
@@ -490,11 +490,11 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
         for i, p in enumerate(config.provider_order, 1):
             short = _SHORT.get(p, p[:4].title())
             if p in visible_providers:
-                top_bar.append(f"[{i}]", style="bold")
-                top_bar.append(f"{short}● ", style="dim")
+                top_bar.append("●", style="bold")
+                top_bar.append(f"[{i}]{short}  ", style="bold")
             else:
-                top_bar.append(f"[{i}]", style="dim")
-                top_bar.append(f"{short}○ ", style="dim italic")
+                top_bar.append("○", style="dim")
+                top_bar.append(f"[{i}]{short}  ", style="dim italic")
         top_bar.justify = "center"
 
         hint = Text()
