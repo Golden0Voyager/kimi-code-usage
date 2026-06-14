@@ -9,7 +9,8 @@ from kimi_code_usage.config import ConfigResolver, AppConfig
 def clean_env(monkeypatch):
     # Completely clear all related environment variables to ensure test isolation
     for key in ["KIMI_API_KEY", "KIMI_CODING_API_KEY", "OPENAI_API_KEY", 
-                "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY",
+                "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OPENROUTER_ADMIN_KEY",
+                "OPENROUTER_MANAGEMENT_KEY",
                 "KIMI_BASE_URL", "OPENAI_BASE_URL", "ANTHROPIC_BASE_URL", "OPENROUTER_BASE_URL"]:
         monkeypatch.delenv(key, raising=False)
     yield
@@ -225,5 +226,73 @@ def test_config_resolver_unknown_provider(tmp_path):
     config = resolver.resolve()
     assert "unknown-prov" not in config.provider_order
     assert "kimi" in config.provider_order
+
+
+def test_config_resolver_or_metric(tmp_path, monkeypatch):
+    # Default
+    config_path = tmp_path / "config.json"
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({}, f)
+    resolver = ConfigResolver(config_path=str(config_path))
+    config = resolver.resolve()
+    assert config.or_metric == "requests"
+
+    # JSON config
+    data = {"general": {"orMetric": "tokens"}}
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    resolver2 = ConfigResolver(config_path=str(config_path))
+    config2 = resolver2.resolve()
+    assert config2.or_metric == "tokens"
+
+    # Invalid value falls back to requests
+    data = {"general": {"orMetric": "invalid"}}
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    resolver3 = ConfigResolver(config_path=str(config_path))
+    config3 = resolver3.resolve()
+    assert config3.or_metric == "requests"
+
+
+def test_config_resolver_openrouter_management_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_MANAGEMENT_KEY", "env-or-mgmt-key")
+    
+    config_path = tmp_path / "nonexistent.json"
+    resolver = ConfigResolver(config_path=str(config_path))
+    config = resolver.resolve()
+    
+    assert config.providers["openrouter"].management_key == "env-or-mgmt-key"
+
+
+def test_save_theme_or_metric(tmp_path):
+    from kimi_code_usage.config import save_theme
+    dest = tmp_path / "config.json"
+    save_theme("blue-dark", or_metric="tokens", days_window=60, config_path=dest)
+    data = json.loads(dest.read_text())
+    assert data["general"]["orMetric"] == "tokens"
+    assert data["general"]["daysWindow"] == 60
+
+
+def test_config_resolver_days_window(tmp_path):
+    config_path = tmp_path / "config.json"
+
+    # default
+    resolver = ConfigResolver(config_path=str(config_path))
+    assert resolver.resolve().days_window == 30
+
+    # valid JSON value
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({"general": {"daysWindow": 7}}, f)
+    assert ConfigResolver(config_path=str(config_path)).resolve().days_window == 7
+
+    # invalid type falls back to 30
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({"general": {"daysWindow": "abc"}}, f)
+    assert ConfigResolver(config_path=str(config_path)).resolve().days_window == 30
+
+    # out-of-range value falls back to 30
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({"general": {"daysWindow": 100}}, f)
+    assert ConfigResolver(config_path=str(config_path)).resolve().days_window == 30
 
 

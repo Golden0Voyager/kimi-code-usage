@@ -1,7 +1,104 @@
 import pytest
 from unittest.mock import patch, AsyncMock
 from fastmcp import FastMCP
-from kimi_code_usage.providers import ProviderUsage
+from kimi_code_usage.providers import ProviderUsage, ActivityTotals, DailyUsage, ModelUsage
+from kimi_code_usage.mcp import _format_activity_lines
+
+
+def test_format_activity_lines():
+    item = ProviderUsage(
+        provider="openrouter",
+        label="Activity",
+        used=0.0,
+        limit=None,
+        remaining=None,
+        percent=None,
+        reset_at=None,
+        unit="text",
+        activity_totals=ActivityTotals(
+            spend=4.3,
+            requests=45,
+            prompt_tokens=1_500_000,
+            completion_tokens=2_000,
+            reasoning_tokens=300,
+        ),
+        daily_activity=[
+            DailyUsage(date="2026-06-10", models=[ModelUsage(model="m1", requests=5)], total=1.5),
+            DailyUsage(date="2026-06-11", models=[ModelUsage(model="m2", requests=15)], total=3.0),
+        ],
+        top_models=[
+            ModelUsage(
+                model="anthropic/claude-opus-4",
+                spend=3.5,
+                requests=10,
+                prompt_tokens=1000,
+                completion_tokens=500,
+            ),
+            ModelUsage(
+                model="plain-model",
+                spend=1.0,
+                requests=5,
+                prompt_tokens=100,
+                completion_tokens=50,
+            ),
+        ],
+    )
+
+    # requests metric (default)
+    lines = _format_activity_lines(item, "Openrouter")
+    assert any("45 requests" in line for line in lines)
+    assert any("1.5M" in line for line in lines)
+    assert any("Daily Requests:" in line for line in lines)
+    assert any("15" in line for line in lines)
+    assert any("Top Models:" in line for line in lines)
+    assert any("claude-opus-4" in line for line in lines)
+    assert any("10 req" in line for line in lines)
+    assert any("plain-model" in line for line in lines)
+
+    # tokens metric
+    lines_tokens = _format_activity_lines(item, "Openrouter", metric="tokens")
+    assert any("Daily Tokens:" in line for line in lines_tokens)
+
+    # spend metric
+    lines_spend = _format_activity_lines(item, "Openrouter", metric="spend")
+    assert any("Daily Spend:" in line for line in lines_spend)
+    assert any("$3.00" in line for line in lines_spend)
+    assert any("$3.50" in line for line in lines_spend)
+
+
+@pytest.mark.asyncio
+async def test_openrouter_activity_in_get_usage(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
+    from kimi_code_usage.mcp import get_usage
+
+    mock_results = {
+        "openrouter": [
+            ProviderUsage(provider="openrouter", label="Credits", used=2.5, limit=10.0, remaining=7.5, percent=25.0, reset_at=None, unit="$"),
+            ProviderUsage(
+                provider="openrouter",
+                label="Activity",
+                used=0.0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                activity_totals=ActivityTotals(spend=4.3, requests=45, prompt_tokens=4500, completion_tokens=2000),
+                daily_activity=[DailyUsage(date="2026-06-11", models=[], total=3.0)],
+                top_models=[ModelUsage(model="anthropic/claude-opus-4", spend=3.5)],
+            ),
+        ]
+    }
+
+    with patch("kimi_code_usage.mcp.dispatch_all", AsyncMock(return_value=(mock_results, {}))):
+        result = await get_usage()
+        assert "Openrouter - Credits" in result
+        assert "Openrouter - Activity:" in result
+        assert "Daily Requests:" in result
+        assert "Top Models:" in result
+
+
+
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
