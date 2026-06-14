@@ -120,7 +120,7 @@ def _parse_usage_payload(payload: Mapping[str, Any]) -> Tuple[Optional[KimiRow],
 
     return summary, limits
 
-async def fetch_kimi_usage(api_key: str, base_url: str) -> List[ProviderUsage]:
+async def fetch_kimi_usage(api_key: str, base_url: str, management_key: Optional[str] = None) -> List[ProviderUsage]:
     url = base_url.rstrip("/") + "/usages"
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}) as resp:

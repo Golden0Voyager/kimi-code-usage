@@ -12,7 +12,7 @@ from rich.text import Text
 from typing import Dict, List, Optional, Tuple
 
 from kimi_code_usage.config import ConfigResolver, save_theme
-from kimi_code_usage.providers import dispatch_all, ProviderUsage
+from kimi_code_usage.providers import DailyUsage, ProviderUsage, dispatch_all
 
 # --- i18n ---
 LANG = os.getenv("LANG", "en")
@@ -269,25 +269,394 @@ THEME_MAP = {
 }
 
 
-def _handle_key(ch: str, idx: int, n: int) -> Tuple[int, bool, bool, Optional[int], bool]:
+def _handle_key(ch: str, idx: int, n: int) -> Tuple[int, bool, bool, Optional[int], bool, bool, bool]:
     """Map a keypress to a TUI action.
 
     Returns:
-        (new_idx, should_quit, should_refresh, toggle_provider_num, lang_toggle)
+        (new_idx, should_quit, should_refresh, toggle_provider_num, lang_toggle, metric_toggle, days_toggle)
     """
     if ch in ('q', 'Q', '\x03', '\x04'):       # q  Ctrl-C  Ctrl-D
-        return idx, True, False, None, False
+        return idx, True, False, None, False, False, False
     if ch in (']', 'n', '\t', '\x1b[C'):        # ]  n  Tab  →
-        return (idx + 1) % n, False, False, None, False
+        return (idx + 1) % n, False, False, None, False, False, False
     if ch in ('[', 'p', '\x1b[D'):              # [  p  ←
-        return (idx - 1) % n, False, False, None, False
+        return (idx - 1) % n, False, False, None, False, False, False
     if ch in ('r', 'R'):                        # r → refresh data
-        return idx, False, True, None, False
+        return idx, False, True, None, False, False, False
     if ch in ('1', '2', '3', '4'):              # 1-4 → toggle provider panel
-        return idx, False, False, int(ch) - 1, False
+        return idx, False, False, int(ch) - 1, False, False, False
     if ch in ('l', 'L'):                        # l → toggle language zh/en
-        return idx, False, False, None, True
-    return idx, False, False, None, False
+        return idx, False, False, None, True, False, False
+    if ch in ('m', 'M'):                        # m → toggle OpenRouter metric
+        return idx, False, False, None, False, True, False
+    if ch in ('d', 'D'):                        # d → toggle days window
+        return idx, False, False, None, False, False, True
+    return idx, False, False, None, False, False, False
+
+
+def _format_tokens(n: float) -> str:
+    if n >= 1_000_000:
+        return f"{n/1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n/1_000:.1f}K"
+    return f"{n:.0f}"
+
+
+def _model_short_name(model: str) -> str:
+    if "/" in model:
+        return model.rsplit("/", 1)[-1]
+    return model
+
+
+# --- OpenRouter metric helpers ---
+OR_METRIC_SPEND = "spend"
+OR_METRIC_REQUESTS = "requests"
+OR_METRIC_TOKENS = "tokens"
+VALID_OR_METRICS = (OR_METRIC_SPEND, OR_METRIC_REQUESTS, OR_METRIC_TOKENS)
+
+# --- OpenRouter days window helpers ---
+DAYS_WINDOWS = (7, 14, 30, 60, 90)
+
+
+def _parse_days_window(value) -> int:
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return 30
+    return value if value in DAYS_WINDOWS else 30
+
+
+def _next_days_window(days_window: int) -> int:
+    try:
+        idx = DAYS_WINDOWS.index(days_window)
+    except ValueError:
+        return 30
+    return DAYS_WINDOWS[(idx + 1) % len(DAYS_WINDOWS)]
+
+
+def _parse_or_metric(value: Optional[str]) -> str:
+    if value in VALID_OR_METRICS:
+        return value
+    return OR_METRIC_REQUESTS
+
+
+def _next_or_metric(metric: str) -> str:
+    order = (OR_METRIC_SPEND, OR_METRIC_REQUESTS, OR_METRIC_TOKENS)
+    try:
+        idx = order.index(metric)
+    except ValueError:
+        return OR_METRIC_REQUESTS
+    return order[(idx + 1) % len(order)]
+
+
+def _metric_label(metric: str, lang_zh: bool) -> str:
+    labels = {
+        OR_METRIC_SPEND: ("支出", "Spend"),
+        OR_METRIC_REQUESTS: ("请求", "Requests"),
+        OR_METRIC_TOKENS: ("Tokens", "Tokens"),
+    }
+    return labels.get(metric, labels[OR_METRIC_SPEND])[0 if lang_zh else 1]
+
+
+def _metric_value_model(mu, metric: str) -> float:
+    if metric == OR_METRIC_REQUESTS:
+        return mu.requests
+    if metric == OR_METRIC_TOKENS:
+        return mu.prompt_tokens + mu.completion_tokens + mu.reasoning_tokens
+    return mu.spend
+
+
+def _metric_value_day(day, metric: str) -> float:
+    if metric == OR_METRIC_SPEND:
+        return day.total
+    return sum(_metric_value_model(m, metric) for m in day.models)
+
+
+def _format_metric_value(value: float, metric: str) -> str:
+    if metric == OR_METRIC_SPEND:
+        return f"${value:.2f}"
+    if metric == OR_METRIC_TOKENS:
+        return _format_tokens(value)
+    return f"{value:,.0f}"
+
+
+def _render_activity_totals(totals, lang_zh: bool, theme: dict) -> Text:
+    text = Text()
+    title = "活动" if lang_zh else "Activity"
+    text.append(f"  {title}\n", style=theme.get("label", "cornflower_blue"))
+    parts = []
+    if totals.requests:
+        req_label = "请求" if lang_zh else "Req"
+        parts.append(f"{req_label}: {totals.requests:,.0f}")
+    if totals.prompt_tokens or totals.completion_tokens:
+        in_label = "输入" if lang_zh else "In"
+        out_label = "输出" if lang_zh else "Out"
+        tok = f"{in_label}: {_format_tokens(totals.prompt_tokens)} / {out_label}: {_format_tokens(totals.completion_tokens)}"
+        if totals.reasoning_tokens:
+            reason_label = "推理" if lang_zh else "reason"
+            tok += f" (+ {_format_tokens(totals.reasoning_tokens)} {reason_label})"
+        parts.append(tok)
+    if totals.spend:
+        spend_label = "支出" if lang_zh else "Spend"
+        parts.append(f"{spend_label}: ${totals.spend:.2f}")
+    text.append("    " + " | ".join(parts), style=theme.get("meta", "grey62"))
+    return text
+
+
+def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str = OR_METRIC_REQUESTS, days_window: int = 30) -> Text:
+    if not daily_activity:
+        return Text()
+    metric = _parse_or_metric(metric)
+    days_window = _parse_days_window(days_window)
+
+    from datetime import datetime, timedelta
+
+    # Build a contiguous date range of `days_window` days ending at the latest activity date.
+    sorted_days = sorted(daily_activity, key=lambda d: d.date)
+    latest_date = datetime.strptime(sorted_days[-1].date[:10], "%Y-%m-%d")
+    start_date = latest_date - timedelta(days=days_window - 1)
+
+    day_lookup: dict[str, DailyUsage] = {}
+    for d in sorted_days:
+        key = d.date[:10] if len(d.date) >= 10 else d.date
+        if key in day_lookup:
+            existing = day_lookup[key]
+            merged_models = existing.models + d.models
+            day_lookup[key] = DailyUsage(date=key, models=merged_models, total=existing.total + d.total)
+        else:
+            day_lookup[key] = DailyUsage(date=key, models=list(d.models), total=d.total)
+
+    days: list[DailyUsage] = []
+    for i in range(days_window):
+        date = (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
+        days.append(day_lookup.get(date, DailyUsage(date=date, models=[], total=0.0)))
+
+    # Chart dimensions inspired by tokentop: clamp column width to [1, 4] and
+    # cap the total rendered width so the chart fits a typical terminal panel.
+    height = 9
+    top_models_limit = 6
+    max_chart_width = 70
+    col_width = 1
+    if len(days) > 0:
+        col_width = max_chart_width // len(days)
+        if col_width > 4:
+            col_width = 4
+        if col_width < 1:
+            col_width = 1
+    # If the full window would exceed the max width, trim to the most recent days.
+    if len(days) * col_width > max_chart_width:
+        keep = max_chart_width // col_width
+        days = days[-keep:]
+
+    max_total = max(_metric_value_day(d, metric) for d in days) or 1.0
+
+    # Find top models across all days for consistent coloring
+    model_totals_all: dict[str, float] = {}
+    for day in days:
+        for model in day.models:
+            model_totals_all[model.model] = model_totals_all.get(model.model, 0.0) + _metric_value_model(model, metric)
+    top_models = _top_n_models(model_totals_all, top_models_limit)
+    top_model_set = set(top_models)
+    others_color_idx = len(top_models) % len(_model_colors(theme))
+
+    # Pre-compute each column as color indices (bottom -> top)
+    columns: list[list[Optional[int]]] = []
+    for day in days:
+        value_by_model: dict[str, float] = {}
+        others_value = 0.0
+        for model in day.models:
+            v = _metric_value_model(model, metric)
+            if model.model in top_model_set:
+                value_by_model[model.model] = value_by_model.get(model.model, 0.0) + v
+            else:
+                others_value += v
+
+        segments: list[tuple[int, float]] = []
+        for i, name in enumerate(top_models):
+            if v := value_by_model.get(name, 0.0):
+                segments.append((i, v))
+        if others_value > 0:
+            segments.append((others_color_idx, others_value))
+
+        day_total = sum(v for _, v in segments)
+        column: list[Optional[int]] = [None] * height
+        if day_total > 0 and max_total > 0:
+            total_cells = max(1, min(height, int(round(day_total / max_total * height))))
+            exacts = [seg[1] / day_total * total_cells for seg in segments]
+            counts = [int(x) for x in exacts]
+            remainders = [exacts[i] - counts[i] for i in range(len(segments))]
+            allocated = sum(counts)
+            while allocated < total_cells:
+                best = max(range(len(remainders)), key=lambda i: remainders[i])
+                counts[best] += 1
+                remainders[best] = -1
+                allocated += 1
+
+            cell_idx = 0
+            for seg_idx, (cidx, _) in enumerate(segments):
+                for _ in range(counts[seg_idx]):
+                    if cell_idx < height:
+                        column[cell_idx] = cidx
+                        cell_idx += 1
+        columns.append(column)
+
+    text = Text()
+    title_label = _metric_label(metric, lang_zh)
+    title = f"每日{title_label}" if lang_zh else f"Daily {title_label.title()}"
+    text.append(f"  {title}\n\n", style=theme.get("label", "cornflower_blue"))
+
+    # Y-axis gutter
+    y_labels = [max_total, max_total / 2, max_total / float(height)]
+    y_label_strs = [_format_metric_value(v, metric) for v in y_labels]
+    gutter_width = max(len(s) for s in y_label_strs) + 1
+    gutter_fmt = f"{{:>{gutter_width}s}}"
+    empty_gutter = " " * gutter_width
+    # Indent the whole chart body to align with the title above
+    chart_indent = "  "
+
+    filled_glyph = "▐" + "█" * (col_width - 1)
+    empty_glyph = " " * col_width
+
+    colors = _model_colors(theme)
+
+    # Render rows top -> bottom
+    for row in range(height - 1, -1, -1):
+        text.append(chart_indent, style=theme.get("meta", "grey62"))
+        if row == height - 1:
+            text.append(gutter_fmt.format(y_label_strs[0]), style=theme.get("meta", "grey62"))
+        elif row == height // 2:
+            text.append(gutter_fmt.format(y_label_strs[1]), style=theme.get("meta", "grey62"))
+        elif row == 0:
+            text.append(gutter_fmt.format(y_label_strs[2]), style=theme.get("meta", "grey62"))
+        else:
+            text.append(empty_gutter, style=theme.get("meta", "grey62"))
+
+        text.append("│", style=theme.get("meta", "grey62"))
+        for col in columns:
+            cidx = col[row]
+            if cidx is not None:
+                color = colors[cidx % len(colors)]
+                text.append(filled_glyph, style=color)
+            else:
+                text.append(empty_glyph)
+        text.append("\n")
+
+    # X-axis line
+    text.append(chart_indent + empty_gutter + "└" + "─" * (col_width * len(days)) + "\n", style=theme.get("meta", "grey62"))
+
+    # Date labels: distribute evenly based on how many column slots a label
+    # occupies. A date label is 5 chars; we want at least 2 chars of visual gap.
+    if len(days) > 0:
+        date_line = Text(chart_indent + empty_gutter + " ")
+        label_len = len(short_date(days[0].date))
+        # Number of column slots needed per label (including desired gap)
+        slot_gap = max(1, (label_len + 2 + col_width - 1) // col_width)
+
+        label_positions = set(range(0, len(days), slot_gap))
+        # Always include the last day if not already present and it fits.
+        if len(days) > 1 and (len(days) - 1) % slot_gap != 0:
+            label_positions.add(len(days) - 1)
+        label_positions = sorted(label_positions)
+
+        max_line_chars = len(days) * col_width
+        skip = 0
+        for i, day in enumerate(days):
+            if skip > 0:
+                skip -= 1
+                continue
+            if i in label_positions:
+                lbl = short_date(day.date)
+                date_line.append(lbl, style=theme.get("meta", "grey62"))
+                consumed_cols = max(1, (len(lbl) + col_width - 1) // col_width)
+                # Pad to the column boundary, but never beyond the chart width
+                current_pos = i * col_width + len(lbl)
+                target_pos = min(i * col_width + consumed_cols * col_width, max_line_chars)
+                padding = target_pos - current_pos
+                if padding > 0:
+                    date_line.append(" " * padding)
+                skip = consumed_cols - 1
+            else:
+                date_line.append(" " * col_width)
+        text.append(date_line)
+        text.append("\n")
+
+    # Legend
+    if top_models:
+        text.append("\n")
+        text.append("     ", style=theme.get("meta", "grey62"))
+        for i, model in enumerate(top_models[:8]):
+            name = truncate(_model_short_name(model), 14)
+            color = colors[i % len(colors)]
+            text.append("█", style=color)
+            text.append(f" {name}  ", style=theme.get("meta", "grey62"))
+        text.append("\n")
+
+    return text
+
+
+def _model_colors(theme: dict) -> list[str]:
+    return [
+        theme.get("ok", "medium_spring_green"),
+        theme.get("warning", "gold1"),
+        theme.get("danger", "indian_red1"),
+        "dodger_blue1",
+        "medium_purple1",
+        "dark_orange",
+        "turquoise2",
+        "hot_pink",
+        "spring_green2",
+        "gold3",
+    ]
+
+
+def _top_n_models(model_totals: dict[str, float], n: int) -> list[str]:
+    items = sorted(model_totals.items(), key=lambda x: (-x[1], x[0]))
+    return [m for m, _ in items[:n]]
+
+
+def short_date(date: str) -> str:
+    if len(date) >= 10:
+        return date[5:10]
+    return date
+
+
+def truncate(s: str, max_len: int) -> str:
+    if len(s) > max_len:
+        return s[:max_len - 3] + "..."
+    return s
+
+
+
+def _render_top_models(top_models, lang_zh: bool, theme: dict, metric: str = OR_METRIC_REQUESTS, chart_width: int = 20) -> Text:
+    if not top_models:
+        return Text()
+    metric = _parse_or_metric(metric)
+    max_val = max(_metric_value_model(m, metric) for m in top_models) or 1.0
+    text = Text()
+    title = "Top 模型" if lang_zh else "Top Models"
+    text.append(f"  {title}\n", style=theme.get("label", "cornflower_blue"))
+    colors = [
+        theme.get("ok", "medium_spring_green"),
+        theme.get("warning", "gold1"),
+        theme.get("danger", "indian_red1"),
+        "dodger_blue1",
+        "medium_purple1",
+        "dark_orange",
+        "turquoise2",
+    ]
+    for i, m in enumerate(top_models[:7]):
+        val = _metric_value_model(m, metric)
+        bar_len = int(val / max_val * chart_width) if max_val > 0 else 0
+        name = _model_short_name(m.model)
+        if len(name) > 22:
+            name = name[:19] + "..."
+        color = colors[i % len(colors)]
+        text.append(f"    {name:22} ", style=theme.get("meta", "grey62"))
+        text.append(f"{_format_metric_value(val, metric):>8}  ", style=theme.get("meta", "grey62"))
+        text.append("█" * bar_len, style=color)
+        text.append("░" * (chart_width - bar_len) + "\n", style="grey50")
+    return text
+
 
 
 def _format_aggregated_results(
@@ -296,6 +665,9 @@ def _format_aggregated_results(
     order: Optional[List[str]] = None,
     theme_name: str = "blue-dark",
     lang_zh: bool = IS_ZH,
+    enabled_providers: Optional[set] = None,
+    or_metric: str = OR_METRIC_REQUESTS,
+    days_window: int = 30,
 ) -> Text:
     _L = L_ZH if lang_zh else L_EN
     result = Text()
@@ -333,6 +705,24 @@ def _format_aggregated_results(
         for i, row in enumerate(p_items):
             if i > 0:
                 body_text.append("\n")
+
+            has_structured = row.activity_totals or row.daily_activity or row.top_models
+
+            if has_structured:
+                # Structured rows render only their visualizations, no generic label line
+                if row.activity_totals:
+                    if i > 0:
+                        body_text.append("\n")
+                    body_text.append(_render_activity_totals(row.activity_totals, lang_zh, theme))
+                if row.daily_activity:
+                    if i > 0 or row.activity_totals:
+                        body_text.append("\n")
+                    body_text.append(_render_daily_chart(row.daily_activity, lang_zh, theme, metric=or_metric, days_window=days_window))
+                if row.top_models:
+                    if i > 0 or row.activity_totals or row.daily_activity:
+                        body_text.append("\n")
+                    body_text.append(_render_top_models(row.top_models, lang_zh, theme, metric=or_metric, chart_width=20))
+                continue
 
             loc_label = _get_localized_label(row.label, lang_zh)
             label_v_width = _get_visual_width(loc_label)
@@ -398,6 +788,8 @@ def _format_aggregated_results(
             if err_width > global_max_width:
                 global_max_width = err_width
         elif p not in results:
+            if enabled_providers is not None and p not in enabled_providers:
+                continue
             err_msg = "  ⚠ 未配置" if lang_zh else "  ⚠ Not configured"
             error_msgs[p] = err_msg
             err_width = _get_visual_width(err_msg)
@@ -406,22 +798,19 @@ def _format_aggregated_results(
 
     divider_width = max(50, global_max_width + 4)
 
-    # Second pass: construct final result with uniform divider width in user-defined order
+    # Second pass: construct final result with simple divider titles
     for p in order:
         body_text = provider_bodies.get(p)
         err_msg = error_msgs.get(p)
-        
-
 
         title_str = "Kimi" if p == "kimi" else p.capitalize()
-        base_line = f"──── {title_str} "
-        divider_line = base_line + "─" * max(2, divider_width - len(base_line))
-        
+        divider_line = f"───────── {title_str} ─────────"
+
         if body_text:
             result.append(f"{divider_line}\n", style=theme["title"])
             result.append("\n")  # Empty line between divider and text
             result.append(body_text)
-            
+
         if err_msg:
             if not body_text:
                 result.append(f"{divider_line}\n", style=theme["danger"])
@@ -469,6 +858,9 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
     else:
         lang_zh: bool = IS_ZH
 
+    or_metric: str = _parse_or_metric(config.or_metric)
+    days_window: int = _parse_days_window(config.days_window)
+
     saved_notice: list = [None]   # holds the saved theme name briefly, then None
 
     _SHORT = {
@@ -479,7 +871,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
     def _build_panel() -> Panel:
         visible_order = [p for p in config.provider_order if p in visible_providers]
         _L = L_ZH if lang_zh else L_EN
-        body = _format_aggregated_results(results, errors, visible_order, themes[idx], lang_zh)
+        body = _format_aggregated_results(results, errors, visible_order, themes[idx], lang_zh, enabled_providers=set(config.enabled_providers), or_metric=or_metric, days_window=days_window)
 
         top_bar = Text()
         # Provider toggles
@@ -498,20 +890,22 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
         top_bar.justify = "center"
 
         hint = Text()
-        # Keybindings
-        hint.append("[q]", style="bold")
-        hint.append(" 退出  " if lang_zh else " quit  ", style="dim")
-        hint.append("[r]", style="bold")
-        hint.append(" 刷新  " if lang_zh else " refresh  ", style="dim")
-        hint.append("[←/→]", style="bold")
-        hint.append(" 主题  " if lang_zh else " theme  ", style="dim")
-        hint.append("[1-4]", style="bold")
-        hint.append(" 面板  " if lang_zh else " panels  ", style="dim")
-        hint.append("[l]", style="bold")
-        hint.append(" 英" if lang_zh else " ZH", style="dim")
-        hint.append("  ", style="dim")
-        hint.append("[⏎]", style="bold")
-        hint.append(" 保存主题" if lang_zh else " Save theme", style="dim")
+        # Keybindings grouped logically: navigation / view / data / persistence
+        bindings = [
+            ("[q]", "退出" if lang_zh else "quit"),
+            ("[r]", "刷新" if lang_zh else "refresh"),
+            ("[←/→]", "主题" if lang_zh else "theme"),
+            ("[1-4]", "面板" if lang_zh else "panels"),
+            ("[l]", "英" if lang_zh else "ZH"),
+            ("[m]", _metric_label(or_metric, lang_zh)),
+            ("[d]", f"{days_window}d"),
+            ("[⏎ ]", "保存" if lang_zh else "save"),
+        ]
+        for i, (key, label) in enumerate(bindings):
+            if i > 0:
+                hint.append("  ", style="dim")
+            hint.append(key, style="bold")
+            hint.append(f" {label}", style="dim")
         if saved_notice[0]:
             hint.append(f"  ✓ {'已保存' if lang_zh else 'Saved'}: {saved_notice[0]}", style="bold green")
         hint.justify = "center"
@@ -571,7 +965,9 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
                         save_theme(
                             themes[idx],
                             language="zh" if lang_zh else "en",
-                            visible_providers=list(visible_providers)
+                            visible_providers=list(visible_providers),
+                            or_metric=or_metric,
+                            days_window=days_window
                         )
                         saved_notice[0] = themes[idx]
                         live.update(_build_panel())
@@ -584,7 +980,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
                                     continue
                             break
                         continue
-                    idx, quit_flag, refresh_flag, toggle_num, lang_toggle = _handle_key(ch, idx, len(themes))
+                    idx, quit_flag, refresh_flag, toggle_num, lang_toggle, metric_toggle, days_toggle = _handle_key(ch, idx, len(themes))
                     if quit_flag:
                         running = False
                     elif refresh_flag:
@@ -599,6 +995,10 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
                                 visible_providers.add(p)
                     elif lang_toggle:
                         lang_zh = not lang_zh
+                    elif metric_toggle:
+                        or_metric = _next_or_metric(or_metric)
+                    elif days_toggle:
+                        days_window = _next_days_window(days_window)
                     live.update(_build_panel())
                 await asyncio.sleep(0)
     finally:
@@ -691,7 +1091,12 @@ async def main():
         if not results and not errors:
             console.print(Panel(Text(L["no_data"], style="dim"), title=f"[bold]{L['title']}[/bold]"))
         else:
-            console.print(Panel(_format_aggregated_results(results, errors, config.provider_order, theme_name), title=f"[bold]{L['title']}[/bold]", expand=True, padding=(1, 2, 1, 2)))
+            display_order = config.provider_order
+            if config.visible_providers is not None:
+                display_order = [p for p in config.provider_order if p in config.visible_providers]
+            or_metric = _parse_or_metric(config.or_metric)
+            days_window = _parse_days_window(config.days_window)
+            console.print(Panel(_format_aggregated_results(results, errors, display_order, theme_name, enabled_providers=set(config.enabled_providers), or_metric=or_metric, days_window=days_window), title=f"[bold]{L['title']}[/bold]", expand=True, padding=(1, 2, 1, 2)))
 
 def run_cli():
     asyncio.run(main())

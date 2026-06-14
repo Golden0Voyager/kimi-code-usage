@@ -11,6 +11,7 @@ class ProviderConfig:
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     enabled: bool = True
+    management_key: Optional[str] = None
 
 @dataclass
 class AppConfig:
@@ -21,6 +22,8 @@ class AppConfig:
     theme: str = "blue-dark"
     language: Optional[str] = None
     visible_providers: Optional[List[str]] = None
+    or_metric: str = "requests"
+    days_window: int = 30
 
     @property
     def enabled_providers(self) -> List[str]:
@@ -57,6 +60,22 @@ class ConfigResolver:
         # Get language and visible providers from JSON
         self.config.language = general_data.get("language")
         self.config.visible_providers = general_data.get("visibleProviders")
+
+        # Get OpenRouter metric preference, default requests
+        or_metric = general_data.get("orMetric", "requests")
+        if or_metric not in ("spend", "requests", "tokens"):
+            or_metric = "requests"
+        self.config.or_metric = or_metric
+
+        # Get days window for daily chart, default 30
+        days_window = general_data.get("daysWindow", 30)
+        try:
+            days_window = int(days_window)
+        except (TypeError, ValueError):
+            days_window = 30
+        if days_window not in (7, 14, 30, 60, 90):
+            days_window = 30
+        self.config.days_window = days_window
 
         # 2. Setup providers
         all_providers = ["kimi", "openai", "anthropic", "openrouter"]
@@ -101,6 +120,15 @@ class ConfigResolver:
             if not base_url:
                 base_url = default_urls[p]
 
+            # Get optional management key for OpenRouter (activity endpoint)
+            management_key = None
+            if p == "openrouter":
+                management_key = (
+                    p_data.get("managementApiKey")
+                    or os.getenv("OPENROUTER_MANAGEMENT_KEY")
+                    or os.getenv("OPENROUTER_ADMIN_KEY")
+                )
+
             # Get Enabled status from JSON, else ENV, default True
             enabled = p_data.get("enabled")
             if enabled is None:
@@ -113,7 +141,8 @@ class ConfigResolver:
             self.config.providers[p] = ProviderConfig(
                 api_key=api_key if api_key else None,
                 base_url=base_url,
-                enabled=enabled
+                enabled=enabled,
+                management_key=management_key if management_key else None,
             )
 
         # 3. Determine provider ordering
@@ -137,6 +166,8 @@ def save_theme(
     theme_name: str,
     language: Optional[str] = None,
     visible_providers: Optional[List[str]] = None,
+    or_metric: Optional[str] = None,
+    days_window: Optional[int] = None,
     config_path: Optional[Path] = None
 ) -> None:
     """Persist settings into ``general`` in the JSON config file.
@@ -161,6 +192,10 @@ def save_theme(
         general["language"] = language
     if visible_providers is not None:
         general["visibleProviders"] = visible_providers
+    if or_metric is not None:
+        general["orMetric"] = or_metric
+    if days_window is not None:
+        general["daysWindow"] = days_window
     data["general"] = general
 
     with open(path, "w", encoding="utf-8") as fh:
