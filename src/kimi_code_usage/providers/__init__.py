@@ -1,7 +1,34 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 from kimi_code_usage.config import AppConfig
+
+
+@dataclass
+class ModelUsage:
+    model: str
+    spend: float = 0.0
+    requests: float = 0.0
+    prompt_tokens: float = 0.0
+    completion_tokens: float = 0.0
+    reasoning_tokens: float = 0.0
+
+
+@dataclass
+class DailyUsage:
+    date: str
+    models: List[ModelUsage] = field(default_factory=list)
+    total: float = 0.0
+
+
+@dataclass
+class ActivityTotals:
+    spend: float = 0.0
+    requests: float = 0.0
+    prompt_tokens: float = 0.0
+    completion_tokens: float = 0.0
+    reasoning_tokens: float = 0.0
+
 
 @dataclass
 class ProviderUsage:
@@ -15,6 +42,9 @@ class ProviderUsage:
     unit: str                  # "%" | "tokens" | "$" | "credits"
     countdown: Optional[str] = None # Reset countdown, e.g. "5d 12h"
     text_value: Optional[str] = None
+    activity_totals: Optional[ActivityTotals] = None
+    top_models: Optional[List[ModelUsage]] = None
+    daily_activity: Optional[List[DailyUsage]] = None
 
 # We will dynamically import fetchers to avoid circular dependencies
 # and make it easier to load/mock them.
@@ -54,7 +84,10 @@ async def dispatch_all(config: AppConfig) -> Tuple[Dict[str, List[ProviderUsage]
 
         try:
             # 10s timeout
-            res = await asyncio.wait_for(fetch_func(p_conf.api_key, p_conf.base_url), timeout=10.0)
+            res = await asyncio.wait_for(
+                fetch_func(p_conf.api_key, p_conf.base_url, management_key=p_conf.management_key),
+                timeout=10.0
+            )
             return provider_name, res, None
         except asyncio.TimeoutError:
             return provider_name, None, "Request timed out"

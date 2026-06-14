@@ -1,8 +1,8 @@
 import aiohttp
-from typing import List
+from typing import List, Optional
 from . import ProviderUsage
 
-async def fetch_anthropic_usage(api_key: str, base_url: str) -> List[ProviderUsage]:
+async def fetch_anthropic_usage(api_key: str, base_url: str, management_key: Optional[str] = None) -> List[ProviderUsage]:
     if api_key.startswith("sk-ant-"):
         return [
             ProviderUsage(
