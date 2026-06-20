@@ -1,27 +1,29 @@
 import json
-import os
 import sys
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
 from rich.text import Text
-from kimi_code_usage.providers import ProviderUsage, ActivityTotals, DailyUsage, ModelUsage
+
 from kimi_code_usage.main import (
-    _get_visual_width,
-    _get_localized_label,
+    THEME_MAP,
     _format_aggregated_results,
+    _get_localized_label,
+    _get_visual_width,
+    _handle_key,
+    _interactive_mode,
     _render_activity_totals,
     _render_daily_chart,
     _render_top_models,
-    _handle_key,
-    _interactive_mode,
     main,
     run_cli,
-    THEME_MAP,
 )
+from kimi_code_usage.providers import ActivityTotals, DailyUsage, ModelUsage, ProviderUsage
+
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
-    for key in ["KIMI_API_KEY", "KIMI_CODING_API_KEY", "OPENAI_API_KEY", 
+    for key in ["KIMI_API_KEY", "KIMI_CODING_API_KEY", "OPENAI_API_KEY",
                 "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY",
                 "KIMI_BASE_URL", "OPENAI_BASE_URL", "ANTHROPIC_BASE_URL", "OPENROUTER_BASE_URL"]:
         monkeypatch.delenv(key, raising=False)
@@ -57,7 +59,7 @@ def test_format_aggregated_results():
     errors = {
         "openai": "API Key invalid"
     }
-    
+
     text = _format_aggregated_results(results, errors)
     assert isinstance(text, Text)
     raw_text = str(text)
@@ -65,12 +67,12 @@ def test_format_aggregated_results():
     assert "Openai" in raw_text
     assert "Openrouter" in raw_text
     assert "Pro Plan Value" in raw_text
-    
+
     # Check limit-bar format and no limit format
     assert "1,500 / 10,000 tokens" in raw_text
     assert "$1.50" in raw_text
     assert "$2.50" in raw_text
-    
+
     # Check error message
     assert "⚠ API Key invalid" in raw_text
 
@@ -86,15 +88,15 @@ async def test_main_no_providers_configured(monkeypatch, capsys):
 async def test_main_json_output(monkeypatch, capsys):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
     monkeypatch.setattr("sys.argv", ["prog", "--json"])
-    
+
     mock_results = {
         "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")]
     }
     mock_errors = {"openai": "Auth failed"}
-    
+
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_results, mock_errors))):
         await main()
-        
+
     captured = capsys.readouterr()
     data = json.loads(captured.out.strip())
     assert "kimi" in data
@@ -105,7 +107,7 @@ async def test_main_json_output(monkeypatch, capsys):
 async def test_main_plain_output(monkeypatch, capsys):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
     monkeypatch.setattr("sys.argv", ["prog", "--plain"])
-    
+
     mock_results = {
         "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")],
         "openai": [ProviderUsage(provider="openai", label="Tokens", used=100, limit=None, remaining=None, percent=None, reset_at=None, unit="tokens")],
@@ -115,10 +117,10 @@ async def test_main_plain_output(monkeypatch, capsys):
         ]
     }
     mock_errors = {"openrouter": "Timeout"}
-    
+
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_results, mock_errors))):
         await main()
-        
+
     captured = capsys.readouterr()
     assert "Kimi - " in captured.out
     assert "Openai - Tokens" in captured.out
@@ -130,14 +132,14 @@ async def test_main_plain_output(monkeypatch, capsys):
 async def test_main_rich_output(monkeypatch, capsys):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
     monkeypatch.setattr("sys.argv", ["prog"])
-    
+
     mock_results = {
         "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")]
     }
-    
+
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_results, {}))):
         await main()
-        
+
     captured = capsys.readouterr()
     assert "Weekly Usage" in captured.out or "周" in captured.out
 
@@ -146,19 +148,19 @@ async def test_main_with_provider_filter(monkeypatch, capsys):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
     monkeypatch.setattr("sys.argv", ["prog", "--provider", "kimi", "--plain"])
-    
+
     mock_results = {
         "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")],
         "openai": [ProviderUsage(provider="openai", label="Tokens", used=100, limit=None, remaining=None, percent=None, reset_at=None, unit="tokens")]
     }
-    
+
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_results, {}))) as mock_dispatch:
         await main()
         mock_dispatch.assert_called_once()
         config = mock_dispatch.call_args[0][0]
         assert config.providers["openai"].api_key is None
         assert config.providers["kimi"].api_key == "kimi-key"
-        
+
     captured = capsys.readouterr()
     assert "Kimi - " in captured.out
     assert "Openai" not in captured.out
@@ -166,7 +168,7 @@ async def test_main_with_provider_filter(monkeypatch, capsys):
 @pytest.mark.asyncio
 async def test_main_custom_config_path(monkeypatch, capsys):
     monkeypatch.setattr("sys.argv", ["prog", "--config", "/tmp/dummy.json"])
-    
+
     with patch("kimi_code_usage.main.ConfigResolver") as mock_resolver:
         mock_resolver.return_value.resolve.return_value.enabled_providers = []
         with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=({}, {}))):
@@ -175,13 +177,13 @@ async def test_main_custom_config_path(monkeypatch, capsys):
 
 def test_run_cli(monkeypatch):
     monkeypatch.setattr("sys.argv", ["prog"])
-    
+
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=({}, {}))):
         run_cli()
 
 def test_main_guard_calls_run_cli():
-    import runpy
     import asyncio
+    import runpy
     with patch.object(asyncio, 'run') as mock_run:
         runpy.run_module('kimi_code_usage.main', run_name='__main__')
     mock_run.assert_called_once()
@@ -190,33 +192,33 @@ def test_main_guard_calls_run_cli():
 async def test_main_theme_cli(monkeypatch, capsys):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
     monkeypatch.setattr("sys.argv", ["prog", "--theme", "sky-dark"])
-    
+
     mock_results = {
         "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")]
     }
-    
+
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_results, {}))):
         await main()
-        
+
     captured = capsys.readouterr()
     assert "Weekly Usage" in captured.out or "周" in captured.out
 
 def test_all_themes_rendering():
     # Test rendering with all 9 themes and invalid fallback theme
     from kimi_code_usage.main import THEME_MAP
-    
+
     results = {
         "kimi": [
             ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at="06-11 12:00", unit="%", countdown="1d 2h")
         ]
     }
-    
+
     # 1. Test invalid fallback theme (hits line 149 in main.py)
     text_invalid = _format_aggregated_results(results, {}, theme_name="unknown-theme")
     assert "Weekly Usage" in str(text_invalid) or "周" in str(text_invalid)
-    
+
     # 2. Test all 9 themes
-    for t_name in THEME_MAP.keys():
+    for t_name in THEME_MAP:
         text = _format_aggregated_results(results, {}, theme_name=t_name)
         assert "Weekly Usage" in str(text) or "周" in str(text)
 
@@ -266,7 +268,8 @@ def _make_interactive_config(monkeypatch):
 
 def _mock_terminal(monkeypatch):
     """Suppress all real terminal calls (termios/tty/fileno)."""
-    import termios as _termios, tty as _tty
+    import termios as _termios
+    import tty as _tty
     monkeypatch.setattr(_termios, "tcgetattr", lambda fd: [])
     monkeypatch.setattr(_termios, "tcsetattr", lambda *a: None)
     monkeypatch.setattr(_tty, "setcbreak", lambda fd: None)
@@ -282,7 +285,6 @@ def _make_select_and_read(key_sequence):
         buf.write(k)
     buf.seek(0)
 
-    call_no = [0]
     total_chars = sum(len(k) for k in key_sequence)
 
     def mock_select(rlist, wlist, xlist, timeout):
@@ -543,10 +545,10 @@ def test_localization_helpers():
     # 2. Test _get_localized_text_value
     assert _get_localized_text_value(None, lang_zh=True) is None
     assert _get_localized_text_value("", lang_zh=True) == ""
-    
+
     val_en = "Daily: $0.1234 | Weekly: $0.5678 | Monthly: $1.2345"
     assert _get_localized_text_value(val_en, lang_zh=True) == "今日: $0.1234 | 本周: $0.5678 | 本月: $1.2345"
-    
+
     val_zh = "今日: $0.1234 | 本周: $0.5678 | 本月: $1.2345"
     assert _get_localized_text_value(val_zh, lang_zh=False) == "Daily: $0.1234 | Weekly: $0.5678 | Monthly: $1.2345"
 
@@ -555,7 +557,7 @@ def test_localization_helpers():
 
     assert _get_localized_text_value("Other normal text", lang_zh=True) == "Other normal text"
     assert _get_localized_text_value("Other normal text", lang_zh=False) == "Other normal text"
-    
+
     # Rate limit localization
     assert _get_localized_text_value("Unlimited/10s", lang_zh=True) == "无限制/10秒"
     assert _get_localized_text_value("无限制/10秒", lang_zh=False) == "Unlimited/10s"
@@ -621,14 +623,14 @@ def test_format_aggregated_results_edge_cases():
 async def test_main_json_output_no_errors(monkeypatch, capsys):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
     monkeypatch.setattr("sys.argv", ["prog", "--json"])
-    
+
     mock_results = {
         "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")]
     }
-    
+
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_results, {}))):
         await main()
-        
+
     captured = capsys.readouterr()
     data = json.loads(captured.out.strip())
     assert "kimi" in data
@@ -643,7 +645,7 @@ async def test_interactive_mode_escape_keys(monkeypatch):
     # Case 1: Escape followed by non-'[' character (e.g. '\x1b', 'A', 'q')
     inputs_1 = ['\x1b', 'A', 'q']
     idx_1 = [0]
-    
+
     def mock_select_1(rlist, wlist, xlist, timeout):
         if idx_1[0] < len(inputs_1):
             return ([sys.stdin], [], [])
@@ -667,7 +669,7 @@ async def test_interactive_mode_escape_keys(monkeypatch):
     # Case 2: Escape followed by '[', but no 3rd character (timeout on r3)
     inputs_2 = ['\x1b', '[', 'q']
     idx_2 = [0]
-    
+
     def mock_select_2(rlist, wlist, xlist, timeout):
         if timeout == 0.05 and idx_2[0] == 2:
             return ([], [], [])
@@ -707,14 +709,14 @@ def test_render_activity_totals():
 
 def test_render_daily_chart_variants():
     from kimi_code_usage.main import (
-        _parse_days_window,
-        _next_days_window,
-        _parse_or_metric,
-        _next_or_metric,
         _format_tokens,
+        _next_days_window,
+        _next_or_metric,
+        _parse_days_window,
+        _parse_or_metric,
+        _render_top_models,
         short_date,
         truncate,
-        _render_top_models,
     )
 
     # Helper edge cases

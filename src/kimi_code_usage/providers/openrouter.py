@@ -1,12 +1,13 @@
-import aiohttp
 import asyncio
 import os
-from typing import List, Optional
+
+import aiohttp
+
 from . import (
-    ProviderUsage,
     ActivityTotals,
     DailyUsage,
     ModelUsage,
+    ProviderUsage,
 )
 
 
@@ -21,7 +22,7 @@ def _get_lang() -> bool:
     return "zh" in os.getenv("LANG", "en").lower()
 
 
-def _build_activity(items: List[dict]) -> tuple[ActivityTotals, List[ModelUsage]]:
+def _build_activity(items: list[dict]) -> tuple[ActivityTotals, list[ModelUsage]]:
     totals = ActivityTotals()
     by_model: dict[str, ModelUsage] = {}
 
@@ -50,7 +51,7 @@ def _build_activity(items: List[dict]) -> tuple[ActivityTotals, List[ModelUsage]
     return totals, models
 
 
-def _build_daily_activity(items: List[dict]) -> List[DailyUsage]:
+def _build_daily_activity(items: list[dict]) -> list[DailyUsage]:
     by_date: dict[str, dict[str, ModelUsage]] = {}
 
     for item in items:
@@ -86,7 +87,7 @@ def _model_short_name(model: str) -> str:
     return model
 
 
-async def fetch_openrouter_usage(api_key: str, base_url: str, management_key: Optional[str] = None) -> List[ProviderUsage]:
+async def fetch_openrouter_usage(api_key: str, base_url: str, management_key: str | None = None) -> list[ProviderUsage]:
     base = _base_url_v1(base_url)
     key_url = f"{base}/auth/key"
     credits_url = f"{base}/credits"
@@ -137,7 +138,7 @@ async def fetch_openrouter_usage(api_key: str, base_url: str, management_key: Op
     key_data = key_payload.get("data", {})
     is_management = bool(key_data.get("is_management_key"))
 
-    res: List[ProviderUsage] = []
+    res: list[ProviderUsage] = []
     is_zh = _get_lang()
 
     key_usage = key_data.get("usage")

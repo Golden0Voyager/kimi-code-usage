@@ -4,14 +4,14 @@ import json
 import os
 import select as _select_module
 import sys
+
 from dotenv import load_dotenv
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
-from typing import Dict, List, Optional, Tuple
 
-from kimi_code_usage.config import ConfigResolver, save_theme
+from kimi_code_usage.config import AppConfig, ConfigResolver, save_theme
 from kimi_code_usage.providers import DailyUsage, ProviderUsage, dispatch_all
 
 # --- i18n ---
@@ -54,7 +54,7 @@ def _get_visual_width(s: str) -> int:
 
 def _get_localized_label(label: str, lang_zh: bool = IS_ZH) -> str:
     _L = L_ZH if lang_zh else L_EN
-    
+
     # 1. Dynamic translations first
     if lang_zh:
         translations = {
@@ -120,7 +120,7 @@ def _get_localized_text_value(text_val: str, lang_zh: bool) -> str:
                 return f"今日: ${u_daily:.4f} | 本周: ${u_weekly:.4f} | 本月: ${u_monthly:.4f}"
             else:
                 return f"Daily: ${u_daily:.4f} | Weekly: ${u_weekly:.4f} | Monthly: ${u_monthly:.4f}"
-    
+
     # Rate limit localization (e.g., Unlimited/10s <-> 无限制/10秒, 20 req/1s <-> 20次/1秒)
     if lang_zh:
         if text_val.startswith("Unlimited/"):
@@ -152,7 +152,7 @@ def _get_localized_text_value(text_val: str, lang_zh: bool) -> str:
             return "Yes"
         if text_val == "否":
             return "No"
-            
+
     return text_val
 
 # (typing already imported at top)
@@ -269,7 +269,7 @@ THEME_MAP = {
 }
 
 
-def _handle_key(ch: str, idx: int, n: int) -> Tuple[int, bool, bool, Optional[int], bool, bool, bool]:
+def _handle_key(ch: str, idx: int, n: int) -> tuple[int, bool, bool, int | None, bool, bool, bool]:
     """Map a keypress to a TUI action.
 
     Returns:
@@ -334,7 +334,7 @@ def _next_days_window(days_window: int) -> int:
     return DAYS_WINDOWS[(idx + 1) % len(DAYS_WINDOWS)]
 
 
-def _parse_or_metric(value: Optional[str]) -> str:
+def _parse_or_metric(value: str | None) -> str:
     if value in VALID_OR_METRICS:
         return value
     return OR_METRIC_REQUESTS
@@ -460,7 +460,7 @@ def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str 
     others_color_idx = len(top_models) % len(_model_colors(theme))
 
     # Pre-compute each column as color indices (bottom -> top)
-    columns: list[list[Optional[int]]] = []
+    columns: list[list[int | None]] = []
     for day in days:
         value_by_model: dict[str, float] = {}
         others_value = 0.0
@@ -479,7 +479,7 @@ def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str 
             segments.append((others_color_idx, others_value))
 
         day_total = sum(v for _, v in segments)
-        column: list[Optional[int]] = [None] * height
+        column: list[int | None] = [None] * height
         if day_total > 0 and max_total > 0:
             total_cells = max(1, min(height, int(round(day_total / max_total * height))))
             exacts = [seg[1] / day_total * total_cells for seg in segments]
@@ -660,12 +660,12 @@ def _render_top_models(top_models, lang_zh: bool, theme: dict, metric: str = OR_
 
 
 def _format_aggregated_results(
-    results: Dict[str, List[ProviderUsage]],
-    errors: Dict[str, str],
-    order: Optional[List[str]] = None,
+    results: dict[str, list[ProviderUsage]],
+    errors: dict[str, str],
+    order: list[str] | None = None,
     theme_name: str = "blue-dark",
     lang_zh: bool = IS_ZH,
-    enabled_providers: Optional[set] = None,
+    enabled_providers: set | None = None,
     or_metric: str = OR_METRIC_REQUESTS,
     days_window: int = 30,
 ) -> Text:
@@ -677,7 +677,7 @@ def _format_aggregated_results(
     theme = THEME_MAP.get(theme_name)
     if not theme:
         theme = THEME_MAP["blue-dark"]
-        
+
     # First pass: pre-render all bodies and find global_max_width
     provider_bodies = {}
     error_msgs = {}
@@ -796,7 +796,7 @@ def _format_aggregated_results(
             if err_width > global_max_width:
                 global_max_width = err_width
 
-    divider_width = max(50, global_max_width + 4)
+    max(50, global_max_width + 4)
 
     # Second pass: construct final result with simple divider titles
     for p in order:
@@ -842,12 +842,12 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
     except ValueError:
         idx = 0
 
-    results: Dict[str, List[ProviderUsage]] = {}
-    errors: Dict[str, str] = {}
+    results: dict[str, list[ProviderUsage]] = {}
+    errors: dict[str, str] = {}
 
     # Determine initial visible providers and language
     if config.visible_providers is not None:
-        visible_providers: set = set(p for p in config.visible_providers if p in config.provider_order)
+        visible_providers: set = {p for p in config.visible_providers if p in config.provider_order}
     else:
         visible_providers: set = set(config.provider_order)
 

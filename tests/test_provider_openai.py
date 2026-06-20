@@ -1,6 +1,9 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
+
 from kimi_code_usage.providers.openai import fetch_openai_usage
+
 
 @pytest.mark.asyncio
 async def test_fetch_openai_usage_success():
@@ -31,7 +34,7 @@ async def test_fetch_openai_usage_success():
 
     mock_session = AsyncMock()
     call_count = [0]
-    
+
     def mock_get(url, **kwargs):
         call_count[0] += 1
         if "completions" in url:
@@ -46,14 +49,14 @@ async def test_fetch_openai_usage_success():
     with patch("aiohttp.ClientSession", return_value=mock_session):
         res = await fetch_openai_usage("org-admin-key", "https://api.openai.com")
         assert len(res) == 2
-        
+
         # Tokens ProviderUsage
         assert res[0].provider == "openai"
         assert res[0].label == "Tokens"
         assert res[0].used == 4500.0
         assert res[0].limit is None
         assert res[0].unit == "tokens"
-        
+
         # Cost ProviderUsage
         assert res[1].provider == "openai"
         assert res[1].label == "Cost"
@@ -76,7 +79,7 @@ async def test_fetch_openai_usage_costs_fails_gracefully():
         return cm
 
     mock_session = AsyncMock()
-    
+
     def mock_get(url, **kwargs):
         if "completions" in url:
             return make_mock_cm(200, mock_json_completions)

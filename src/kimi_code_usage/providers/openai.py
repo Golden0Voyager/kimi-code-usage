@@ -1,9 +1,11 @@
-import aiohttp
 from datetime import datetime, timedelta
-from typing import List, Optional
+
+import aiohttp
+
 from . import ProviderUsage
 
-async def fetch_openai_usage(api_key: str, base_url: str, management_key: Optional[str] = None) -> List[ProviderUsage]:
+
+async def fetch_openai_usage(api_key: str, base_url: str, management_key: str | None = None) -> list[ProviderUsage]:
     headers = {"Authorization": f"Bearer {api_key}"}
 
     # Calculate start_time (1st day of current month) and end_time (tomorrow)

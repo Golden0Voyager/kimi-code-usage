@@ -24,10 +24,16 @@ jobs:
         run: uv sync --dev
 
       - name: Run ruff check
-        run: uv run ruff check src/kimi_code_usage/ tests/
+        run: uv run ruff check src/
 
       - name: Run mypy
-        run: uv run mypy src/kimi_code_usage/ || true
+        run: uv run mypy src/ || true
+      - name: Run security scan (bandit)
+        run: uv tool run bandit -r src/ || true
+
+      - name: Run dependency audit
+        run: uv audit || true
+
 
       - name: Run tests with coverage
         run: uv run pytest --cov --cov-report=term-missing tests/

@@ -1,14 +1,15 @@
 import json
-import os
-from pathlib import Path
 from unittest.mock import patch
+
 import pytest
-from kimi_code_usage.config import ConfigResolver, AppConfig
+
+from kimi_code_usage.config import AppConfig, ConfigResolver
+
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
     # Completely clear all related environment variables to ensure test isolation
-    for key in ["KIMI_API_KEY", "KIMI_CODING_API_KEY", "OPENAI_API_KEY", 
+    for key in ["KIMI_API_KEY", "KIMI_CODING_API_KEY", "OPENAI_API_KEY",
                 "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OPENROUTER_ADMIN_KEY",
                 "OPENROUTER_MANAGEMENT_KEY",
                 "KIMI_BASE_URL", "OPENAI_BASE_URL", "ANTHROPIC_BASE_URL", "OPENROUTER_BASE_URL"]:
@@ -19,7 +20,7 @@ def test_config_resolver_default_not_exist(tmp_path):
     config_path = tmp_path / "nonexistent.json"
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
-    
+
     assert isinstance(config, AppConfig)
     assert config.refresh_interval_minutes == 5
     assert config.output_mode == "rich"
@@ -29,7 +30,7 @@ def test_config_resolver_invalid_json(tmp_path):
     config_path = tmp_path / "invalid.json"
     with open(config_path, "w", encoding="utf-8") as f:
         f.write("not-json")
-        
+
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
     assert config.refresh_interval_minutes == 5
@@ -49,16 +50,16 @@ def test_config_resolver_valid_json(tmp_path):
     }
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(data, f)
-        
+
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
-    
+
     assert config.refresh_interval_minutes == 10
     assert config.output_mode == "plain"
     assert "kimi" in config.enabled_providers
     assert "openai" in config.enabled_providers
     assert "anthropic" not in config.enabled_providers
-    
+
     assert config.providers["kimi"].api_key == "kimi-key"
     assert config.providers["kimi"].base_url == "https://custom.kimi"
     assert config.providers["openai"].api_key == "openai-key"
@@ -68,16 +69,16 @@ def test_config_resolver_env_variables(tmp_path, monkeypatch):
     monkeypatch.setenv("KIMI_API_KEY", "env-kimi-key")
     monkeypatch.setenv("KIMI_BASE_URL", "https://env.kimi")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "env-anthropic-key")
-    
+
     config_path = tmp_path / "nonexistent.json"
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
-    
+
     assert "kimi" in config.enabled_providers
     assert "anthropic" in config.enabled_providers
     assert "openai" not in config.enabled_providers
     assert "openrouter" not in config.enabled_providers
-    
+
     assert config.providers["kimi"].api_key == "env-kimi-key"
     assert config.providers["kimi"].base_url == "https://env.kimi"
     assert config.providers["anthropic"].api_key == "env-anthropic-key"
@@ -85,17 +86,17 @@ def test_config_resolver_env_variables(tmp_path, monkeypatch):
 
 def test_config_resolver_openrouter_admin_key(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENROUTER_ADMIN_KEY", "env-or-admin-key")
-    
+
     config_path = tmp_path / "nonexistent.json"
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
-    
+
     assert "openrouter" in config.enabled_providers
     assert config.providers["openrouter"].api_key == "env-or-admin-key"
 
 def test_config_resolver_priority(tmp_path, monkeypatch):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-env-key")
-    
+
     config_path = tmp_path / "config.json"
     data = {
         "providers": {
@@ -104,10 +105,10 @@ def test_config_resolver_priority(tmp_path, monkeypatch):
     }
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(data, f)
-        
+
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
-    
+
     assert config.providers["kimi"].api_key == "kimi-json-key"
 
 def test_config_resolver_no_arg(tmp_path):
@@ -127,22 +128,22 @@ def test_config_resolver_enabled_env_and_json(tmp_path, monkeypatch):
     }
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(data, f)
-        
+
     # Test env override of enabled
     monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
     monkeypatch.setenv("OPENROUTER_ENABLED", "false")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "ant-key")
     monkeypatch.setenv("ANTHROPIC_ENABLED", "true")
-    
+
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
-    
+
     # Check that only kimi and anthropic are enabled
     assert "kimi" in config.enabled_providers
     assert "anthropic" in config.enabled_providers
     assert "openai" not in config.enabled_providers
     assert "openrouter" not in config.enabled_providers
-    
+
     assert config.providers["kimi"].enabled is True
     assert config.providers["openai"].enabled is False
     assert config.providers["openrouter"].enabled is False
@@ -159,10 +160,10 @@ def test_config_resolver_ordering(tmp_path):
     }
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(data, f)
-        
+
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
-    
+
     # Expected order: JSON defined order (openrouter, kimi), then default remaining order (anthropic, openai)
     assert config.provider_order == ["openrouter", "kimi", "anthropic", "openai"]
 
@@ -176,16 +177,16 @@ def test_config_resolver_theme(tmp_path, monkeypatch):
     }
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(data, f)
-        
+
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
     assert config.theme == "cyberpunk-dark"
-    
+
     # 2. Env variable theme override (when JSON has no theme)
     config_path_empty = tmp_path / "config_empty.json"
     with open(config_path_empty, "w", encoding="utf-8") as f:
         json.dump({}, f)
-        
+
     monkeypatch.setenv("KIMI_USAGE_THEME", "nordic-dark")
     resolver2 = ConfigResolver(config_path=str(config_path_empty))
     config2 = resolver2.resolve()
@@ -203,7 +204,7 @@ def test_config_resolver_language_and_visible_providers(tmp_path):
     }
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(data, f)
-        
+
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
     assert config.theme == "matisse-dark"
@@ -221,7 +222,7 @@ def test_config_resolver_unknown_provider(tmp_path):
     }
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(data, f)
-        
+
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
     assert "unknown-prov" not in config.provider_order
@@ -256,11 +257,11 @@ def test_config_resolver_or_metric(tmp_path, monkeypatch):
 
 def test_config_resolver_openrouter_management_key(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENROUTER_MANAGEMENT_KEY", "env-or-mgmt-key")
-    
+
     config_path = tmp_path / "nonexistent.json"
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
-    
+
     assert config.providers["openrouter"].management_key == "env-or-mgmt-key"
 
 

@@ -1,6 +1,9 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
+
 from kimi_code_usage.providers.anthropic import fetch_anthropic_usage
+
 
 @pytest.mark.asyncio
 async def test_fetch_anthropic_usage_regular_key():
@@ -33,13 +36,13 @@ async def test_fetch_anthropic_usage_oauth_success():
     with patch("aiohttp.ClientSession", return_value=mock_session):
         res = await fetch_anthropic_usage("oauth-token", "https://api.anthropic.com")
         assert len(res) == 2
-        
+
         assert res[0].label == "5 Hours"
         assert res[0].used == 45.0
         assert res[0].remaining == 55.0
         assert res[0].percent == 45.0
         assert res[0].unit == "%"
-        
+
         assert res[1].label == "7 Days"
         assert res[1].used == 12.0
         assert res[1].remaining == 88.0

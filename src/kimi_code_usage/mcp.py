@@ -1,5 +1,5 @@
-import os
 from fastmcp import FastMCP
+
 from kimi_code_usage.config import ConfigResolver
 from kimi_code_usage.providers import ProviderUsage, dispatch_all
 

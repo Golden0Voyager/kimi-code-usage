@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+
 from kimi_code_usage.config import AppConfig
 
 
@@ -17,7 +17,7 @@ class ModelUsage:
 @dataclass
 class DailyUsage:
     date: str
-    models: List[ModelUsage] = field(default_factory=list)
+    models: list[ModelUsage] = field(default_factory=list)
     total: float = 0.0
 
 
@@ -35,28 +35,28 @@ class ProviderUsage:
     provider: str              # "kimi" | "openai" | "anthropic" | "openrouter"
     label: str                 # e.g., "Weekly Usage", "5 Hours", "Cost"
     used: float
-    limit: Optional[float]     # None if unlimited
-    remaining: Optional[float]
-    percent: Optional[float]   # 0-100, None if no limit
-    reset_at: Optional[str]    # ISO timestamp or formatted reset date
+    limit: float | None     # None if unlimited
+    remaining: float | None
+    percent: float | None   # 0-100, None if no limit
+    reset_at: str | None    # ISO timestamp or formatted reset date
     unit: str                  # "%" | "tokens" | "$" | "credits"
-    countdown: Optional[str] = None # Reset countdown, e.g. "5d 12h"
-    text_value: Optional[str] = None
-    activity_totals: Optional[ActivityTotals] = None
-    top_models: Optional[List[ModelUsage]] = None
-    daily_activity: Optional[List[DailyUsage]] = None
+    countdown: str | None = None # Reset countdown, e.g. "5d 12h"
+    text_value: str | None = None
+    activity_totals: ActivityTotals | None = None
+    top_models: list[ModelUsage] | None = None
+    daily_activity: list[DailyUsage] | None = None
 
 # We will dynamically import fetchers to avoid circular dependencies
 # and make it easier to load/mock them.
 
-async def dispatch_all(config: AppConfig) -> Tuple[Dict[str, List[ProviderUsage]], Dict[str, str]]:
+async def dispatch_all(config: AppConfig) -> tuple[dict[str, list[ProviderUsage]], dict[str, str]]:
     """
     Fetch usage from all enabled providers in parallel.
     Returns a tuple of (results, errors) dicts.
     """
+    from .anthropic import fetch_anthropic_usage
     from .kimi import fetch_kimi_usage
     from .openai import fetch_openai_usage
-    from .anthropic import fetch_anthropic_usage
     from .openrouter import fetch_openrouter_usage
 
     fetchers = {
@@ -66,14 +66,14 @@ async def dispatch_all(config: AppConfig) -> Tuple[Dict[str, List[ProviderUsage]
         "openrouter": fetch_openrouter_usage,
     }
 
-    results: Dict[str, List[ProviderUsage]] = {}
-    errors: Dict[str, str] = {}
+    results: dict[str, list[ProviderUsage]] = {}
+    errors: dict[str, str] = {}
 
     enabled = config.enabled_providers
     if not enabled:
         return results, errors
 
-    async def fetch_one(provider_name: str) -> Tuple[str, Optional[List[ProviderUsage]], Optional[str]]:
+    async def fetch_one(provider_name: str) -> tuple[str, list[ProviderUsage] | None, str | None]:
         fetch_func = fetchers.get(provider_name)
         if not fetch_func:
             return provider_name, None, f"Unknown provider {provider_name}"
@@ -89,7 +89,7 @@ async def dispatch_all(config: AppConfig) -> Tuple[Dict[str, List[ProviderUsage]
                 timeout=10.0
             )
             return provider_name, res, None
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return provider_name, None, "Request timed out"
         except Exception as e:
             return provider_name, None, str(e)

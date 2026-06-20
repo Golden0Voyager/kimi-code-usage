@@ -1,15 +1,17 @@
-import json
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
-from datetime import datetime, timedelta, timezone
+
 from kimi_code_usage.providers.kimi import (
-    _to_int,
     _get_reset_info,
     _limit_label,
-    _to_usage_row,
     _parse_usage_payload,
+    _to_int,
+    _to_usage_row,
     fetch_kimi_usage,
 )
+
 
 # -- _to_int --
 @pytest.mark.parametrize("val,expected", [
@@ -26,7 +28,7 @@ def test_to_int(val, expected):
 # -- _get_reset_info --
 @pytest.mark.parametrize("key", ["resetTime", "reset_at", "reset_time"])
 def test_get_reset_info_iso_string(key):
-    future = datetime.now(timezone.utc) + timedelta(hours=25, minutes=30)
+    future = datetime.now(UTC) + timedelta(hours=25, minutes=30)
     result = _get_reset_info({key: future.isoformat()})
     assert result is not None
     _, countdown = result
