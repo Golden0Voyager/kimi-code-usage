@@ -2,35 +2,34 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
 
 DEFAULT_CONFIG_PATH = Path.home() / ".kimi-usage" / "config.json"
 
 @dataclass
 class ProviderConfig:
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
+    api_key: str | None = None
+    base_url: str | None = None
     enabled: bool = True
-    management_key: Optional[str] = None
+    management_key: str | None = None
 
 @dataclass
 class AppConfig:
-    providers: Dict[str, ProviderConfig] = field(default_factory=dict)
+    providers: dict[str, ProviderConfig] = field(default_factory=dict)
     refresh_interval_minutes: int = 5
     output_mode: str = "rich"
-    provider_order: List[str] = field(default_factory=list)
+    provider_order: list[str] = field(default_factory=list)
     theme: str = "blue-dark"
-    language: Optional[str] = None
-    visible_providers: Optional[List[str]] = None
+    language: str | None = None
+    visible_providers: list[str] | None = None
     or_metric: str = "requests"
     days_window: int = 30
 
     @property
-    def enabled_providers(self) -> List[str]:
+    def enabled_providers(self) -> list[str]:
         return [name for name, p_conf in self.providers.items() if p_conf.api_key and p_conf.enabled]
 
 class ConfigResolver:
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: str | None = None):
         self.config_path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
         self.config = AppConfig()
 
@@ -39,7 +38,7 @@ class ConfigResolver:
         json_data = {}
         if self.config_path.exists():
             try:
-                with open(self.config_path, "r", encoding="utf-8") as f:
+                with open(self.config_path, encoding="utf-8") as f:
                     json_data = json.load(f)
             except Exception:
                 pass  # Ignore invalid JSON, fall back to default/env
@@ -148,7 +147,7 @@ class ConfigResolver:
         # 3. Determine provider ordering
         default_order = ["anthropic", "openai", "openrouter", "kimi"]
         json_providers = list(providers_data.keys())
-        
+
         final_order = []
         for p in json_providers:
             if p in all_providers and p not in final_order:
@@ -156,7 +155,7 @@ class ConfigResolver:
         for p in default_order:
             if p not in final_order:
                 final_order.append(p)
-        
+
         self.config.provider_order = final_order
 
         return self.config
@@ -164,11 +163,11 @@ class ConfigResolver:
 
 def save_theme(
     theme_name: str,
-    language: Optional[str] = None,
-    visible_providers: Optional[List[str]] = None,
-    or_metric: Optional[str] = None,
-    days_window: Optional[int] = None,
-    config_path: Optional[Path] = None
+    language: str | None = None,
+    visible_providers: list[str] | None = None,
+    or_metric: str | None = None,
+    days_window: int | None = None,
+    config_path: Path | None = None
 ) -> None:
     """Persist settings into ``general`` in the JSON config file.
 
@@ -181,7 +180,7 @@ def save_theme(
     data: dict = {}
     if path.exists():
         try:
-            with open(path, "r", encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
         except Exception:
             data = {}

@@ -1,10 +1,12 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
+
 from kimi_code_usage.providers.openrouter import (
-    fetch_openrouter_usage,
     _build_activity,
     _build_daily_activity,
     _model_short_name,
+    fetch_openrouter_usage,
 )
 
 
@@ -51,7 +53,7 @@ async def _run_fetch(monkeypatch, get_handler, api_key="or-key", base_url="https
 async def test_fetch_openrouter_usage_success(monkeypatch):
     # Force language to English for test uniformity
     monkeypatch.setenv("LANG", "en")
-    
+
     def get_handler(url, cm, kwargs):
         if "credits" in url:
             async def mock_credits_json():

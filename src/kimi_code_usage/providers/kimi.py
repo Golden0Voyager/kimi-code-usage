@@ -1,15 +1,19 @@
-import aiohttp
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
-from typing import Any, List, Mapping, Optional, Sequence, Tuple, cast
+from typing import Any, cast
+
+import aiohttp
+
 from . import ProviderUsage
 
-def _to_int(v: Any) -> Optional[int]:
+
+def _to_int(v: Any) -> int | None:
     try:
         return int(v)
     except (TypeError, ValueError):
         return None
 
-def _get_reset_info(data: Mapping[str, Any]) -> Optional[Tuple[str, str]]:
+def _get_reset_info(data: Mapping[str, Any]) -> tuple[str, str] | None:
     reset_at = data.get("resetTime") or data.get("reset_at") or data.get("reset_time")
     if reset_at:
         try:
@@ -61,14 +65,14 @@ def _limit_label(window: Mapping[str, Any], idx: int) -> str:
     return f"Limit #{idx + 1}"
 
 class KimiRow:
-    def __init__(self, label: str, used: int, limit: int, reset_at: Optional[str] = None, countdown: Optional[str] = None):
+    def __init__(self, label: str, used: int, limit: int, reset_at: str | None = None, countdown: str | None = None):
         self.label = label
         self.used = used
         self.limit = limit
         self.reset_at = reset_at
         self.countdown = countdown
 
-def _to_usage_row(data: Mapping[str, Any], default_label: str) -> Optional[KimiRow]:
+def _to_usage_row(data: Mapping[str, Any], default_label: str) -> KimiRow | None:
     limit = _to_int(data.get("limit") or data.get("limit_amount"))
     used = _to_int(data.get("used") or data.get("used_amount"))
     if used is None:
@@ -87,7 +91,7 @@ def _to_usage_row(data: Mapping[str, Any], default_label: str) -> Optional[KimiR
         countdown=countdown,
     )
 
-def _parse_usage_payload(payload: Mapping[str, Any]) -> Tuple[Optional[KimiRow], List[KimiRow]]:
+def _parse_usage_payload(payload: Mapping[str, Any]) -> tuple[KimiRow | None, list[KimiRow]]:
     summary = None
     limits = []
 
@@ -120,7 +124,7 @@ def _parse_usage_payload(payload: Mapping[str, Any]) -> Tuple[Optional[KimiRow],
 
     return summary, limits
 
-async def fetch_kimi_usage(api_key: str, base_url: str, management_key: Optional[str] = None) -> List[ProviderUsage]:
+async def fetch_kimi_usage(api_key: str, base_url: str, management_key: str | None = None) -> list[ProviderUsage]:
     url = base_url.rstrip("/") + "/usages"
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}) as resp:

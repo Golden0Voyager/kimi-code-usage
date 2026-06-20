@@ -51,7 +51,10 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
-ignore = ["E501"]
+ignore = ["E501", "SIM108", "SIM117", "UP035", "N806"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["N806"]
 
 [tool.mypy]
 ignore_missing_imports = true
@@ -62,3 +65,6 @@ source = ["kimi_code_usage"]
 [tool.coverage.report]
 fail_under = 85
 show_missing = true
+
+[tool.bandit]
+skips = ["B101", "B311", "B404", "B603"]

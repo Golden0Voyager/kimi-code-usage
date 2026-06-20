@@ -1,8 +1,10 @@
+
 import aiohttp
-from typing import List, Optional
+
 from . import ProviderUsage
 
-async def fetch_anthropic_usage(api_key: str, base_url: str, management_key: Optional[str] = None) -> List[ProviderUsage]:
+
+async def fetch_anthropic_usage(api_key: str, base_url: str, management_key: str | None = None) -> list[ProviderUsage]:
     if api_key.startswith("sk-ant-"):
         return [
             ProviderUsage(
@@ -20,25 +22,24 @@ async def fetch_anthropic_usage(api_key: str, base_url: str, management_key: Opt
     url = f"{base_url.rstrip('/')}/api/oauth/usage"
     headers = {"Authorization": f"Bearer {api_key}"}
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as resp:
-            if resp.status in (401, 403):
-                return [
-                    ProviderUsage(
-                        provider="anthropic",
-                        label="API Plan (No usage API)",
-                        used=0.0,
-                        limit=None,
-                        remaining=None,
-                        percent=None,
-                        reset_at=None,
-                        unit="text"
-                    )
-                ]
-            if resp.status != 200:
-                text = await resp.text()
-                raise Exception(f"Anthropic API Error {resp.status}: {text}")
-            data = await resp.json()
+    async with aiohttp.ClientSession() as session, session.get(url, headers=headers) as resp:
+        if resp.status in (401, 403):
+            return [
+                ProviderUsage(
+                    provider="anthropic",
+                    label="API Plan (No usage API)",
+                    used=0.0,
+                    limit=None,
+                    remaining=None,
+                    percent=None,
+                    reset_at=None,
+                    unit="text"
+                )
+            ]
+        if resp.status != 200:
+            text = await resp.text()
+            raise Exception(f"Anthropic API Error {resp.status}: {text}")
+        data = await resp.json()
 
     five_hour = data.get("five_hour", {})
     seven_day = data.get("seven_day", {})
