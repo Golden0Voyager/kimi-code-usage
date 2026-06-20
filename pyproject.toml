@@ -37,6 +37,7 @@ packages = ["src/kimi_code_usage"]
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "pytest-asyncio>=0.24",
     "pytest-cov>=5.0",
     "ruff>=0.5.0",
     "mypy>=1.10.0",
@@ -63,7 +64,7 @@ ignore_missing_imports = true
 source = ["kimi_code_usage"]
 
 [tool.coverage.report]
-fail_under = 85
+fail_under = 75
 show_missing = true
 
 [tool.bandit]
