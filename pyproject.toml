@@ -64,7 +64,7 @@ ignore_missing_imports = true
 source = ["kimi_code_usage"]
 
 [tool.coverage.report]
-fail_under = 75
+fail_under = 85
 show_missing = true
 
 [tool.bandit]
