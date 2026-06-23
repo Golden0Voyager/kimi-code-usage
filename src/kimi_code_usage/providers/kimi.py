@@ -2,6 +2,8 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any, cast
 
+import os
+
 import aiohttp
 
 from . import ProviderUsage
@@ -124,16 +126,57 @@ def _parse_usage_payload(payload: Mapping[str, Any]) -> tuple[KimiRow | None, li
 
     return summary, limits
 
+_KIMI_USER_AGENT = "KimiCLI/1.6"
+
+def _kimi_headers(api_key: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {api_key}",
+        "User-Agent": _KIMI_USER_AGENT,
+    }
+
+_KIMI_LANG_IS_ZH = "zh" in os.getenv("LANG", "en").lower()
+
+def _kimi_error_hint(status: int, zh: bool | None = None) -> str:
+    if zh is None:
+        zh = _KIMI_LANG_IS_ZH
+    if zh:
+        hints = {
+            401: (
+                "Kimi Code API 认证失败（401）。\n"
+                "  ▸ 请确认你使用的是 Kimi Code 平台（Coding Plan）的 API Key，格式为 sk-kimi-xxx\n"
+                "  ▸ 请勿使用 Kimi 开放平台（platform.kimi.com）的 sk-xxx 类型密钥\n"
+                "  ▸ 如需获取正确的 Key，请前往 Kimi Code 控制台创建\n"
+                "  ▸ 环境变量：KIMI_API_KEY 或 KIMI_CODING_API_KEY"
+            ),
+            403: "Kimi Code API 拒绝访问（403），请检查 API Key 是否有权限访问用量接口。",
+            429: "Kimi Code API 请求过于频繁（429），请稍后重试。",
+        }
+        return hints.get(status, f"Kimi Code API 返回错误 {status}")
+    hints = {
+        401: (
+            "Kimi Code API authentication failed (401).\n"
+            "  ▸ Make sure you are using a Kimi Code Platform (Coding Plan) API Key (format: sk-kimi-xxx)\n"
+            "  ▸ Do NOT use a Kimi Open Platform (platform.kimi.com / api.moonshot.cn) API Key (format: sk-xxx)\n"
+            "  ▸ Get the correct key from Kimi Code Console\n"
+            "  ▸ Environment variables: KIMI_API_KEY or KIMI_CODING_API_KEY"
+        ),
+        403: "Kimi Code API access denied (403). Check if your API Key has permission to access the usage endpoint.",
+        429: "Kimi Code API rate limited (429). Please retry later.",
+    }
+    return hints.get(status, f"Kimi Code API returned error {status}")
+
 async def fetch_kimi_usage(api_key: str, base_url: str, management_key: str | None = None) -> list[ProviderUsage]:
     url = base_url.rstrip("/") + "/usages"
+    headers = _kimi_headers(api_key)
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}) as resp:
+        async with session.get(url, headers=headers) as resp:
             if resp.status != 200:
                 fallback_url = base_url.rstrip("/") + "/usage"
-                async with session.get(fallback_url, headers={"Authorization": f"Bearer {api_key}"}) as f_resp:
+                async with session.get(fallback_url, headers=headers) as f_resp:
                     if f_resp.status != 200:
                         text = await f_resp.text()
-                        raise Exception(f"API Error {f_resp.status}: {text}")
+                        hint = _kimi_error_hint(f_resp.status)
+                        raise Exception(f"{hint}\n  Original: API Error {f_resp.status}: {text}")
                     payload = await f_resp.json()
             else:
                 payload = await resp.json()

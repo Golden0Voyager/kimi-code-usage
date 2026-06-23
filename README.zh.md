@@ -22,7 +22,15 @@
 
 在"直觉编程"时代，资源的透明度是进入心流状态的前提。**Kimi Code Usage** 是一套精心打磨的工具链 — 三种形态，一个灵魂。
 
-**统一前提：** 在环境变量或 `.env` 文件中设置 `KIMI_API_KEY`（[Kimi Coding Plan](https://api.kimi.com/coding/v1) API Key）。
+> **⚠️ 重要：API Key 类型说明**
+>
+> 本工具查询的是 **Kimi Code 平台（Coding Plan 会员）** 的用量数据。你需要的是 **Kimi Code 控制台** 创建的 API Key（格式 `sk-kimi-xxx`），
+> **不是** Kimi 开放平台（platform.kimi.com）的 API Key（格式 `sk-xxx`）。两种 Key 不互通。
+>
+> 获取方式：登录 Kimi Code 控制台 → 创建 API Key → 设置环境变量 `KIMI_API_KEY`。
+> 详见 [Kimi Code 文档](https://www.kimi.com/code/docs/)。
+
+**统一前提：** 在环境变量或 `.env` 文件中设置 `KIMI_API_KEY`（[Kimi Coding Plan](https://api.kimi.com/coding/v1) API Key，格式 `sk-kimi-xxx`）。
 
 ---
 

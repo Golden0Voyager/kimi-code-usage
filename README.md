@@ -22,7 +22,15 @@
 
 In the era of "Vibecoding," transparency of resources is a prerequisite for flow. **Kimi Code Usage** is a meticulously crafted toolchain — three components, one soul.
 
-**Prerequisite:** A [Kimi Coding Plan](https://api.kimi.com/coding/v1) API Key, set as `KIMI_API_KEY` in your environment or `.env` file.
+> **⚠️ 重要：API Key 类型说明**
+>
+> 本工具查询的是 **Kimi Code 平台（Coding Plan 会员）** 的用量数据。你需要的是 **Kimi Code 控制台** 创建的 API Key（格式 `sk-kimi-xxx`），
+> **不是** Kimi 开放平台（platform.kimi.com）的 API Key（格式 `sk-xxx`）。两种 Key 不互通。
+>
+> 获取方式：登录 Kimi Code 控制台 → 创建 API Key → 设置环境变量 `KIMI_API_KEY`。
+> 详见 [Kimi Code 文档](https://www.kimi.com/code/docs/)。
+
+**Prerequisite:** A [Kimi Coding Plan](https://api.kimi.com/coding/v1) API Key (`sk-kimi-xxx`), set as `KIMI_API_KEY` in your environment or `.env` file.
 
 ---
 
