@@ -5,6 +5,7 @@ import pytest
 
 from kimi_code_usage.providers.kimi import (
     _get_reset_info,
+    _kimi_error_hint,
     _limit_label,
     _parse_usage_payload,
     _to_int,
@@ -24,6 +25,13 @@ from kimi_code_usage.providers.kimi import (
 ])
 def test_to_int(val, expected):
     assert _to_int(val) == expected
+
+def test_kimi_error_hint_404_explains_usage_endpoint_configuration():
+    hint = _kimi_error_hint(404, zh=False)
+    assert "usage endpoint" in hint
+    assert "https://api.kimi.com/coding/v1" in hint
+    assert "api.moonshot.cn" in hint
+    assert "sk-kimi" in hint
 
 # -- _get_reset_info --
 @pytest.mark.parametrize("key", ["resetTime", "reset_at", "reset_time"])
@@ -187,6 +195,38 @@ async def test_fetch_kimi_usage_fallback():
         res = await fetch_kimi_usage("test-key", "https://api.example.com/v1")
         assert len(res) == 1
         assert res[0].used == 200.0
+
+@pytest.mark.asyncio
+async def test_fetch_kimi_usage_does_not_fallback_on_auth_error():
+    calls = []
+
+    def make_cm(status, text_data):
+        cm = AsyncMock()
+        cm.__aenter__ = AsyncMock(return_value=cm)
+        cm.__aexit__ = AsyncMock(return_value=None)
+        cm.status = status
+        cm.text = AsyncMock(return_value=text_data)
+        return cm
+
+    def mock_get(url, *a, **kw):
+        calls.append(url)
+        if len(calls) == 1:
+            return make_cm(401, '{"code":"unauthenticated"}')
+        return make_cm(404, '{"error":{"message":"The requested resource was not found","type":"resource_not_found_error"}}')
+
+    mock_session = AsyncMock()
+    mock_session.get = mock_get
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+
+    with patch('aiohttp.ClientSession', return_value=mock_session):
+        with pytest.raises(Exception) as exc:
+            await fetch_kimi_usage("test-key", "https://api.example.com/v1")
+
+    assert "401" in str(exc.value)
+    assert "unauthenticated" in str(exc.value)
+    assert "resource_not_found_error" not in str(exc.value)
+    assert calls == ["https://api.example.com/v1/usages"]
 
 @pytest.mark.asyncio
 async def test_fetch_kimi_usage_fallback_fails():

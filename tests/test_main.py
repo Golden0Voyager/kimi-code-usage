@@ -330,6 +330,16 @@ def _cfg_one_provider(m):
     return cfg
 
 
+def _panel_plain(panel):
+    parts = []
+    for item in getattr(panel.renderable, "renderables", []):
+        if hasattr(item, "plain"):
+            parts.append(item.plain)
+        else:
+            parts.append(str(item))
+    return "\n".join(parts)
+
+
 @pytest.mark.parametrize("keys,theme,live_update_min,dispatch_call_count,cfg_maker", [
     (["q"], "blue-dark", 1, 1, None),
     (["r", "q"], "blue-dark", 2, 2, None),
@@ -353,6 +363,62 @@ def test_interactive_mode_initializes_from_config(monkeypatch, language):
     cfg = _make_interactive_config(monkeypatch)
     cfg.language = language
     _run_interactive_mode(monkeypatch, ["q"], cfg=cfg, live_update_min=1, dispatch_call_count=1)
+
+
+def test_render_config_guide_includes_supported_provider_setup():
+    from kimi_code_usage.config import AppConfig, ProviderConfig
+    from kimi_code_usage.main import _render_config_guide
+
+    cfg = AppConfig()
+    cfg.providers = {
+        "kimi": ProviderConfig(api_key="sk-kimi-1234567890", base_url="https://api.kimi.com/coding/v1"),
+        "openai": ProviderConfig(api_key="sk-openai-abcdef1234", base_url="https://api.openai.com"),
+        "anthropic": ProviderConfig(api_key=None, base_url="https://api.anthropic.com"),
+        "openrouter": ProviderConfig(api_key="sk-or-v1-abcdef1234", base_url="https://openrouter.ai/api", management_key="or-mgmt-1234"),
+    }
+    cfg.provider_order = ["kimi", "openai", "anthropic", "openrouter"]
+
+    text = _render_config_guide(cfg, lang_zh=False, config_path="/tmp/kimi-usage/config.json")
+    raw = text.plain
+
+    assert "/tmp/kimi-usage/config.json" in raw
+    assert "KIMI_API_KEY" in raw
+    assert "OPENAI_API_KEY" in raw
+    assert "ANTHROPIC_API_KEY" in raw
+    assert "OPENROUTER_API_KEY" in raw
+    assert "OPENROUTER_ADMIN_KEY" in raw
+    assert "OPENROUTER_MANAGEMENT_KEY" in raw
+    assert "https://api.kimi.com/coding/v1" in raw
+    assert "https://openrouter.ai/api" in raw
+    assert "https://api.moonshot.cn/v1" in raw
+    assert "sk-kimi" in raw
+    assert "sk-kimi-1234567890" not in raw
+    assert "or-mgmt-1234" not in raw
+    assert "missing" in raw
+
+
+@pytest.mark.asyncio
+async def test_interactive_mode_help_and_config_keys(monkeypatch):
+    _mock_terminal(monkeypatch)
+    mock_select, mock_read = _make_select_and_read(["h", "c", "q"])
+    import kimi_code_usage.main as main_mod
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    cfg = _make_interactive_config(monkeypatch)
+    mock_res = {"kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=5, limit=100, remaining=95, percent=5, reset_at=None, unit="%")]}
+
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+        with patch("kimi_code_usage.main.Live") as mock_live_cls:
+            mock_live = mock_live_cls.return_value.__enter__.return_value
+            await _interactive_mode(cfg, "blue-dark")
+
+    rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
+    assert "Interactive Help" in rendered
+    assert "Configuration Guide" in rendered
+    assert "OPENAI_API_KEY" in rendered
+    assert "ANTHROPIC_API_KEY" in rendered
+    assert "OPENROUTER_API_KEY" in rendered
 
 
 @pytest.mark.asyncio

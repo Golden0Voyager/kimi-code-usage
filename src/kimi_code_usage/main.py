@@ -11,7 +11,7 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
 
-from kimi_code_usage.config import AppConfig, ConfigResolver, save_theme
+from kimi_code_usage.config import DEFAULT_CONFIG_PATH, AppConfig, ConfigResolver, save_theme
 from kimi_code_usage.providers import DailyUsage, ProviderUsage, dispatch_all
 
 # --- i18n ---
@@ -42,6 +42,41 @@ L_ZH = {
 
 L = L_ZH if IS_ZH else L_EN
 
+_PROVIDER_SETUP_HELP = {
+    "kimi": {
+        "name": "Kimi Code",
+        "key_envs": ("KIMI_API_KEY", "KIMI_CODING_API_KEY"),
+        "base_env": "KIMI_BASE_URL",
+        "default_url": "https://api.kimi.com/coding/v1",
+        "note_en": "Use a Kimi Code / Coding Plan key (sk-kimi-...). Do not use https://api.moonshot.cn/v1.",
+        "note_zh": "使用 Kimi Code / Coding Plan 密钥（sk-kimi-...），不要使用 https://api.moonshot.cn/v1。",
+    },
+    "openai": {
+        "name": "OpenAI",
+        "key_envs": ("OPENAI_API_KEY",),
+        "base_env": "OPENAI_BASE_URL",
+        "default_url": "https://api.openai.com",
+        "note_en": "Use an OpenAI API key with organization usage access.",
+        "note_zh": "使用具备用量接口权限的 OpenAI API Key。",
+    },
+    "anthropic": {
+        "name": "Anthropic",
+        "key_envs": ("ANTHROPIC_API_KEY",),
+        "base_env": "ANTHROPIC_BASE_URL",
+        "default_url": "https://api.anthropic.com",
+        "note_en": "Use an Anthropic key that can access the usage endpoint.",
+        "note_zh": "使用具备用量接口权限的 Anthropic Key。",
+    },
+    "openrouter": {
+        "name": "OpenRouter",
+        "key_envs": ("OPENROUTER_API_KEY", "OPENROUTER_ADMIN_KEY"),
+        "base_env": "OPENROUTER_BASE_URL",
+        "default_url": "https://openrouter.ai/api",
+        "note_en": "Set OPENROUTER_MANAGEMENT_KEY or OPENROUTER_ADMIN_KEY for activity details.",
+        "note_zh": "如需活动明细，设置 OPENROUTER_MANAGEMENT_KEY 或 OPENROUTER_ADMIN_KEY。",
+    },
+}
+
 def _get_visual_width(s: str) -> int:
     import unicodedata
     width = 0
@@ -51,6 +86,14 @@ def _get_visual_width(s: str) -> int:
         else:
             width += 1
     return width
+
+
+def _mask_secret(secret: str | None) -> str:
+    if not secret:
+        return "missing"
+    if len(secret) <= 8:
+        return secret[:2] + "..."
+    return f"{secret[:7]}...{secret[-4:]}"
 
 def _get_localized_label(label: str, lang_zh: bool = IS_ZH) -> str:
     _L = L_ZH if lang_zh else L_EN
@@ -154,6 +197,117 @@ def _get_localized_text_value(text_val: str, lang_zh: bool) -> str:
             return "No"
 
     return text_val
+
+
+def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_window: int = 30) -> Text:
+    text = Text()
+    title = "交互帮助" if lang_zh else "Interactive Help"
+    text.append(f"{title}\n\n", style="bold")
+    if lang_zh:
+        rows = [
+            ("q / Ctrl-C", "退出"),
+            ("r", "刷新用量"),
+            ("h / ?", "显示或隐藏帮助"),
+            ("c", "显示或隐藏配置引导"),
+            ("1-4", "切换服务商面板"),
+            ("l", "切换中英文"),
+            ("←/→ 或 [ / ]", "切换主题"),
+            ("m", f"切换 OpenRouter 指标（当前：{_metric_label(or_metric, True)}）"),
+            ("d", f"切换 OpenRouter 图表窗口（当前：{days_window}d）"),
+            ("Enter", "保存主题、语言、可见面板和 OpenRouter 显示偏好"),
+        ]
+        footer = "再次按 h/? 或 c 可回到用量视图。"
+    else:
+        rows = [
+            ("q / Ctrl-C", "quit"),
+            ("r", "refresh usage"),
+            ("h / ?", "show or hide help"),
+            ("c", "show or hide configuration guide"),
+            ("1-4", "toggle provider panels"),
+            ("l", "toggle language"),
+            ("←/→ or [ / ]", "cycle theme"),
+            ("m", f"cycle OpenRouter metric (current: {_metric_label(or_metric, False)})"),
+            ("d", f"cycle OpenRouter chart window (current: {days_window}d)"),
+            ("Enter", "save theme, language, visible panels, and OpenRouter display preferences"),
+        ]
+        footer = "Press h/? or c again to return to the usage view."
+
+    for key, desc in rows:
+        text.append(f"  {key:<16}", style="bold")
+        text.append(f"{desc}\n", style="grey62")
+    text.append(f"\n{footer}", style="grey62")
+    return text
+
+
+def _render_config_guide(
+    config: AppConfig,
+    lang_zh: bool = IS_ZH,
+    config_path: str | None = None,
+) -> Text:
+    text = Text()
+    title = "配置引导" if lang_zh else "Configuration Guide"
+    path = config_path or str(DEFAULT_CONFIG_PATH)
+    text.append(f"{title}\n\n", style="bold")
+    if lang_zh:
+        text.append(f"配置文件: {path}\n", style="grey62")
+        text.append("读取优先级: config.json > 环境变量 / 当前目录 .env > 默认 base URL\n\n", style="grey62")
+    else:
+        text.append(f"Config file: {path}\n", style="grey62")
+        text.append("Resolution order: config.json > environment variables / current .env > default base URL\n\n", style="grey62")
+
+    provider_order = list(config.provider_order)
+    for provider_name in _PROVIDER_SETUP_HELP:
+        if provider_name not in provider_order:
+            provider_order.append(provider_name)
+
+    for provider_name in provider_order:
+        help_info = _PROVIDER_SETUP_HELP.get(provider_name)
+        if not help_info:
+            continue
+        p_conf = config.providers.get(provider_name)
+        api_key = p_conf.api_key if p_conf else None
+        base_url = p_conf.base_url if p_conf and p_conf.base_url else help_info["default_url"]
+        enabled = p_conf.enabled if p_conf else True
+        status = "enabled" if api_key and enabled else ("disabled" if not enabled else "missing")
+        if lang_zh:
+            status_label = {"enabled": "已启用", "disabled": "已禁用", "missing": "缺少密钥"}[status]
+            text.append(f"{help_info['name']}\n", style="bold")
+            text.append(f"  状态: {status_label}\n", style="grey62")
+            text.append(f"  Key: {_mask_secret(api_key)}  ({' / '.join(help_info['key_envs'])})\n", style="grey62")
+            text.append(f"  Base URL: {base_url}  ({help_info['base_env']})\n", style="grey62")
+            text.append(f"  提示: {help_info['note_zh']}\n", style="grey62")
+        else:
+            text.append(f"{help_info['name']}\n", style="bold")
+            text.append(f"  status: {status}\n", style="grey62")
+            text.append(f"  key: {_mask_secret(api_key)}  ({' / '.join(help_info['key_envs'])})\n", style="grey62")
+            text.append(f"  baseUrl: {base_url}  ({help_info['base_env']})\n", style="grey62")
+            text.append(f"  note: {help_info['note_en']}\n", style="grey62")
+
+        if provider_name == "openrouter":
+            management_key = p_conf.management_key if p_conf else None
+            if lang_zh:
+                text.append(
+                    f"  管理 Key: {_mask_secret(management_key)}  (OPENROUTER_MANAGEMENT_KEY / OPENROUTER_ADMIN_KEY)\n",
+                    style="grey62",
+                )
+            else:
+                text.append(
+                    f"  management key: {_mask_secret(management_key)}  (OPENROUTER_MANAGEMENT_KEY / OPENROUTER_ADMIN_KEY)\n",
+                    style="grey62",
+                )
+        text.append("\n")
+
+    if lang_zh:
+        text.append(
+            "建议把长期配置写入 ~/.kimi-usage/config.json；uvx 每次运行都会读取这个文件。\n",
+            style="grey62",
+        )
+    else:
+        text.append(
+            "For persistent uvx usage, put long-lived settings in ~/.kimi-usage/config.json.\n",
+            style="grey62",
+        )
+    return text
 
 # (typing already imported at top)
 
@@ -824,7 +978,7 @@ def _format_aggregated_results(
     return result
 
 
-async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
+async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path: str | None = None) -> None:
     """Live Rich TUI with keyboard theme cycling and provider panel toggling.
 
     Keys:
@@ -860,6 +1014,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
 
     or_metric: str = _parse_or_metric(config.or_metric)
     days_window: int = _parse_days_window(config.days_window)
+    current_view = "usage"
 
     saved_notice: list = [None]   # holds the saved theme name briefly, then None
 
@@ -871,7 +1026,12 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
     def _build_panel() -> Panel:
         visible_order = [p for p in config.provider_order if p in visible_providers]
         _L = L_ZH if lang_zh else L_EN
-        body = _format_aggregated_results(results, errors, visible_order, themes[idx], lang_zh, enabled_providers=set(config.enabled_providers), or_metric=or_metric, days_window=days_window)
+        if current_view == "help":
+            body = _render_interactive_help(lang_zh, or_metric=or_metric, days_window=days_window)
+        elif current_view == "config":
+            body = _render_config_guide(config, lang_zh=lang_zh, config_path=config_path)
+        else:
+            body = _format_aggregated_results(results, errors, visible_order, themes[idx], lang_zh, enabled_providers=set(config.enabled_providers), or_metric=or_metric, days_window=days_window)
 
         top_bar = Text()
         # Provider toggles
@@ -894,6 +1054,8 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
         bindings = [
             ("[q]", "退出" if lang_zh else "quit"),
             ("[r]", "刷新" if lang_zh else "refresh"),
+            ("[h/?]", "帮助" if lang_zh else "help"),
+            ("[c]", "配置" if lang_zh else "config"),
             ("[←/→]", "主题" if lang_zh else "theme"),
             ("[1-4]", "面板" if lang_zh else "panels"),
             ("[l]", "英" if lang_zh else "ZH"),
@@ -961,6 +1123,14 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str) -> None:
 
                     if saved_notice[0]:     # clear notice on any new keypress
                         saved_notice[0] = None
+                    if ch in ('h', 'H', '?'):
+                        current_view = "usage" if current_view == "help" else "help"
+                        live.update(_build_panel())
+                        continue
+                    if ch in ('c', 'C'):
+                        current_view = "usage" if current_view == "config" else "config"
+                        live.update(_build_panel())
+                        continue
                     if ch in ('\r', '\n'):  # Enter → save settings to config file
                         save_theme(
                             themes[idx],
@@ -1011,7 +1181,7 @@ async def main():
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--plain", action="store_true")
     parser.add_argument("-i", "--interactive", action="store_true",
-                        help="Interactive mode: ←/→ or [/] to cycle themes, r refresh, q quit")
+                        help="Interactive mode: h help, c config, ←/→ or [/] themes, r refresh, q quit")
     parser.add_argument("--provider", help="Comma-separated providers to query (kimi,openai,anthropic,openrouter)")
     parser.add_argument("--config", help="Custom configuration file path")
     parser.add_argument("--theme", help="Specify color theme: blue-dark, blue-light, sky-dark, salmon-dark, turquoise-dark, pink-light, violet-dark, amber-dark, mint-dark, monochrome, blind-deuteranopia, blind-tritanopia")
@@ -1034,7 +1204,7 @@ async def main():
 
     # Interactive mode: hand off to TUI loop (handles its own dispatch)
     if args.interactive:
-        await _interactive_mode(config, theme_name)
+        await _interactive_mode(config, theme_name, config_path=str(resolver.config_path))
         return
 
     results, errors = await dispatch_all(config)

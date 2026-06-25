@@ -1,8 +1,7 @@
+import os
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any, cast
-
-import os
 
 import aiohttp
 
@@ -148,6 +147,12 @@ def _kimi_error_hint(status: int, zh: bool | None = None) -> str:
                 "  ▸ 如需获取正确的 Key，请前往 Kimi Code 控制台创建\n"
                 "  ▸ 环境变量：KIMI_API_KEY 或 KIMI_CODING_API_KEY"
             ),
+            404: (
+                "未找到 Kimi Code API 用量接口（404）。\n"
+                "  ▸ 请确认 KIMI_BASE_URL/baseUrl 是 https://api.kimi.com/coding/v1\n"
+                "  ▸ 请勿使用 Kimi 开放平台地址（https://api.moonshot.cn/v1 或 platform.kimi.com）\n"
+                "  ▸ 请确认 API Key 来自 Kimi Code 平台（Coding Plan），格式为 sk-kimi-xxx"
+            ),
             403: "Kimi Code API 拒绝访问（403），请检查 API Key 是否有权限访问用量接口。",
             429: "Kimi Code API 请求过于频繁（429），请稍后重试。",
         }
@@ -160,6 +165,12 @@ def _kimi_error_hint(status: int, zh: bool | None = None) -> str:
             "  ▸ Get the correct key from Kimi Code Console\n"
             "  ▸ Environment variables: KIMI_API_KEY or KIMI_CODING_API_KEY"
         ),
+        404: (
+            "Kimi Code API usage endpoint was not found (404).\n"
+            "  ▸ Make sure KIMI_BASE_URL/baseUrl is https://api.kimi.com/coding/v1\n"
+            "  ▸ Do NOT use the Kimi Open Platform base URL (https://api.moonshot.cn/v1 or platform.kimi.com)\n"
+            "  ▸ Make sure the API Key is from Kimi Code Platform (Coding Plan), format: sk-kimi-xxx"
+        ),
         403: "Kimi Code API access denied (403). Check if your API Key has permission to access the usage endpoint.",
         429: "Kimi Code API rate limited (429). Please retry later.",
     }
@@ -170,7 +181,9 @@ async def fetch_kimi_usage(api_key: str, base_url: str, management_key: str | No
     headers = _kimi_headers(api_key)
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=headers) as resp:
-            if resp.status != 200:
+            if resp.status == 200:
+                payload = await resp.json()
+            elif resp.status == 404:
                 fallback_url = base_url.rstrip("/") + "/usage"
                 async with session.get(fallback_url, headers=headers) as f_resp:
                     if f_resp.status != 200:
@@ -179,7 +192,9 @@ async def fetch_kimi_usage(api_key: str, base_url: str, management_key: str | No
                         raise Exception(f"{hint}\n  Original: API Error {f_resp.status}: {text}")
                     payload = await f_resp.json()
             else:
-                payload = await resp.json()
+                text = await resp.text()
+                hint = _kimi_error_hint(resp.status)
+                raise Exception(f"{hint}\n  Original: API Error {resp.status}: {text}")
 
     summary, limits = _parse_usage_payload(payload)
     rows = ([summary] if summary else []) + limits
