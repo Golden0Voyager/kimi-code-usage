@@ -44,3 +44,10 @@ vscode-extension/coverage/
 .vscode-test/
 **/*.js.map
 tokscale-export-*.json
+
+# Toolchain caches
+.ruff_cache/
+.mypy_cache/
+
+# Coverage
+htmlcov/
