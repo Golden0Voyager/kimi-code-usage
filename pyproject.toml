@@ -59,6 +59,7 @@ ignore = ["E501", "SIM108", "SIM117", "UP035", "N806"]
 
 [tool.mypy]
 ignore_missing_imports = true
+files = ["src/kimi_code_usage/"]
 
 [tool.coverage.run]
 source = ["kimi_code_usage"]
