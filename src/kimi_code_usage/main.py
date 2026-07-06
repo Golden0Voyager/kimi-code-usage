@@ -6,6 +6,8 @@ import select as _select_module
 import sys
 
 from dotenv import load_dotenv
+
+from kimi_code_usage.server import run_server
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
@@ -1185,10 +1187,17 @@ async def main():
     parser.add_argument("--provider", help="Comma-separated providers to query (kimi,openai,anthropic,openrouter)")
     parser.add_argument("--config", help="Custom configuration file path")
     parser.add_argument("--theme", help="Specify color theme: blue-dark, blue-light, sky-dark, salmon-dark, turquoise-dark, pink-light, violet-dark, amber-dark, mint-dark, monochrome, blind-deuteranopia, blind-tritanopia")
+    parser.add_argument("--serve", action="store_true", help="Start web server instead of CLI output")
+    parser.add_argument("--port", type=int, default=8765, help="Web server port (default: 8765)")
     args = parser.parse_args()
 
     resolver = ConfigResolver(config_path=args.config)
     config = resolver.resolve()
+
+    # Serve mode: start web server
+    if args.serve:
+        await run_server(port=args.port, lang_zh=IS_ZH)
+        return
 
     # Determine theme
     theme_name = args.theme if args.theme else config.theme
