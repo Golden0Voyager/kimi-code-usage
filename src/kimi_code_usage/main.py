@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from kimi_code_usage.config import DEFAULT_CONFIG_PATH, AppConfig, ConfigResolver, save_theme
-from kimi_code_usage.providers import DailyUsage, ProviderUsage, dispatch_all
+from kimi_code_usage.providers import DailyUsage, ModelUsage, ProviderUsage, dispatch_all
 from kimi_code_usage.server import run_server
 
 # --- i18n ---
@@ -827,6 +827,53 @@ def truncate(s: str, max_len: int) -> str:
 
 
 
+def _window_top_models(daily_activity, days_window: int, metric: str) -> list[ModelUsage]:
+    """Rank models within the current [d] window, so Top Models tracks the Daily chart.
+
+    Mirrors the daily chart's window (a contiguous range of ``days_window`` days
+    ending at the latest activity date), aggregates each model's usage across those
+    days, and returns them ranked by ``metric`` descending. Returns an empty list
+    when there is no dated activity to window over.
+    """
+    if not daily_activity:
+        return []
+    from datetime import datetime, timedelta
+
+    metric = _parse_or_metric(metric)
+    days_window = _parse_days_window(days_window)
+    sorted_days = sorted(daily_activity, key=lambda d: d.date)
+    latest_date = datetime.strptime(sorted_days[-1].date[:10], "%Y-%m-%d")
+    start_date = latest_date - timedelta(days=days_window - 1)
+
+    agg: dict[str, ModelUsage] = {}
+    for day in sorted_days:
+        key = day.date[:10] if len(day.date) >= 10 else day.date
+        try:
+            day_date = datetime.strptime(key, "%Y-%m-%d")
+        except ValueError:
+            continue
+        if day_date < start_date or day_date > latest_date:
+            continue
+        for m in day.models:
+            existing = agg.get(m.model)
+            if existing is None:
+                agg[m.model] = ModelUsage(
+                    model=m.model,
+                    spend=m.spend,
+                    requests=m.requests,
+                    prompt_tokens=m.prompt_tokens,
+                    completion_tokens=m.completion_tokens,
+                    reasoning_tokens=m.reasoning_tokens,
+                )
+            else:
+                existing.spend += m.spend
+                existing.requests += m.requests
+                existing.prompt_tokens += m.prompt_tokens
+                existing.completion_tokens += m.completion_tokens
+                existing.reasoning_tokens += m.reasoning_tokens
+    return sorted(agg.values(), key=lambda m: (-_metric_value_model(m, metric), m.model))
+
+
 def _render_top_models(top_models, lang_zh: bool, theme: dict, metric: str = OR_METRIC_REQUESTS, chart_width: int = 20, color_map: dict[str, str] | None = None) -> Text:
     if not top_models:
         return Text()
@@ -904,6 +951,9 @@ def _format_aggregated_results(
         body_text = Text()
         # Shared model→color map so the daily chart and Top Models agree on colors.
         model_color_map = _build_openrouter_color_map(p_items, or_metric, theme)
+        # Top Models tracks the [d] window: recompute the ranking from the dated
+        # daily activity so switching the window updates it (consistent with the chart).
+        _daily_row = next((r for r in p_items if r.daily_activity), None)
         for i, row in enumerate(p_items):
             if i > 0:
                 body_text.append("\n")
@@ -923,7 +973,8 @@ def _format_aggregated_results(
                 if row.top_models:
                     if i > 0 or row.activity_totals or row.daily_activity:
                         body_text.append("\n")
-                    body_text.append(_render_top_models(row.top_models, lang_zh, theme, metric=or_metric, chart_width=20, color_map=model_color_map))
+                    _windowed = _window_top_models(_daily_row.daily_activity, days_window, or_metric) if _daily_row else []
+                    body_text.append(_render_top_models(_windowed or row.top_models, lang_zh, theme, metric=or_metric, chart_width=20, color_map=model_color_map))
                 continue
 
             loc_label = _get_localized_label(row.label, lang_zh)
