@@ -1077,6 +1077,35 @@ def _format_aggregated_results(
     return result
 
 
+def _fit_scroll_body(body: Text, budget: int, scroll_offset: int, lang_zh: bool) -> tuple[Text, int]:
+    """Clamp a body ``Text`` to ``budget`` lines with an in-panel scroll offset.
+
+    Keeps the interactive panel within the terminal height so the control hint
+    bar is never cropped and Rich never has to scroll the screen (which would
+    duplicate the header). When the body overflows, returns the visible slice
+    plus a scroll-indicator line; otherwise returns the body unchanged. The
+    second return value is the clamped offset the caller should store back.
+    """
+    if budget < 1:
+        budget = 1
+    lines = body.split("\n")
+    total = len(lines)
+    if total <= budget:
+        return body, 0
+    view_rows = max(1, budget - 1)  # reserve one line for the scroll indicator
+    max_off = max(0, total - view_rows)
+    off = max(0, min(scroll_offset, max_off))
+    visible = list(lines[off:off + view_rows])
+    up = "▲" if off > 0 else "·"
+    down = "▼" if off + view_rows < total else "·"
+    label = "滚动" if lang_zh else "scroll"
+    indicator = Text(
+        f"  {up} {off + 1}–{min(off + view_rows, total)}/{total} {down}  [↑/↓ PgUp/PgDn {label}]",
+        style="dim",
+    )
+    return Text("\n").join([*visible, indicator]), off
+
+
 async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path: str | None = None) -> None:
     """Live Rich TUI with keyboard theme cycling and provider panel toggling.
 
@@ -1116,6 +1145,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
     current_view = "usage"
 
     saved_notice: list = [None]   # holds the saved theme name briefly, then None
+    scroll: list = [0]            # in-panel vertical scroll offset (lines from top)
 
     _SHORT = {
         "anthropic": "Anthropic", "openai": "Openai",
@@ -1157,6 +1187,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
             ("[c]", "配置" if lang_zh else "config"),
             ("[←/→]", "主题" if lang_zh else "theme"),
             ("[1-4]", "面板" if lang_zh else "panels"),
+            ("[↑↓]", "滚动" if lang_zh else "scroll"),
             ("[l]", "英" if lang_zh else "ZH"),
             ("[m]", _metric_label(or_metric, lang_zh)),
             ("[d]", f"{days_window}d"),
@@ -1170,6 +1201,19 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
         if saved_notice[0]:
             hint.append(f"  ✓ {'已保存' if lang_zh else 'Saved'}: {saved_notice[0]}", style="bold green")
         hint.justify = "center"
+
+        # Keep top_bar and hint to a single line each so the fit math below is exact.
+        top_bar.no_wrap = True
+        top_bar.overflow = "ellipsis"
+        hint.no_wrap = True
+        hint.overflow = "ellipsis"
+
+        # Fit the body to the terminal so the hint bar is never cropped and Rich
+        # never scrolls the screen (which duplicates the header). Overhead:
+        # border(2) + padding(2) + top_bar(1) + gap(1) + hint(1) = 7 lines.
+        body_budget = max(3, console.size.height - 7)
+        if isinstance(body, Text):
+            body, scroll[0] = _fit_scroll_body(body, body_budget, scroll[0], lang_zh)
 
         panel_content = Group(
             top_bar,
@@ -1201,7 +1245,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
         tty.setcbreak(fd)
         results, errors = await dispatch_all(config)
         console = Console()
-        with Live(_build_panel(), console=console, auto_refresh=False, vertical_overflow="visible") as live:
+        with Live(_build_panel(), console=console, auto_refresh=False, vertical_overflow="crop") as live:
             running = True
             while running:
                 rlist, _, _ = _select_module.select([sys.stdin], [], [], 0.15)
@@ -1218,16 +1262,24 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                                 r3, _, _ = _select_module.select([sys.stdin], [], [], 0.05)
                                 if r3:
                                     ch3 = _read_char()
-                                    ch = f'\x1b[{ch3}'
+                                    if ch3.isdigit():
+                                        # CSI sequences like PgUp (\x1b[5~) / PgDn (\x1b[6~)
+                                        r4, _, _ = _select_module.select([sys.stdin], [], [], 0.05)
+                                        tilde = _read_char() if r4 else ""
+                                        ch = f'\x1b[{ch3}{tilde}'
+                                    else:
+                                        ch = f'\x1b[{ch3}'
 
                     if saved_notice[0]:     # clear notice on any new keypress
                         saved_notice[0] = None
                     if ch in ('h', 'H', '?'):
                         current_view = "usage" if current_view == "help" else "help"
+                        scroll[0] = 0
                         live.update(_build_panel(), refresh=True)
                         continue
                     if ch in ('c', 'C'):
                         current_view = "usage" if current_view == "config" else "config"
+                        scroll[0] = 0
                         live.update(_build_panel(), refresh=True)
                         continue
                     if ch in ('\r', '\n'):  # Enter → save settings to config file
@@ -1249,11 +1301,25 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                                     continue
                             break
                         continue
+                    if ch == '\x1b[A':          # ↑ → scroll up
+                        scroll[0] = max(0, scroll[0] - 3)
+                        live.update(_build_panel(), refresh=True)
+                        continue
+                    if ch == '\x1b[B':          # ↓ → scroll down
+                        scroll[0] += 3
+                        live.update(_build_panel(), refresh=True)
+                        continue
+                    if ch in ('\x1b[5~', '\x1b[6~'):  # PgUp / PgDn → page scroll
+                        page = max(1, console.size.height - 8)
+                        scroll[0] = max(0, scroll[0] + (page if ch == '\x1b[6~' else -page))
+                        live.update(_build_panel(), refresh=True)
+                        continue
                     idx, quit_flag, refresh_flag, toggle_num, lang_toggle, metric_toggle, days_toggle = _handle_key(ch, idx, len(themes))
                     if quit_flag:
                         running = False
                     elif refresh_flag:
                         results, errors = await dispatch_all(config)
+                        scroll[0] = 0
                     elif toggle_num is not None:
                         providers = list(config.provider_order)
                         if toggle_num < len(providers):
