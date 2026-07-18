@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import socket
-from datetime import datetime
 
 from aiohttp import web
 
