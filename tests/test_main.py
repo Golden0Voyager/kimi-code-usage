@@ -942,8 +942,8 @@ def test_format_aggregated_results_with_openrouter_activity():
                 reset_at=None,
                 unit="text",
                 daily_activity=[
-                    DailyUsage(date="2026-06-10", models=[ModelUsage(model="m1", requests=5)], total=1.5),
-                    DailyUsage(date="2026-06-11", models=[ModelUsage(model="m2", requests=10)], total=3.0),
+                    DailyUsage(date="2026-06-10", models=[ModelUsage(model="anthropic/claude-opus-4", requests=10, spend=3.5)], total=3.5),
+                    DailyUsage(date="2026-06-11", models=[ModelUsage(model="openai/gpt-4.1", requests=5, spend=0.8)], total=0.8),
                 ],
             ),
             ProviderUsage(
@@ -1055,3 +1055,34 @@ def test_daily_and_top_models_share_colors():
     top_text = _render_top_models(top, lang_zh=False, theme=theme, metric="tokens", color_map=color_map)
     top_styles = {str(s.style) for s in top_text.spans}
     assert hy3_color in top_styles
+
+
+def test_window_top_models_respects_window_and_ranks_by_metric():
+    from kimi_code_usage.main import _window_top_models
+
+    daily = [
+        DailyUsage(date="2026-07-08", models=[ModelUsage(model="old-only", requests=1000)], total=0.0),
+        DailyUsage(date="2026-07-16", models=[ModelUsage(model="recent-a", requests=50)], total=0.0),
+        DailyUsage(date="2026-07-17", models=[ModelUsage(model="recent-b", requests=80)], total=0.0),
+    ]
+    # 7-day window ends at the latest date (07-17) → covers 07-11..07-17, excludes 07-08
+    windowed = _window_top_models(daily, days_window=7, metric="requests")
+    assert [m.model for m in windowed] == ["recent-b", "recent-a"]  # ranked by requests desc
+    assert all(m.model != "old-only" for m in windowed)
+
+    # 30-day window includes all three, still ranked by the metric
+    wide = _window_top_models(daily, days_window=30, metric="requests")
+    assert [m.model for m in wide] == ["old-only", "recent-b", "recent-a"]
+
+    # Same model on multiple days within the window is aggregated
+    daily2 = [
+        DailyUsage(date="2026-07-16", models=[ModelUsage(model="x", requests=30, prompt_tokens=1000)], total=0.0),
+        DailyUsage(date="2026-07-17", models=[ModelUsage(model="x", requests=20, prompt_tokens=2000)], total=0.0),
+    ]
+    agg = _window_top_models(daily2, days_window=7, metric="requests")
+    assert len(agg) == 1
+    assert agg[0].requests == 50
+    assert agg[0].prompt_tokens == 3000
+
+    # No dated activity → empty list
+    assert _window_top_models([], days_window=7, metric="requests") == []
