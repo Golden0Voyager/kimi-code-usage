@@ -971,3 +971,87 @@ def test_format_aggregated_results_with_openrouter_activity():
     assert "Top Models" in raw
     assert "claude-opus-4" in raw
     assert "10" in raw
+
+
+def test_build_model_color_map_stable_and_ordered():
+    from kimi_code_usage.main import _build_model_color_map, _model_colors
+
+    theme = THEME_MAP["blue-dark"]
+    colors = _model_colors(theme)
+    names = ["hy3", "nemotron-3-ultra", "laguna-m.1"]
+    cmap = _build_model_color_map(names, theme)
+    # Canonical order → color assigned by position
+    assert cmap["hy3"] == colors[0]
+    assert cmap["nemotron-3-ultra"] == colors[1]
+    assert cmap["laguna-m.1"] == colors[2]
+    # Deterministic for the same input
+    assert _build_model_color_map(names, theme) == cmap
+    # Colors cycle when there are more models than palette entries
+    many = [f"m{i}" for i in range(len(colors) + 2)]
+    cmap_many = _build_model_color_map(many, theme)
+    assert cmap_many[f"m{len(colors)}"] == colors[0]
+    assert cmap_many[f"m{len(colors) + 1}"] == colors[1]
+
+
+def test_build_openrouter_color_map():
+    from kimi_code_usage.main import _build_openrouter_color_map, _model_colors
+
+    theme = THEME_MAP["blue-dark"]
+    colors = _model_colors(theme)
+    # Prefer the top_models row; rank by the displayed metric (tokens), not the row's spend order
+    top_row = ProviderUsage(
+        provider="openrouter", label="Top Models", used=0.0, limit=None, remaining=None,
+        percent=None, reset_at=None, unit="text",
+        top_models=[
+            ModelUsage(model="laguna", spend=5.0, prompt_tokens=1_000_000),
+            ModelUsage(model="hy3", spend=1.0, prompt_tokens=9_000_000),
+        ],
+    )
+    cmap = _build_openrouter_color_map([top_row], metric="tokens", theme=theme)
+    assert cmap["hy3"] == colors[0]      # 9M tokens → ranked first
+    assert cmap["laguna"] == colors[1]   # 1M tokens → second
+
+    # No model breakdown → None (e.g. non-OpenRouter providers)
+    plain_row = ProviderUsage(provider="kimi", label="x", used=0.0, limit=None, remaining=None,
+                              percent=None, reset_at=None, unit="text")
+    assert _build_openrouter_color_map([plain_row], metric="tokens", theme=theme) is None
+
+    # Falls back to daily_activity when there is no top_models row
+    daily_row = ProviderUsage(
+        provider="openrouter", label="Daily", used=0.0, limit=None, remaining=None,
+        percent=None, reset_at=None, unit="text",
+        daily_activity=[DailyUsage(date="2026-07-10",
+                                   models=[ModelUsage(model="z", prompt_tokens=5_000_000)], total=0.0)],
+    )
+    assert _build_openrouter_color_map([daily_row], metric="tokens", theme=theme) == {"z": colors[0]}
+
+
+def test_daily_and_top_models_share_colors():
+    # Regression: the same model must get the same color in the daily legend and in Top Models,
+    # even though the two charts sort models differently (tokens vs spend).
+    from kimi_code_usage.main import _build_model_color_map
+
+    theme = THEME_MAP["blue-dark"]
+    color_map = _build_model_color_map(["hy3", "nemotron-3-ultra", "laguna-m.1"], theme)
+    hy3_color = color_map["hy3"]
+    assert hy3_color != color_map["laguna-m.1"]
+
+    daily = [
+        DailyUsage(date="2026-07-10",
+                   models=[ModelUsage(model="hy3", prompt_tokens=9_000_000),
+                           ModelUsage(model="laguna-m.1", prompt_tokens=1_000_000)],
+                   total=0.0),
+    ]
+    daily_text = _render_daily_chart(daily, lang_zh=False, theme=theme, metric="tokens",
+                                     days_window=7, color_map=color_map)
+    daily_styles = {str(s.style) for s in daily_text.spans}
+    assert hy3_color in daily_styles
+
+    # Top Models receives the SAME map but a spend-descending list (laguna first).
+    top = [
+        ModelUsage(model="laguna-m.1", spend=5.0, prompt_tokens=1_000_000),
+        ModelUsage(model="hy3", spend=1.0, prompt_tokens=9_000_000),
+    ]
+    top_text = _render_top_models(top, lang_zh=False, theme=theme, metric="tokens", color_map=color_map)
+    top_styles = {str(s.style) for s in top_text.spans}
+    assert hy3_color in top_styles
