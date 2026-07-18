@@ -274,6 +274,9 @@ def _mock_terminal(monkeypatch):
     monkeypatch.setattr(_termios, "tcsetattr", lambda *a: None)
     monkeypatch.setattr(_tty, "setcbreak", lambda fd: None)
     monkeypatch.setattr(sys.stdin, "fileno", lambda: 0)
+    # Tall terminal so the interactive panel fits without scroll truncation,
+    # keeping content assertions stable (fit/scroll logic is unit-tested separately).
+    monkeypatch.setenv("LINES", "200")
 
 
 def _make_select_and_read(key_sequence):
@@ -349,6 +352,7 @@ def _panel_plain(panel):
     (["1", "1", "q"], "blue-dark", 3, 1, None),
     (["l", "l", "q"], "blue-dark", 3, 1, None),
     (["m", "d", "q"], "blue-dark", 3, 1, None),
+    (["\x1b[B", "\x1b[A", "\x1b[6~", "\x1b[5~", "q"], "blue-dark", 4, 1, None),
     (["q"], "nonexistent-theme", 1, 1, None),
 ])
 def test_interactive_mode_common_keys(monkeypatch, keys, theme, live_update_min, dispatch_call_count, cfg_maker):
@@ -1086,3 +1090,39 @@ def test_window_top_models_respects_window_and_ranks_by_metric():
 
     # No dated activity → empty list
     assert _window_top_models([], days_window=7, metric="requests") == []
+
+
+def test_fit_scroll_body():
+    from kimi_code_usage.main import _fit_scroll_body
+
+    # Fits within budget → returned unchanged, offset reset to 0
+    small = Text("\n".join(f"line{i}" for i in range(5)))
+    out, off = _fit_scroll_body(small, budget=10, scroll_offset=3, lang_zh=False)
+    assert out is small
+    assert off == 0
+
+    # Overflow → view_rows = budget-1 content lines + 1 indicator line
+    big = Text("\n".join(f"L{i}" for i in range(20)))
+    out, off = _fit_scroll_body(big, budget=10, scroll_offset=0, lang_zh=False)
+    lines = out.plain.split("\n")
+    assert len(lines) == 10           # 9 content + 1 indicator
+    assert "L0" in lines[0]
+    assert "▼" in lines[-1] and "/20" in lines[-1]  # more below, position shown
+    assert "▲" not in lines[-1]                      # at top → no up arrow
+
+    # Offset beyond the end clamps to max, last content line is the final one
+    out2, off2 = _fit_scroll_body(big, budget=10, scroll_offset=999, lang_zh=False)
+    assert off2 == 20 - 9             # max_off = total - view_rows
+    lines2 = out2.plain.split("\n")
+    assert "L19" in lines2[-2]
+    assert "▲" in lines2[-1] and "▼" not in lines2[-1]  # at bottom → only up arrow
+
+    # Middle offset shows both arrows and honors the offset
+    out3, off3 = _fit_scroll_body(big, budget=10, scroll_offset=5, lang_zh=False)
+    assert off3 == 5
+    indicator3 = out3.plain.split("\n")[-1]
+    assert "▲" in indicator3 and "▼" in indicator3
+
+    # Localized scroll label
+    out_zh, _ = _fit_scroll_body(big, budget=10, scroll_offset=0, lang_zh=True)
+    assert "滚动" in out_zh.plain.split("\n")[-1]
