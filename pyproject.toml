@@ -1,6 +1,6 @@
 [project]
 name = "kimi-code-usage"
-version = "0.1.5"
+version = "0.1.6"
 description = "A curated Kimi Coding Plan usage monitor with aesthetic CLI and MCP server."
 readme = "README.md"
 requires-python = ">=3.10"
