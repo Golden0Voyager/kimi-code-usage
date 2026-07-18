@@ -6,8 +6,6 @@ import select as _select_module
 import sys
 
 from dotenv import load_dotenv
-
-from kimi_code_usage.server import run_server
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
@@ -15,6 +13,7 @@ from rich.text import Text
 
 from kimi_code_usage.config import DEFAULT_CONFIG_PATH, AppConfig, ConfigResolver, save_theme
 from kimi_code_usage.providers import DailyUsage, ProviderUsage, dispatch_all
+from kimi_code_usage.server import run_server
 
 # --- i18n ---
 LANG = os.getenv("LANG", "en")
@@ -559,7 +558,7 @@ def _render_activity_totals(totals, lang_zh: bool, theme: dict) -> Text:
     return text
 
 
-def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str = OR_METRIC_REQUESTS, days_window: int = 30) -> Text:
+def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str = OR_METRIC_REQUESTS, days_window: int = 30, color_map: dict[str, str] | None = None) -> Text:
     if not daily_activity:
         return Text()
     metric = _parse_or_metric(metric)
@@ -613,7 +612,16 @@ def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str 
             model_totals_all[model.model] = model_totals_all.get(model.model, 0.0) + _metric_value_model(model, metric)
     top_models = _top_n_models(model_totals_all, top_models_limit)
     top_model_set = set(top_models)
-    others_color_idx = len(top_models) % len(_model_colors(theme))
+    # Build a color palette aligned to `top_models`, plus a trailing neutral color
+    # for the "others" bucket. When a shared color_map is supplied, colors are
+    # keyed by model name so this chart agrees with the Top Models chart.
+    _colors = _model_colors(theme)
+    if color_map is not None:
+        palette = [color_map.get(name, _colors[i % len(_colors)]) for i, name in enumerate(top_models)]
+    else:
+        palette = [_colors[i % len(_colors)] for i in range(len(top_models))]
+    palette.append(theme.get("meta", "grey62"))  # "others" bucket → neutral
+    others_color_idx = len(top_models)  # index of the "others" color in `palette`
 
     # Pre-compute each column as color indices (bottom -> top)
     columns: list[list[int | None]] = []
@@ -673,8 +681,6 @@ def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str 
     filled_glyph = "▐" + "█" * (col_width - 1)
     empty_glyph = " " * col_width
 
-    colors = _model_colors(theme)
-
     # Render rows top -> bottom
     for row in range(height - 1, -1, -1):
         text.append(chart_indent, style=theme.get("meta", "grey62"))
@@ -691,7 +697,7 @@ def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str 
         for col in columns:
             cidx = col[row]
             if cidx is not None:
-                color = colors[cidx % len(colors)]
+                color = palette[cidx]
                 text.append(filled_glyph, style=color)
             else:
                 text.append(empty_glyph)
@@ -742,7 +748,7 @@ def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str 
         text.append("     ", style=theme.get("meta", "grey62"))
         for i, model in enumerate(top_models[:8]):
             name = truncate(_model_short_name(model), 14)
-            color = colors[i % len(colors)]
+            color = palette[i]
             text.append("█", style=color)
             text.append(f" {name}  ", style=theme.get("meta", "grey62"))
         text.append("\n")
@@ -765,6 +771,44 @@ def _model_colors(theme: dict) -> list[str]:
     ]
 
 
+def _build_model_color_map(model_names: list[str], theme: dict) -> dict[str, str]:
+    """Map each model name to a stable color so every panel colors it the same.
+
+    ``model_names`` is expected in canonical (metric-descending) order, so the
+    top-ranked model gets the first color. Colors cycle when there are more
+    models than palette entries.
+    """
+    colors = _model_colors(theme)
+    return {name: colors[i % len(colors)] for i, name in enumerate(model_names)}
+
+
+def _build_openrouter_color_map(rows, metric: str, theme: dict) -> dict[str, str] | None:
+    """Build one shared model→color map for an OpenRouter provider's rows.
+
+    The daily chart and the Top Models chart live in separate ``ProviderUsage``
+    rows but must agree on colors. We rank models by the currently displayed
+    metric (preferring the aggregate ``top_models`` row, else ``daily_activity``)
+    so the same model gets the same color in both. Returns ``None`` when the
+    rows carry no model breakdown (e.g. non-OpenRouter providers).
+    """
+    metric = _parse_or_metric(metric)
+    totals: dict[str, float] = {}
+    top_row = next((r for r in rows if r.top_models), None)
+    if top_row and top_row.top_models:
+        for m in top_row.top_models:
+            totals[m.model] = totals.get(m.model, 0.0) + _metric_value_model(m, metric)
+    else:
+        for row in rows:
+            if row.daily_activity:
+                for day in row.daily_activity:
+                    for m in day.models:
+                        totals[m.model] = totals.get(m.model, 0.0) + _metric_value_model(m, metric)
+    if not totals:
+        return None
+    ordered = [name for name, _ in sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))]
+    return _build_model_color_map(ordered, theme)
+
+
 def _top_n_models(model_totals: dict[str, float], n: int) -> list[str]:
     items = sorted(model_totals.items(), key=lambda x: (-x[1], x[0]))
     return [m for m, _ in items[:n]]
@@ -783,7 +827,7 @@ def truncate(s: str, max_len: int) -> str:
 
 
 
-def _render_top_models(top_models, lang_zh: bool, theme: dict, metric: str = OR_METRIC_REQUESTS, chart_width: int = 20) -> Text:
+def _render_top_models(top_models, lang_zh: bool, theme: dict, metric: str = OR_METRIC_REQUESTS, chart_width: int = 20, color_map: dict[str, str] | None = None) -> Text:
     if not top_models:
         return Text()
     metric = _parse_or_metric(metric)
@@ -806,7 +850,7 @@ def _render_top_models(top_models, lang_zh: bool, theme: dict, metric: str = OR_
         name = _model_short_name(m.model)
         if len(name) > 22:
             name = name[:19] + "..."
-        color = colors[i % len(colors)]
+        color = color_map.get(m.model, colors[i % len(colors)]) if color_map else colors[i % len(colors)]
         text.append(f"    {name:22} ", style=theme.get("meta", "grey62"))
         text.append(f"{_format_metric_value(val, metric):>8}  ", style=theme.get("meta", "grey62"))
         text.append("█" * bar_len, style=color)
@@ -858,6 +902,8 @@ def _format_aggregated_results(
         bar_width = 20
 
         body_text = Text()
+        # Shared model→color map so the daily chart and Top Models agree on colors.
+        model_color_map = _build_openrouter_color_map(p_items, or_metric, theme)
         for i, row in enumerate(p_items):
             if i > 0:
                 body_text.append("\n")
@@ -873,11 +919,11 @@ def _format_aggregated_results(
                 if row.daily_activity:
                     if i > 0 or row.activity_totals:
                         body_text.append("\n")
-                    body_text.append(_render_daily_chart(row.daily_activity, lang_zh, theme, metric=or_metric, days_window=days_window))
+                    body_text.append(_render_daily_chart(row.daily_activity, lang_zh, theme, metric=or_metric, days_window=days_window, color_map=model_color_map))
                 if row.top_models:
                     if i > 0 or row.activity_totals or row.daily_activity:
                         body_text.append("\n")
-                    body_text.append(_render_top_models(row.top_models, lang_zh, theme, metric=or_metric, chart_width=20))
+                    body_text.append(_render_top_models(row.top_models, lang_zh, theme, metric=or_metric, chart_width=20, color_map=model_color_map))
                 continue
 
             loc_label = _get_localized_label(row.label, lang_zh)
@@ -1104,7 +1150,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
         tty.setcbreak(fd)
         results, errors = await dispatch_all(config)
         console = Console()
-        with Live(_build_panel(), console=console, refresh_per_second=4) as live:
+        with Live(_build_panel(), console=console, auto_refresh=False, vertical_overflow="visible") as live:
             running = True
             while running:
                 rlist, _, _ = _select_module.select([sys.stdin], [], [], 0.15)
@@ -1127,11 +1173,11 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                         saved_notice[0] = None
                     if ch in ('h', 'H', '?'):
                         current_view = "usage" if current_view == "help" else "help"
-                        live.update(_build_panel())
+                        live.update(_build_panel(), refresh=True)
                         continue
                     if ch in ('c', 'C'):
                         current_view = "usage" if current_view == "config" else "config"
-                        live.update(_build_panel())
+                        live.update(_build_panel(), refresh=True)
                         continue
                     if ch in ('\r', '\n'):  # Enter → save settings to config file
                         save_theme(
@@ -1142,7 +1188,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                             days_window=days_window
                         )
                         saved_notice[0] = themes[idx]
-                        live.update(_build_panel())
+                        live.update(_build_panel(), refresh=True)
                         # Flush any consecutive \r or \n (like \r\n from terminal)
                         while True:
                             r_extra, _, _ = _select_module.select([sys.stdin], [], [], 0.0)
@@ -1171,7 +1217,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                         or_metric = _next_or_metric(or_metric)
                     elif days_toggle:
                         days_window = _next_days_window(days_window)
-                    live.update(_build_panel())
+                    live.update(_build_panel(), refresh=True)
                 await asyncio.sleep(0)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
