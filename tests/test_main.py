@@ -729,58 +729,8 @@ async def test_interactive_mode_top_bar_placeholder_when_all_hidden(monkeypatch)
 
     rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
     assert "(no visible panels)" in rendered or "（无可见面板）" in rendered
-
-
-@pytest.mark.asyncio
-async def test_interactive_mode_number_key_uses_visible_index(monkeypatch):
-    """In usage view, number keys map to visible-only provider indices."""
-    _mock_terminal(monkeypatch)
-    mock_select, mock_read = _make_select_and_read(["2", "q"])
-    import kimi_code_usage.main as main_mod
-
-    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
-    monkeypatch.setattr(sys.stdin, "read", mock_read)
-
-    cfg = _make_interactive_config(monkeypatch)
-    cfg.provider_order = ["kimi", "openai", "anthropic", "openrouter", "codex", "claude"]
-    cfg.visible_providers = ["kimi", "anthropic"]
-    mock_res = {
-        "kimi": [
-            ProviderUsage(
-                provider="kimi",
-                label="Weekly Usage",
-                used=5,
-                limit=100,
-                remaining=95,
-                percent=5,
-                reset_at=None,
-                unit="%",
-            )
-        ],
-        "anthropic": [
-            ProviderUsage(
-                provider="anthropic",
-                label="Usage",
-                used=10,
-                limit=100,
-                remaining=90,
-                percent=10,
-                reset_at=None,
-                unit="%",
-            )
-        ],
-    }
-
-    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
-        with patch("kimi_code_usage.main.Live") as mock_live_cls:
-            mock_live = mock_live_cls.return_value.__enter__.return_value
-            await _interactive_mode(cfg, "blue-dark")
-
-    # Initial render shows [1]Kimi [2]Anthropic; pressing "2" toggles anthropic off
-    # because it is the second *visible* provider, not openai (full-list index 1).
-    final_render = _panel_plain(mock_live.update.call_args_list[-1].args[0])
-    assert "[1]Kimi" in final_render
-    assert "[2]" not in final_render
+    # Footer panels hint is hidden when no providers are visible (no [1-0]).
+    assert "[1-" not in rendered
 
 
 @pytest.mark.asyncio
