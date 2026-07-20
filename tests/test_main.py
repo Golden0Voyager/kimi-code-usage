@@ -486,6 +486,39 @@ async def test_interactive_mode_number_key_uses_visible_index(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_interactive_mode_usage_number_key_targets_visible_order(monkeypatch):
+    """Pressing [2] in usage view hides the second visible provider, not provider_order[1]."""
+    _mock_terminal(monkeypatch)
+    mock_select, mock_read = _make_select_and_read(["2", "q"])
+    import kimi_code_usage.main as main_mod
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    cfg = _make_interactive_config(monkeypatch)
+    cfg.provider_order = ["kimi", "openai", "anthropic"]
+    cfg.visible_providers = ["kimi", "anthropic"]  # openai is hidden
+    mock_res = {
+        "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=5, limit=100, remaining=95, percent=5, reset_at=None, unit="%")],
+        "anthropic": [ProviderUsage(provider="anthropic", label="API Plan", used=0, limit=None, remaining=None, percent=None, reset_at=None, unit="text", text_value="Pro Plan")],
+    }
+
+    saved_calls = []
+    def fake_save(theme, language=None, visible_providers=None, or_metric=None, days_window=None, config_path=None):
+        saved_calls.append((theme, language, visible_providers, or_metric, days_window))
+
+    with patch("kimi_code_usage.main.save_theme", fake_save):
+        with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+            with patch("kimi_code_usage.main.Live") as mock_live_cls:
+                mock_live = mock_live_cls.return_value.__enter__.return_value
+                await _interactive_mode(cfg, "blue-dark")
+
+    rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
+    # anthropic was at [2] in the visible top bar; pressing 2 should hide it
+    assert "[2]Anthropic" not in rendered
+    assert "[1]Kimi" in rendered
+
+
+@pytest.mark.asyncio
 async def test_interactive_mode_lone_escape(monkeypatch):
     """A lone ESC with no follow-up → treated as unknown key (no-op), then q."""
     _mock_terminal(monkeypatch)
