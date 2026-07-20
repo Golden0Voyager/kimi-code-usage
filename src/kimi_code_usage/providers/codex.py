@@ -12,14 +12,12 @@ The provider is **disabled by default** — enable it with
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from collections.abc import Mapping
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-
-import asyncio
 
 import cloudscraper
 
@@ -259,13 +257,11 @@ def _parse_usage_response(data: Mapping[str, Any]) -> list[ProviderUsage]:
         limit = _to_float(limit_entry.get("limit") or limit_entry.get("limit_amount") or limit_entry.get("total"))
         used_pct = _to_float(limit_entry.get("used_percent"))
         window = str(limit_entry.get("window") or limit_entry.get("name") or limit_entry.get("period") or "")
-        unit = str(limit_entry.get("unit") or "messages")
 
         # Handle RateLimitWindowSnapshot format: only used_percent, no used/limit
         if used is None and limit is None and used_pct is not None:
             used = used_pct
             limit = 100.0
-            unit = "%"
 
         if used is not None and limit is not None and limit > 0:
             pct = used / limit * 100
@@ -302,7 +298,7 @@ def _parse_usage_response(data: Mapping[str, Any]) -> list[ProviderUsage]:
     # --- Fallback: show raw data as text ---
     if not results:
         # If we couldn't parse anything useful, show the raw JSON keys
-        raw_keys = ", ".join(str(k) for k in data.keys())
+        raw_keys = ", ".join(str(k) for k in data)
         results.append(
             ProviderUsage(
                 provider="codex",

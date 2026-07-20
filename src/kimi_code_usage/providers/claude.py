@@ -113,7 +113,7 @@ def _parse_usage_response(data: Mapping[str, Any]) -> list[ProviderUsage]:
 
     # Fallback if no windows were parsed
     if not results:
-        raw_keys = ", ".join(str(k) for k in data.keys())
+        raw_keys = ", ".join(str(k) for k in data)
         results.append(
             ProviderUsage(
                 provider="claude",
