@@ -30,6 +30,13 @@ L_EN = {
     "error_api": "API Error",
 }
 
+_SHORT = {
+    "anthropic": "Anthropic", "openai": "OpenAI API",
+    "openrouter": "Openrouter",    "kimi": "Kimi",
+    "codex": "ChatGPT+", "claude": "Claude",
+}
+
+
 L_ZH = {
     "title": "AI 用量配额监控",
     "weekly_limit": "周用量限额",
@@ -40,6 +47,8 @@ L_ZH = {
     "no_data": "未找到用量数据，或未配置任何服务商。",
     "error_api": "API 错误",
 }
+
+
 
 L = L_ZH if IS_ZH else L_EN
 
@@ -53,12 +62,12 @@ _PROVIDER_SETUP_HELP = {
         "note_zh": "使用 Kimi Code / Coding Plan 密钥（sk-kimi-...），不要使用 https://api.moonshot.cn/v1。",
     },
     "openai": {
-        "name": "OpenAI",
+        "name": "OpenAI API",
         "key_envs": ("OPENAI_API_KEY",),
         "base_env": "OPENAI_BASE_URL",
         "default_url": "https://api.openai.com",
-        "note_en": "Use an OpenAI API key with organization usage access.",
-        "note_zh": "使用具备用量接口权限的 OpenAI API Key。",
+        "note_en": "OpenAI Platform API billing (requires Org Admin key). Not ChatGPT Plus subscription.",
+        "note_zh": "OpenAI 平台 API 账单（需 Org Admin 密钥）。不是 ChatGPT Plus 订阅。",
     },
     "anthropic": {
         "name": "Anthropic",
@@ -76,7 +85,25 @@ _PROVIDER_SETUP_HELP = {
         "note_en": "Set OPENROUTER_MANAGEMENT_KEY or OPENROUTER_ADMIN_KEY for activity details.",
         "note_zh": "如需活动明细，设置 OPENROUTER_MANAGEMENT_KEY 或 OPENROUTER_ADMIN_KEY。",
     },
+    "codex": {
+        "name": "ChatGPT Plus",
+        "key_envs": ("CODEX_ENABLED",),
+        "base_env": "CODEX_BASE_URL",
+        "default_url": "https://chatgpt.com/backend-api",
+        "note_en": "ChatGPT Plus subscription usage. Reads ~/.codex/auth.json. Set CODEX_ENABLED=true to enable.",
+        "note_zh": "ChatGPT Plus 订阅用量。读取 ~/.codex/auth.json 本地认证文件。设置 CODEX_ENABLED=true 启用。",
+    },
+    "claude": {
+        "name": "Claude",
+        "key_envs": ("CLAUDE_ENABLED",),
+        "base_env": "CLAUDE_BASE_URL",
+        "default_url": "https://api.anthropic.com",
+        "note_en": "Claude subscription usage. Reads ~/.claude/.credentials.json. Set CLAUDE_ENABLED=true to enable.",
+        "note_zh": "Claude 订阅用量。读取 ~/.claude/.credentials.json 本地认证文件。设置 CLAUDE_ENABLED=true 启用。",
+    },
 }
+
+
 
 def _get_visual_width(s: str) -> int:
     import unicodedata
@@ -200,17 +227,63 @@ def _get_localized_text_value(text_val: str, lang_zh: bool) -> str:
     return text_val
 
 
-def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_window: int = 30) -> Text:
+def _render_setting_view(
+    config: "AppConfig",
+    visible_providers: set,
+    settings_cursor: int = 0,
+    lang_zh: bool = False,
+) -> Text:
+    """Render the settings page for toggling and reordering providers."""
+    text = Text()
+    title = "面板设置" if lang_zh else "Panel Settings"
+    text.append(f"{title}\n\n", style="bold")
+
+    order = config.provider_order
+    max_keys = min(len(order), 9)
+    for i, p in enumerate(order):
+        short = _SHORT.get(p, p[:4].title())
+        icon = "●" if p in visible_providers else "○"
+        num = i + 1
+        cursor = "▸" if i == settings_cursor else " "
+        line = f"{cursor} {icon} [{num}] {short}"
+        if i == settings_cursor:
+            text.append(line, style="bold reverse")
+        elif p in visible_providers:
+            text.append(line, style="bold")
+        else:
+            text.append(line, style="dim")
+        text.append("\n")
+
+    text.append("\n", style="bold")
+    if lang_zh:
+        text.append(f"  [1-{max_keys}] 开关面板\n", style="grey62")
+        text.append("  [↑/↓] 移动光标\n", style="grey62")
+        text.append("  [←/→] 移动选中面板\n", style="grey62")
+        text.append("  [s]   返回用量视图\n", style="grey62")
+        text.append("  Enter 保存设置\n", style="grey62")
+    else:
+        text.append(f"  [1-{max_keys}] toggle panels\n", style="grey62")
+        text.append("  [↑/↓] move cursor\n", style="grey62")
+        text.append("  [←/→] move selected panel\n", style="grey62")
+        text.append("  [s]   back to usage\n", style="grey62")
+        text.append("  Enter save settings\n", style="grey62")
+
+    return text
+
+
+def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_window: int = 30, provider_count: int = 6) -> Text:
     text = Text()
     title = "交互帮助" if lang_zh else "Interactive Help"
     text.append(f"{title}\n\n", style="bold")
+    key_range = f"1-{provider_count}"
     if lang_zh:
         rows = [
             ("q / Ctrl-C", "退出"),
             ("r", "刷新用量"),
             ("h / ?", "显示或隐藏帮助"),
             ("c", "显示或隐藏配置引导"),
-            ("1-4", "切换服务商面板"),
+            ("s", "面板设置"),
+            (key_range, "切换服务商面板"),
             ("l", "切换中英文"),
             ("←/→ 或 [ / ]", "切换主题"),
             ("m", f"切换 OpenRouter 指标（当前：{_metric_label(or_metric, True)}）"),
@@ -224,7 +297,8 @@ def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_wi
             ("r", "refresh usage"),
             ("h / ?", "show or hide help"),
             ("c", "show or hide configuration guide"),
-            ("1-4", "toggle provider panels"),
+            ("s", "panel settings"),
+            (key_range, "toggle provider panels"),
             ("l", "toggle language"),
             ("←/→ or [ / ]", "cycle theme"),
             ("m", f"cycle OpenRouter metric (current: {_metric_label(or_metric, False)})"),
@@ -424,6 +498,8 @@ THEME_MAP = {
 }
 
 
+
+
 def _handle_key(ch: str, idx: int, n: int) -> tuple[int, bool, bool, int | None, bool, bool, bool]:
     """Map a keypress to a TUI action.
 
@@ -438,7 +514,7 @@ def _handle_key(ch: str, idx: int, n: int) -> tuple[int, bool, bool, int | None,
         return (idx - 1) % n, False, False, None, False, False, False
     if ch in ('r', 'R'):                        # r → refresh data
         return idx, False, True, None, False, False, False
-    if ch in ('1', '2', '3', '4'):              # 1-4 → toggle provider panel
+    if ch in ("1", "2", "3", "4", "5", "6", "7", "8", "9"):              # 1-6 → toggle provider panel
         return idx, False, False, int(ch) - 1, False, False, False
     if ch in ('l', 'L'):                        # l → toggle language zh/en
         return idx, False, False, None, True, False, False
@@ -1056,7 +1132,23 @@ def _format_aggregated_results(
         body_text = provider_bodies.get(p)
         err_msg = error_msgs.get(p)
 
-        title_str = "Kimi" if p == "kimi" else p.capitalize()
+        # Dynamic title for codex: use plan_type from API response
+        if p == "codex":
+            p_items = results.get(p, [])
+            plan_row = next((r for r in p_items if r.label == "Plan"), None)
+            plan_title = plan_row.text_value if plan_row and plan_row.text_value else "ChatGPT Plus"
+        else:
+            plan_title = None
+
+        _PROVIDER_TITLES = {
+            "kimi": "Kimi",
+            "codex": plan_title or "ChatGPT Plus",
+            "openai": "OpenAI API",
+            "anthropic": "Anthropic",
+            "openrouter": "OpenRouter",
+            "claude": "Claude",
+        }
+        title_str = _PROVIDER_TITLES.get(p, p.capitalize())
         divider_line = f"───────── {title_str} ─────────"
 
         if body_text:
@@ -1146,19 +1238,18 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
 
     saved_notice: list = [None]   # holds the saved theme name briefly, then None
     scroll: list = [0]            # in-panel vertical scroll offset (lines from top)
+    settings_cursor: list = [0]       # cursor position in settings view
 
-    _SHORT = {
-        "anthropic": "Anthropic", "openai": "Openai",
-        "openrouter": "Openrouter",    "kimi": "Kimi",
-    }
 
     def _build_panel() -> Panel:
         visible_order = [p for p in config.provider_order if p in visible_providers]
         _L = L_ZH if lang_zh else L_EN
         if current_view == "help":
-            body = _render_interactive_help(lang_zh, or_metric=or_metric, days_window=days_window)
+            body = _render_interactive_help(lang_zh, or_metric=or_metric, days_window=days_window, provider_count=len(config.provider_order))
         elif current_view == "config":
             body = _render_config_guide(config, lang_zh=lang_zh, config_path=config_path)
+        elif current_view == "settings":
+            body = _render_setting_view(config, visible_providers, settings_cursor=settings_cursor[0], lang_zh=lang_zh)
         else:
             body = _format_aggregated_results(results, errors, visible_order, themes[idx], lang_zh, enabled_providers=set(config.enabled_providers), or_metric=or_metric, days_window=days_window)
 
@@ -1185,8 +1276,9 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
             ("[r]", "刷新" if lang_zh else "refresh"),
             ("[h/?]", "帮助" if lang_zh else "help"),
             ("[c]", "配置" if lang_zh else "config"),
+            ("[s]", "设置" if lang_zh else "settings"),
             ("[←/→]", "主题" if lang_zh else "theme"),
-            ("[1-4]", "面板" if lang_zh else "panels"),
+            (f"[1-{len(config.provider_order)}]", "面板" if lang_zh else "panels"),
             ("[↑↓]", "滚动" if lang_zh else "scroll"),
             ("[l]", "英" if lang_zh else "ZH"),
             ("[m]", _metric_label(or_metric, lang_zh)),
@@ -1282,6 +1374,11 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                         scroll[0] = 0
                         live.update(_build_panel(), refresh=True)
                         continue
+                    if ch in ('s', 'S'):
+                        current_view = "usage" if current_view == "settings" else "settings"
+                        scroll[0] = 0
+                        live.update(_build_panel(), refresh=True)
+                        continue
                     if ch in ('\r', '\n'):  # Enter → save settings to config file
                         save_theme(
                             themes[idx],
@@ -1301,14 +1398,43 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                                     continue
                             break
                         continue
-                    if ch == '\x1b[A':          # ↑ → scroll up
-                        scroll[0] = max(0, scroll[0] - 3)
-                        live.update(_build_panel(), refresh=True)
+                    if ch == '\x1b[A':          # ↑ → scroll up or move cursor up in settings
+                        if current_view == "settings":
+                            settings_cursor[0] = max(0, settings_cursor[0] - 1)
+                            live.update(_build_panel(), refresh=True)
+                        else:
+                            scroll[0] = max(0, scroll[0] - 3)
+                            live.update(_build_panel(), refresh=True)
                         continue
-                    if ch == '\x1b[B':          # ↓ → scroll down
-                        scroll[0] += 3
-                        live.update(_build_panel(), refresh=True)
+                    if ch == '\x1b[B':          # ↓ → scroll down or move cursor down in settings
+                        if current_view == "settings":
+                            providers = config.provider_order
+                            settings_cursor[0] = min(len(providers) - 1, settings_cursor[0] + 1)
+                            live.update(_build_panel(), refresh=True)
+                        else:
+                            scroll[0] += 3
+                            live.update(_build_panel(), refresh=True)
                         continue
+                    if ch in ('\x1b[C', ']'):   # → / ] → move item right/down in settings
+                        if current_view == "settings":
+                            providers = config.provider_order
+                            cur = settings_cursor[0]
+                            if cur < len(providers) - 1:
+                                providers[cur], providers[cur+1] = providers[cur+1], providers[cur]
+                                settings_cursor[0] = cur + 1
+                            live.update(_build_panel(), refresh=True)
+                            continue
+                        # In usage view, fall through to _handle_key for theme cycling
+                    if ch in ('\x1b[D', '['):   # ← / [ → move item left/up in settings
+                        if current_view == "settings":
+                            providers = config.provider_order
+                            cur = settings_cursor[0]
+                            if cur > 0:
+                                providers[cur], providers[cur-1] = providers[cur-1], providers[cur]
+                                settings_cursor[0] = cur - 1
+                            live.update(_build_panel(), refresh=True)
+                            continue
+                        # In usage view, fall through to _handle_key for theme cycling
                     if ch in ('\x1b[5~', '\x1b[6~'):  # PgUp / PgDn → page scroll
                         page = max(1, console.size.height - 8)
                         scroll[0] = max(0, scroll[0] + (page if ch == '\x1b[6~' else -page))

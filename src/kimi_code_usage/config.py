@@ -77,7 +77,7 @@ class ConfigResolver:
         self.config.days_window = days_window
 
         # 2. Setup providers
-        all_providers = ["kimi", "openai", "anthropic", "openrouter"]
+        all_providers = ["kimi", "openai", "anthropic", "openrouter", "codex", "claude"]
 
         # Envs map
         env_keys = {
@@ -85,6 +85,8 @@ class ConfigResolver:
             "openai": ("OPENAI_API_KEY",),
             "anthropic": ("ANTHROPIC_API_KEY",),
             "openrouter": ("OPENROUTER_API_KEY", "OPENROUTER_ADMIN_KEY"),
+            "codex": ("CODEX_API_KEY",),
+            "claude": ("CLAUDE_API_KEY",),
         }
 
         env_urls = {
@@ -92,6 +94,8 @@ class ConfigResolver:
             "openai": "OPENAI_BASE_URL",
             "anthropic": "ANTHROPIC_BASE_URL",
             "openrouter": "OPENROUTER_BASE_URL",
+            "codex": "CODEX_BASE_URL",
+            "claude": "CLAUDE_BASE_URL",
         }
 
         default_urls = {
@@ -99,6 +103,8 @@ class ConfigResolver:
             "openai": "https://api.openai.com",
             "anthropic": "https://api.anthropic.com",
             "openrouter": "https://openrouter.ai/api",
+            "codex": "https://chatgpt.com/backend-api",
+            "claude": "https://api.anthropic.com",
         }
 
         for p in all_providers:
@@ -128,14 +134,23 @@ class ConfigResolver:
                     or os.getenv("OPENROUTER_ADMIN_KEY")
                 )
 
-            # Get Enabled status from JSON, else ENV, default True
-            enabled = p_data.get("enabled")
-            if enabled is None:
-                env_enabled = os.getenv(f"{p.upper()}_ENABLED")
-                if env_enabled is not None:
-                    enabled = env_enabled.lower() not in ("false", "0", "no")
-                else:
-                    enabled = True
+            # Codex & Claude: default-off, read local auth files directly
+            if p in ("codex", "claude"):
+                enabled = p_data.get("enabled")
+                if enabled is None:
+                    env_enabled = os.getenv(f"{p.upper()}_ENABLED", "").lower()
+                    enabled = env_enabled in ("true", "1", "yes")
+                if enabled:
+                    api_key = "enabled"  # Sentinel: passes enabled_providers check
+            else:
+                # Get Enabled status from JSON, else ENV, default True
+                enabled = p_data.get("enabled")
+                if enabled is None:
+                    env_enabled = os.getenv(f"{p.upper()}_ENABLED")
+                    if env_enabled is not None:
+                        enabled = env_enabled.lower() not in ("false", "0", "no")
+                    else:
+                        enabled = True
 
             self.config.providers[p] = ProviderConfig(
                 api_key=api_key if api_key else None,
@@ -145,7 +160,7 @@ class ConfigResolver:
             )
 
         # 3. Determine provider ordering
-        default_order = ["anthropic", "openai", "openrouter", "kimi"]
+        default_order = ["anthropic", "openai", "openrouter", "kimi", "codex", "claude"]
         json_providers = list(providers_data.keys())
 
         final_order = []

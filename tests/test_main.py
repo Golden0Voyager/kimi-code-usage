@@ -64,8 +64,8 @@ def test_format_aggregated_results():
     assert isinstance(text, Text)
     raw_text = str(text)
     assert "Kimi" in raw_text
-    assert "Openai" in raw_text
-    assert "Openrouter" in raw_text
+    assert "OpenAI API" in raw_text
+    assert "OpenRouter" in raw_text
     assert "Pro Plan Value" in raw_text
 
     # Check limit-bar format and no limit format
@@ -968,7 +968,7 @@ def test_format_aggregated_results_with_openrouter_activity():
     }
     text = _format_aggregated_results(results, {}, order=["openrouter"], lang_zh=False)
     raw = str(text)
-    assert "Openrouter" in raw
+    assert "OpenRouter" in raw
     assert "Credits" in raw
     assert "Req: 45" in raw
     assert "Daily Requests" in raw

@@ -164,8 +164,8 @@ def test_config_resolver_ordering(tmp_path):
     resolver = ConfigResolver(config_path=str(config_path))
     config = resolver.resolve()
 
-    # Expected order: JSON defined order (openrouter, kimi), then default remaining order (anthropic, openai)
-    assert config.provider_order == ["openrouter", "kimi", "anthropic", "openai"]
+    # Expected order: JSON defined order (openrouter, kimi), then default remaining order (anthropic, openai, codex, claude)
+    assert config.provider_order == ["openrouter", "kimi", "anthropic", "openai", "codex", "claude"]
 
 def test_config_resolver_theme(tmp_path, monkeypatch):
     # 1. JSON config theme
