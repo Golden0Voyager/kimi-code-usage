@@ -5,12 +5,14 @@ from pathlib import Path
 
 DEFAULT_CONFIG_PATH = Path.home() / ".kimi-usage" / "config.json"
 
+
 @dataclass
 class ProviderConfig:
     api_key: str | None = None
     base_url: str | None = None
     enabled: bool = True
     management_key: str | None = None
+
 
 @dataclass
 class AppConfig:
@@ -27,6 +29,7 @@ class AppConfig:
     @property
     def enabled_providers(self) -> list[str]:
         return [name for name, p_conf in self.providers.items() if p_conf.api_key and p_conf.enabled]
+
 
 class ConfigResolver:
     def __init__(self, config_path: str | None = None):
@@ -56,9 +59,10 @@ class ConfigResolver:
             theme = os.getenv("KIMI_USAGE_THEME", "blue-dark")
         self.config.theme = theme
 
-        # Get language and visible providers from JSON
+        # Get language, visible providers, and provider order from JSON
         self.config.language = general_data.get("language")
         self.config.visible_providers = general_data.get("visibleProviders")
+        saved_provider_order = general_data.get("providerOrder")
 
         # Get OpenRouter metric preference, default requests
         or_metric = general_data.get("orMetric", "requests")
@@ -77,7 +81,7 @@ class ConfigResolver:
         self.config.days_window = days_window
 
         # 2. Setup providers
-        all_providers = ["kimi", "openai", "anthropic", "openrouter"]
+        all_providers = ["kimi", "openai", "anthropic", "openrouter", "codex", "claude"]
 
         # Envs map
         env_keys = {
@@ -85,6 +89,8 @@ class ConfigResolver:
             "openai": ("OPENAI_API_KEY",),
             "anthropic": ("ANTHROPIC_API_KEY",),
             "openrouter": ("OPENROUTER_API_KEY", "OPENROUTER_ADMIN_KEY"),
+            "codex": ("CODEX_API_KEY",),
+            "claude": ("CLAUDE_API_KEY",),
         }
 
         env_urls = {
@@ -92,6 +98,8 @@ class ConfigResolver:
             "openai": "OPENAI_BASE_URL",
             "anthropic": "ANTHROPIC_BASE_URL",
             "openrouter": "OPENROUTER_BASE_URL",
+            "codex": "CODEX_BASE_URL",
+            "claude": "CLAUDE_BASE_URL",
         }
 
         default_urls = {
@@ -99,6 +107,8 @@ class ConfigResolver:
             "openai": "https://api.openai.com",
             "anthropic": "https://api.anthropic.com",
             "openrouter": "https://openrouter.ai/api",
+            "codex": "https://chatgpt.com/backend-api",
+            "claude": "https://api.anthropic.com",
         }
 
         for p in all_providers:
@@ -128,14 +138,23 @@ class ConfigResolver:
                     or os.getenv("OPENROUTER_ADMIN_KEY")
                 )
 
-            # Get Enabled status from JSON, else ENV, default True
-            enabled = p_data.get("enabled")
-            if enabled is None:
-                env_enabled = os.getenv(f"{p.upper()}_ENABLED")
-                if env_enabled is not None:
-                    enabled = env_enabled.lower() not in ("false", "0", "no")
-                else:
-                    enabled = True
+            # Codex & Claude: default-off, read local auth files directly
+            if p in ("codex", "claude"):
+                enabled = p_data.get("enabled")
+                if enabled is None:
+                    env_enabled = os.getenv(f"{p.upper()}_ENABLED", "").lower()
+                    enabled = env_enabled in ("true", "1", "yes")
+                if enabled:
+                    api_key = "enabled"  # Sentinel: passes enabled_providers check
+            else:
+                # Get Enabled status from JSON, else ENV, default True
+                enabled = p_data.get("enabled")
+                if enabled is None:
+                    env_enabled = os.getenv(f"{p.upper()}_ENABLED")
+                    if env_enabled is not None:
+                        enabled = env_enabled.lower() not in ("false", "0", "no")
+                    else:
+                        enabled = True
 
             self.config.providers[p] = ProviderConfig(
                 api_key=api_key if api_key else None,
@@ -145,7 +164,7 @@ class ConfigResolver:
             )
 
         # 3. Determine provider ordering
-        default_order = ["anthropic", "openai", "openrouter", "kimi"]
+        default_order = ["anthropic", "openai", "openrouter", "kimi", "codex", "claude"]
         json_providers = list(providers_data.keys())
 
         final_order = []
@@ -155,6 +174,14 @@ class ConfigResolver:
         for p in default_order:
             if p not in final_order:
                 final_order.append(p)
+
+        # Persisted order from settings view takes precedence over derived order
+        if saved_provider_order:
+            saved_order = [p for p in saved_provider_order if p in all_providers]
+            for p in default_order:
+                if p not in saved_order:
+                    saved_order.append(p)
+            final_order = saved_order
 
         self.config.provider_order = final_order
 
@@ -167,7 +194,8 @@ def save_theme(
     visible_providers: list[str] | None = None,
     or_metric: str | None = None,
     days_window: int | None = None,
-    config_path: Path | None = None
+    provider_order: list[str] | None = None,
+    config_path: Path | None = None,
 ) -> None:
     """Persist settings into ``general`` in the JSON config file.
 
@@ -195,6 +223,8 @@ def save_theme(
         general["orMetric"] = or_metric
     if days_window is not None:
         general["daysWindow"] = days_window
+    if provider_order is not None:
+        general["providerOrder"] = provider_order
     data["general"] = general
 
     with open(path, "w", encoding="utf-8") as fh:

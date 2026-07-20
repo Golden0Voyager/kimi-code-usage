@@ -23,49 +23,107 @@ from kimi_code_usage.providers import ActivityTotals, DailyUsage, ModelUsage, Pr
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
-    for key in ["KIMI_API_KEY", "KIMI_CODING_API_KEY", "OPENAI_API_KEY",
-                "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY",
-                "KIMI_BASE_URL", "OPENAI_BASE_URL", "ANTHROPIC_BASE_URL", "OPENROUTER_BASE_URL"]:
+    for key in [
+        "KIMI_API_KEY",
+        "KIMI_CODING_API_KEY",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "OPENROUTER_API_KEY",
+        "KIMI_BASE_URL",
+        "OPENAI_BASE_URL",
+        "ANTHROPIC_BASE_URL",
+        "OPENROUTER_BASE_URL",
+    ]:
         monkeypatch.delenv(key, raising=False)
     yield
+
 
 def test_get_visual_width():
     assert _get_visual_width("hello") == 5
     assert _get_visual_width("你好") == 4
     assert _get_visual_width("a你好b") == 6
 
+
 def test_get_localized_label():
     assert _get_localized_label("Weekly Usage") == "Weekly Usage" or "周" in _get_localized_label("Weekly Usage")
     assert _get_localized_label("5h Limit") == "5h Limit" or "限额" in _get_localized_label("5h Limit")
     assert _get_localized_label("Other") == "Other"
 
+
 def test_format_aggregated_results():
     results = {
         "kimi": [
-            ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at="06-11 12:00", unit="%", countdown="1d 2h")
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=10,
+                limit=100,
+                remaining=90,
+                percent=10,
+                reset_at="06-11 12:00",
+                unit="%",
+                countdown="1d 2h",
+            )
         ],
         "openai": [
-            ProviderUsage(provider="openai", label="Tokens Limit", used=1500, limit=10000.0, remaining=8500.0, percent=15.0, reset_at=None, unit="tokens"),
-            ProviderUsage(provider="openai", label="Tokens No Limit", used=5000, limit=None, remaining=None, percent=None, reset_at=None, unit="tokens"),
-            ProviderUsage(provider="openai", label="Cost", used=1.5, limit=5.0, remaining=3.5, percent=30, reset_at=None, unit="$")
+            ProviderUsage(
+                provider="openai",
+                label="Tokens Limit",
+                used=1500,
+                limit=10000.0,
+                remaining=8500.0,
+                percent=15.0,
+                reset_at=None,
+                unit="tokens",
+            ),
+            ProviderUsage(
+                provider="openai",
+                label="Tokens No Limit",
+                used=5000,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="tokens",
+            ),
+            ProviderUsage(
+                provider="openai", label="Cost", used=1.5, limit=5.0, remaining=3.5, percent=30, reset_at=None, unit="$"
+            ),
         ],
         "anthropic": [
-            ProviderUsage(provider="anthropic", label="API Plan", used=0, limit=None, remaining=None, percent=None, reset_at=None, unit="text", text_value="Pro Plan Value")
+            ProviderUsage(
+                provider="anthropic",
+                label="API Plan",
+                used=0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                text_value="Pro Plan Value",
+            )
         ],
         "openrouter": [
-            ProviderUsage(provider="openrouter", label="Credits", used=2.5, limit=None, remaining=None, percent=None, reset_at=None, unit="$")
-        ]
+            ProviderUsage(
+                provider="openrouter",
+                label="Credits",
+                used=2.5,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="$",
+            )
+        ],
     }
-    errors = {
-        "openai": "API Key invalid"
-    }
+    errors = {"openai": "API Key invalid"}
 
     text = _format_aggregated_results(results, errors)
     assert isinstance(text, Text)
     raw_text = str(text)
     assert "Kimi" in raw_text
-    assert "Openai" in raw_text
-    assert "Openrouter" in raw_text
+    assert "OpenAI API" in raw_text
+    assert "OpenRouter" in raw_text
     assert "Pro Plan Value" in raw_text
 
     # Check limit-bar format and no limit format
@@ -76,6 +134,7 @@ def test_format_aggregated_results():
     # Check error message
     assert "⚠ API Key invalid" in raw_text
 
+
 @pytest.mark.asyncio
 async def test_main_no_providers_configured(monkeypatch, capsys):
     monkeypatch.setattr("sys.argv", ["prog", "--plain"])
@@ -84,13 +143,25 @@ async def test_main_no_providers_configured(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert "No usage data" in captured.out or "未找到" in captured.out
 
+
 @pytest.mark.asyncio
 async def test_main_json_output(monkeypatch, capsys):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
     monkeypatch.setattr("sys.argv", ["prog", "--json"])
 
     mock_results = {
-        "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")]
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=10,
+                limit=100,
+                remaining=90,
+                percent=10,
+                reset_at=None,
+                unit="%",
+            )
+        ]
     }
     mock_errors = {"openai": "Auth failed"}
 
@@ -103,18 +174,61 @@ async def test_main_json_output(monkeypatch, capsys):
     assert data["kimi"][0]["used"] == 10
     assert data["errors"]["openai"] == "Auth failed"
 
+
 @pytest.mark.asyncio
 async def test_main_plain_output(monkeypatch, capsys):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
     monkeypatch.setattr("sys.argv", ["prog", "--plain"])
 
     mock_results = {
-        "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")],
-        "openai": [ProviderUsage(provider="openai", label="Tokens", used=100, limit=None, remaining=None, percent=None, reset_at=None, unit="tokens")],
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=10,
+                limit=100,
+                remaining=90,
+                percent=10,
+                reset_at=None,
+                unit="%",
+            )
+        ],
+        "openai": [
+            ProviderUsage(
+                provider="openai",
+                label="Tokens",
+                used=100,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="tokens",
+            )
+        ],
         "anthropic": [
-            ProviderUsage(provider="anthropic", label="API Plan", used=0, limit=None, remaining=None, percent=None, reset_at=None, unit="text", text_value="Pro Plan"),
-            ProviderUsage(provider="anthropic", label="Empty Plan", used=0, limit=None, remaining=None, percent=None, reset_at=None, unit="text", text_value=None)
-        ]
+            ProviderUsage(
+                provider="anthropic",
+                label="API Plan",
+                used=0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                text_value="Pro Plan",
+            ),
+            ProviderUsage(
+                provider="anthropic",
+                label="Empty Plan",
+                used=0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                text_value=None,
+            ),
+        ],
     }
     mock_errors = {"openrouter": "Timeout"}
 
@@ -128,13 +242,25 @@ async def test_main_plain_output(monkeypatch, capsys):
     assert "Anthropic - Empty Plan" in captured.out
     assert "Openrouter - Error: Timeout" in captured.err
 
+
 @pytest.mark.asyncio
 async def test_main_rich_output(monkeypatch, capsys):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
     monkeypatch.setattr("sys.argv", ["prog"])
 
     mock_results = {
-        "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")]
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=10,
+                limit=100,
+                remaining=90,
+                percent=10,
+                reset_at=None,
+                unit="%",
+            )
+        ]
     }
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_results, {}))):
@@ -143,6 +269,7 @@ async def test_main_rich_output(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert "Weekly Usage" in captured.out or "周" in captured.out
 
+
 @pytest.mark.asyncio
 async def test_main_with_provider_filter(monkeypatch, capsys):
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
@@ -150,8 +277,30 @@ async def test_main_with_provider_filter(monkeypatch, capsys):
     monkeypatch.setattr("sys.argv", ["prog", "--provider", "kimi", "--plain"])
 
     mock_results = {
-        "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")],
-        "openai": [ProviderUsage(provider="openai", label="Tokens", used=100, limit=None, remaining=None, percent=None, reset_at=None, unit="tokens")]
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=10,
+                limit=100,
+                remaining=90,
+                percent=10,
+                reset_at=None,
+                unit="%",
+            )
+        ],
+        "openai": [
+            ProviderUsage(
+                provider="openai",
+                label="Tokens",
+                used=100,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="tokens",
+            )
+        ],
     }
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_results, {}))) as mock_dispatch:
@@ -165,6 +314,7 @@ async def test_main_with_provider_filter(monkeypatch, capsys):
     assert "Kimi - " in captured.out
     assert "Openai" not in captured.out
 
+
 @pytest.mark.asyncio
 async def test_main_custom_config_path(monkeypatch, capsys):
     monkeypatch.setattr("sys.argv", ["prog", "--config", "/tmp/dummy.json"])
@@ -175,18 +325,22 @@ async def test_main_custom_config_path(monkeypatch, capsys):
             await main()
             mock_resolver.assert_called_once_with(config_path="/tmp/dummy.json")
 
+
 def test_run_cli(monkeypatch):
     monkeypatch.setattr("sys.argv", ["prog"])
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=({}, {}))):
         run_cli()
 
+
 def test_main_guard_calls_run_cli():
     import asyncio
     import runpy
-    with patch.object(asyncio, 'run') as mock_run:
-        runpy.run_module('kimi_code_usage.main', run_name='__main__')
+
+    with patch.object(asyncio, "run") as mock_run:
+        runpy.run_module("kimi_code_usage.main", run_name="__main__")
     mock_run.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_main_theme_cli(monkeypatch, capsys):
@@ -194,7 +348,18 @@ async def test_main_theme_cli(monkeypatch, capsys):
     monkeypatch.setattr("sys.argv", ["prog", "--theme", "sky-dark"])
 
     mock_results = {
-        "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")]
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=10,
+                limit=100,
+                remaining=90,
+                percent=10,
+                reset_at=None,
+                unit="%",
+            )
+        ]
     }
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_results, {}))):
@@ -203,13 +368,24 @@ async def test_main_theme_cli(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert "Weekly Usage" in captured.out or "周" in captured.out
 
+
 def test_all_themes_rendering():
     # Test rendering with all 9 themes and invalid fallback theme
     from kimi_code_usage.main import THEME_MAP
 
     results = {
         "kimi": [
-            ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at="06-11 12:00", unit="%", countdown="1d 2h")
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=10,
+                limit=100,
+                remaining=90,
+                percent=10,
+                reset_at="06-11 12:00",
+                unit="%",
+                countdown="1d 2h",
+            )
         ]
     }
 
@@ -225,43 +401,49 @@ def test_all_themes_rendering():
 
 # ── _handle_key unit tests ──────────────────────────────────────────────────
 
-@pytest.mark.parametrize("ch,idx,n,expected", [
-    ('q', 2, 5, (2, True, False, None, False, False, False)),
-    ('Q', 2, 5, (2, True, False, None, False, False, False)),
-    ('\x03', 2, 5, (2, True, False, None, False, False, False)),
-    ('\x04', 2, 5, (2, True, False, None, False, False, False)),
-    (']', 0, 5, (1, False, False, None, False, False, False)),
-    ('n', 0, 5, (1, False, False, None, False, False, False)),
-    ('\t', 0, 5, (1, False, False, None, False, False, False)),
-    ('\x1b[C', 0, 5, (1, False, False, None, False, False, False)),
-    (']', 4, 5, (0, False, False, None, False, False, False)),  # wrap forward
-    ('[', 2, 5, (1, False, False, None, False, False, False)),
-    ('p', 2, 5, (1, False, False, None, False, False, False)),
-    ('\x1b[D', 2, 5, (1, False, False, None, False, False, False)),
-    ('[', 0, 5, (4, False, False, None, False, False, False)),  # wrap backward
-    ('r', 3, 5, (3, False, True, None, False, False, False)),
-    ('R', 3, 5, (3, False, True, None, False, False, False)),
-    ('1', 2, 5, (2, False, False, 0, False, False, False)),
-    ('2', 2, 5, (2, False, False, 1, False, False, False)),
-    ('3', 2, 5, (2, False, False, 2, False, False, False)),
-    ('4', 2, 5, (2, False, False, 3, False, False, False)),
-    ('l', 2, 5, (2, False, False, None, True, False, False)),
-    ('L', 2, 5, (2, False, False, None, True, False, False)),
-    ('m', 2, 5, (2, False, False, None, False, True, False)),
-    ('M', 2, 5, (2, False, False, None, False, True, False)),
-    ('d', 2, 5, (2, False, False, None, False, False, True)),
-    ('D', 2, 5, (2, False, False, None, False, False, True)),
-    ('x', 2, 5, (2, False, False, None, False, False, False)),
-])
+
+@pytest.mark.parametrize(
+    "ch,idx,n,expected",
+    [
+        ("q", 2, 5, (2, True, False, None, False, False, False)),
+        ("Q", 2, 5, (2, True, False, None, False, False, False)),
+        ("\x03", 2, 5, (2, True, False, None, False, False, False)),
+        ("\x04", 2, 5, (2, True, False, None, False, False, False)),
+        ("]", 0, 5, (1, False, False, None, False, False, False)),
+        ("n", 0, 5, (1, False, False, None, False, False, False)),
+        ("\t", 0, 5, (1, False, False, None, False, False, False)),
+        ("\x1b[C", 0, 5, (1, False, False, None, False, False, False)),
+        ("]", 4, 5, (0, False, False, None, False, False, False)),  # wrap forward
+        ("[", 2, 5, (1, False, False, None, False, False, False)),
+        ("p", 2, 5, (1, False, False, None, False, False, False)),
+        ("\x1b[D", 2, 5, (1, False, False, None, False, False, False)),
+        ("[", 0, 5, (4, False, False, None, False, False, False)),  # wrap backward
+        ("r", 3, 5, (3, False, True, None, False, False, False)),
+        ("R", 3, 5, (3, False, True, None, False, False, False)),
+        ("1", 2, 5, (2, False, False, 0, False, False, False)),
+        ("2", 2, 5, (2, False, False, 1, False, False, False)),
+        ("3", 2, 5, (2, False, False, 2, False, False, False)),
+        ("4", 2, 5, (2, False, False, 3, False, False, False)),
+        ("l", 2, 5, (2, False, False, None, True, False, False)),
+        ("L", 2, 5, (2, False, False, None, True, False, False)),
+        ("m", 2, 5, (2, False, False, None, False, True, False)),
+        ("M", 2, 5, (2, False, False, None, False, True, False)),
+        ("d", 2, 5, (2, False, False, None, False, False, True)),
+        ("D", 2, 5, (2, False, False, None, False, False, True)),
+        ("x", 2, 5, (2, False, False, None, False, False, False)),
+    ],
+)
 def test_handle_key(ch, idx, n, expected):
     assert _handle_key(ch, idx, n) == expected
 
 
 # ── _interactive_mode integration tests ────────────────────────────────────
 
+
 def _make_interactive_config(monkeypatch):
     """Return a minimal AppConfig with kimi enabled."""
     from kimi_code_usage.config import ConfigResolver
+
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
     return ConfigResolver().resolve()
 
@@ -270,6 +452,7 @@ def _mock_terminal(monkeypatch):
     """Suppress all real terminal calls (termios/tty/fileno)."""
     import termios as _termios
     import tty as _tty
+
     monkeypatch.setattr(_termios, "tcgetattr", lambda fd: [])
     monkeypatch.setattr(_termios, "tcsetattr", lambda *a: None)
     monkeypatch.setattr(_tty, "setcbreak", lambda fd: None)
@@ -283,6 +466,7 @@ def _make_select_and_read(key_sequence):
     """Build mock select + stdin.read from a list of key strings.
     Each item is one logical key (plain char or '\x1b[C' etc.)."""
     import io
+
     buf = io.StringIO()
     for k in key_sequence:
         buf.write(k)
@@ -301,22 +485,39 @@ def _make_select_and_read(key_sequence):
     return mock_select, mock_read
 
 
-def _run_interactive_mode(monkeypatch, keys, theme="blue-dark", cfg=None, dispatch_call_count=None, live_update_min=None):
+def _run_interactive_mode(
+    monkeypatch, keys, theme="blue-dark", cfg=None, dispatch_call_count=None, live_update_min=None
+):
     """Run _interactive_mode with a mocked terminal and stdin key sequence."""
     _mock_terminal(monkeypatch)
     mock_select, mock_read = _make_select_and_read(keys)
     import kimi_code_usage.main as main_mod
+
     monkeypatch.setattr(main_mod._select_module, "select", mock_select)
     monkeypatch.setattr(sys.stdin, "read", mock_read)
 
     cfg = cfg or _make_interactive_config(monkeypatch)
-    mock_res = {"kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=5, limit=100, remaining=95, percent=5, reset_at=None, unit="%")]}
+    mock_res = {
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=5,
+                limit=100,
+                remaining=95,
+                percent=5,
+                reset_at=None,
+                unit="%",
+            )
+        ]
+    }
 
     dispatch_mock = AsyncMock(return_value=(mock_res, {}))
     with patch("kimi_code_usage.main.dispatch_all", dispatch_mock):
         with patch("kimi_code_usage.main.Live") as mock_live_cls:
             mock_live = mock_live_cls.return_value.__enter__.return_value
             import asyncio
+
             asyncio.run(_interactive_mode(cfg, theme))
             if live_update_min is not None:
                 assert mock_live.update.call_count >= live_update_min
@@ -327,6 +528,7 @@ def _run_interactive_mode(monkeypatch, keys, theme="blue-dark", cfg=None, dispat
 
 def _cfg_one_provider(m):
     from kimi_code_usage.config import AppConfig, ProviderConfig
+
     cfg = AppConfig()
     cfg.providers = {"kimi": ProviderConfig(api_key="k", enabled=True)}
     cfg.provider_order = ["kimi"]
@@ -343,22 +545,32 @@ def _panel_plain(panel):
     return "\n".join(parts)
 
 
-@pytest.mark.parametrize("keys,theme,live_update_min,dispatch_call_count,cfg_maker", [
-    (["q"], "blue-dark", 1, 1, None),
-    (["r", "q"], "blue-dark", 2, 2, None),
-    (["\x1b[C", "\x1b[D", "]", "[", "q"], "blue-dark", 4, 1, None),
-    (["1", "q"], "blue-dark", 2, 1, None),
-    (["4", "q"], "blue-dark", 2, 1, _cfg_one_provider),
-    (["1", "1", "q"], "blue-dark", 3, 1, None),
-    (["l", "l", "q"], "blue-dark", 3, 1, None),
-    (["m", "d", "q"], "blue-dark", 3, 1, None),
-    (["\x1b[B", "\x1b[A", "\x1b[6~", "\x1b[5~", "q"], "blue-dark", 4, 1, None),
-    (["q"], "nonexistent-theme", 1, 1, None),
-])
+@pytest.mark.parametrize(
+    "keys,theme,live_update_min,dispatch_call_count,cfg_maker",
+    [
+        (["q"], "blue-dark", 1, 1, None),
+        (["r", "q"], "blue-dark", 2, 2, None),
+        (["\x1b[C", "\x1b[D", "]", "[", "q"], "blue-dark", 4, 1, None),
+        (["1", "q"], "blue-dark", 2, 1, None),
+        (["4", "q"], "blue-dark", 2, 1, _cfg_one_provider),
+        (["1", "1", "q"], "blue-dark", 3, 1, None),
+        (["l", "l", "q"], "blue-dark", 3, 1, None),
+        (["m", "d", "q"], "blue-dark", 3, 1, None),
+        (["\x1b[B", "\x1b[A", "\x1b[6~", "\x1b[5~", "q"], "blue-dark", 4, 1, None),
+        (["q"], "nonexistent-theme", 1, 1, None),
+    ],
+)
 def test_interactive_mode_common_keys(monkeypatch, keys, theme, live_update_min, dispatch_call_count, cfg_maker):
     """Common interactive key sequences."""
     cfg = cfg_maker(monkeypatch) if cfg_maker else _make_interactive_config(monkeypatch)
-    _run_interactive_mode(monkeypatch, keys, theme=theme, cfg=cfg, live_update_min=live_update_min, dispatch_call_count=dispatch_call_count)
+    _run_interactive_mode(
+        monkeypatch,
+        keys,
+        theme=theme,
+        cfg=cfg,
+        live_update_min=live_update_min,
+        dispatch_call_count=dispatch_call_count,
+    )
 
 
 @pytest.mark.parametrize("language", ["en", "zh"])
@@ -378,7 +590,9 @@ def test_render_config_guide_includes_supported_provider_setup():
         "kimi": ProviderConfig(api_key="sk-kimi-1234567890", base_url="https://api.kimi.com/coding/v1"),
         "openai": ProviderConfig(api_key="sk-openai-abcdef1234", base_url="https://api.openai.com"),
         "anthropic": ProviderConfig(api_key=None, base_url="https://api.anthropic.com"),
-        "openrouter": ProviderConfig(api_key="sk-or-v1-abcdef1234", base_url="https://openrouter.ai/api", management_key="or-mgmt-1234"),
+        "openrouter": ProviderConfig(
+            api_key="sk-or-v1-abcdef1234", base_url="https://openrouter.ai/api", management_key="or-mgmt-1234"
+        ),
     }
     cfg.provider_order = ["kimi", "openai", "anthropic", "openrouter"]
 
@@ -406,11 +620,25 @@ async def test_interactive_mode_help_and_config_keys(monkeypatch):
     _mock_terminal(monkeypatch)
     mock_select, mock_read = _make_select_and_read(["h", "c", "q"])
     import kimi_code_usage.main as main_mod
+
     monkeypatch.setattr(main_mod._select_module, "select", mock_select)
     monkeypatch.setattr(sys.stdin, "read", mock_read)
 
     cfg = _make_interactive_config(monkeypatch)
-    mock_res = {"kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=5, limit=100, remaining=95, percent=5, reset_at=None, unit="%")]}
+    mock_res = {
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=5,
+                limit=100,
+                remaining=95,
+                percent=5,
+                reset_at=None,
+                unit="%",
+            )
+        ]
+    }
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live") as mock_live_cls:
@@ -426,15 +654,266 @@ async def test_interactive_mode_help_and_config_keys(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_interactive_mode_top_bar_shows_only_visible_providers(monkeypatch):
+    """Top bar omits hidden providers and renumbers visible ones."""
+    _mock_terminal(monkeypatch)
+    mock_select, mock_read = _make_select_and_read(["q"])
+    import kimi_code_usage.main as main_mod
+
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    cfg = _make_interactive_config(monkeypatch)
+    cfg.provider_order = ["kimi", "openai", "anthropic", "openrouter", "codex", "claude"]
+    cfg.visible_providers = ["kimi", "openai"]
+    mock_res = {
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=5,
+                limit=100,
+                remaining=95,
+                percent=5,
+                reset_at=None,
+                unit="%",
+            )
+        ],
+        "openai": [
+            ProviderUsage(
+                provider="openai",
+                label="Tokens",
+                used=100,
+                limit=1000,
+                remaining=900,
+                percent=10,
+                reset_at=None,
+                unit="tokens",
+            )
+        ],
+    }
+
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+        with patch("kimi_code_usage.main.Live") as mock_live_cls:
+            mock_live = mock_live_cls.return_value.__enter__.return_value
+            await _interactive_mode(cfg, "blue-dark")
+
+    rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
+    assert "[1]Kimi" in rendered
+    assert "[2]ChatGPT+" in rendered or "[2]OpenAI API" in rendered
+    assert "[3]" not in rendered
+    assert "[4]" not in rendered
+    assert "[5]" not in rendered
+    assert "[6]" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_interactive_mode_top_bar_placeholder_when_all_hidden(monkeypatch):
+    """When all providers are hidden, top bar shows a dim placeholder."""
+    _mock_terminal(monkeypatch)
+    mock_select, mock_read = _make_select_and_read(["q"])
+    import kimi_code_usage.main as main_mod
+
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    cfg = _make_interactive_config(monkeypatch)
+    cfg.provider_order = ["kimi", "openai"]
+    cfg.visible_providers = []
+    mock_res = {}
+
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+        with patch("kimi_code_usage.main.Live") as mock_live_cls:
+            mock_live = mock_live_cls.return_value.__enter__.return_value
+            await _interactive_mode(cfg, "blue-dark")
+
+    rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
+    assert "(no visible panels)" in rendered or "（无可见面板）" in rendered
+    # Footer panels hint is hidden when no providers are visible (no [1-0]).
+    assert "[1-" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_interactive_mode_usage_number_key_targets_visible_order(monkeypatch):
+    """Pressing [2] in usage view hides the second visible provider, not provider_order[1]."""
+    _mock_terminal(monkeypatch)
+    mock_select, mock_read = _make_select_and_read(["2", "q"])
+    import kimi_code_usage.main as main_mod
+
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    cfg = _make_interactive_config(monkeypatch)
+    cfg.provider_order = ["kimi", "openai", "anthropic"]
+    cfg.visible_providers = ["kimi", "anthropic"]  # openai is hidden
+    mock_res = {
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=5,
+                limit=100,
+                remaining=95,
+                percent=5,
+                reset_at=None,
+                unit="%",
+            )
+        ],
+        "anthropic": [
+            ProviderUsage(
+                provider="anthropic",
+                label="API Plan",
+                used=0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                text_value="Pro Plan",
+            )
+        ],
+    }
+
+    saved_calls = []
+
+    def fake_save(theme, language=None, visible_providers=None, or_metric=None, days_window=None, config_path=None):
+        saved_calls.append((theme, language, visible_providers, or_metric, days_window))
+
+    with patch("kimi_code_usage.main.save_theme", fake_save):
+        with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+            with patch("kimi_code_usage.main.Live") as mock_live_cls:
+                mock_live = mock_live_cls.return_value.__enter__.return_value
+                await _interactive_mode(cfg, "blue-dark")
+
+    rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
+    # anthropic was at [2] in the visible top bar; pressing 2 should hide it
+    assert "[2]Anthropic" not in rendered
+    assert "[1]Kimi" in rendered
+
+
+@pytest.mark.asyncio
+async def test_interactive_mode_settings_number_key_toggles_full_list(monkeypatch):
+    """In settings view, [2] toggles provider_order[1] even if it is not currently visible."""
+    _mock_terminal(monkeypatch)
+    mock_select, mock_read = _make_select_and_read(["s", "2", "q"])
+    import kimi_code_usage.main as main_mod
+
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    cfg = _make_interactive_config(monkeypatch)
+    cfg.provider_order = ["kimi", "openai", "anthropic"]
+    cfg.visible_providers = ["kimi", "anthropic"]  # openai starts hidden
+    mock_res = {
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=5,
+                limit=100,
+                remaining=95,
+                percent=5,
+                reset_at=None,
+                unit="%",
+            )
+        ],
+        "anthropic": [
+            ProviderUsage(
+                provider="anthropic",
+                label="API Plan",
+                used=0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                text_value="Pro Plan",
+            )
+        ],
+    }
+
+    saved_calls = []
+
+    def fake_save(theme, language=None, visible_providers=None, or_metric=None, days_window=None, config_path=None):
+        saved_calls.append((theme, language, visible_providers, or_metric, days_window))
+
+    with patch("kimi_code_usage.main.save_theme", fake_save):
+        with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+            with patch("kimi_code_usage.main.Live") as mock_live_cls:
+                mock_live = mock_live_cls.return_value.__enter__.return_value
+                await _interactive_mode(cfg, "blue-dark")
+
+    rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
+    # After pressing 2 in settings, openai becomes visible
+    assert "● [2] OpenAI API" in rendered or "● [2] OpenAI" in rendered
+
+
+@pytest.mark.asyncio
+async def test_interactive_mode_footer_hints_reflect_visible_count(monkeypatch):
+    """Footer number range matches visible count in usage view and full count in settings view."""
+    _mock_terminal(monkeypatch)
+    # Refresh first to force a usage-view update (the initial panel is rendered by
+    # Live on entry, not via update()), then switch to settings and quit.
+    mock_select, mock_read = _make_select_and_read(["r", "s", "q"])
+    import kimi_code_usage.main as main_mod
+
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    cfg = _make_interactive_config(monkeypatch)
+    cfg.provider_order = ["kimi", "openai", "anthropic", "openrouter", "codex", "claude"]
+    cfg.visible_providers = ["kimi", "openai"]
+    mock_res = {
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=5,
+                limit=100,
+                remaining=95,
+                percent=5,
+                reset_at=None,
+                unit="%",
+            )
+        ],
+        "openai": [
+            ProviderUsage(
+                provider="openai",
+                label="Tokens",
+                used=100,
+                limit=1000,
+                remaining=900,
+                percent=10,
+                reset_at=None,
+                unit="tokens",
+            )
+        ],
+    }
+
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+        with patch("kimi_code_usage.main.Live") as mock_live_cls:
+            mock_live = mock_live_cls.return_value.__enter__.return_value
+            await _interactive_mode(cfg, "blue-dark")
+
+    rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
+    # Usage view after 'r' should show [1-2]
+    # Settings view after 's' should show [1-6]
+    # Because the test renders both views, assert both ranges appear at some point.
+    assert "[1-2]" in rendered
+    assert "[1-6]" in rendered
+
+
+@pytest.mark.asyncio
 async def test_interactive_mode_lone_escape(monkeypatch):
     """A lone ESC with no follow-up → treated as unknown key (no-op), then q."""
     _mock_terminal(monkeypatch)
 
     import kimi_code_usage.main as main_mod
+
     select_calls = [0]
 
     # stdin holds: ESC, q
-    buf = ['\x1b', 'q']
+    buf = ["\x1b", "q"]
     buf_pos = [0]
 
     def mock_select(rlist, wlist, xlist, timeout):
@@ -460,7 +939,20 @@ async def test_interactive_mode_lone_escape(monkeypatch):
     monkeypatch.setattr(sys.stdin, "read", mock_read)
 
     cfg = _make_interactive_config(monkeypatch)
-    mock_res = {"kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=5, limit=100, remaining=95, percent=5, reset_at=None, unit="%")]}
+    mock_res = {
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=5,
+                limit=100,
+                remaining=95,
+                percent=5,
+                reset_at=None,
+                unit="%",
+            )
+        ]
+    }
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live"):
@@ -473,6 +965,7 @@ async def test_interactive_mode_no_key_timeout(monkeypatch):
     _mock_terminal(monkeypatch)
 
     import kimi_code_usage.main as main_mod
+
     call_count = [0]
 
     def mock_select(rlist, wlist, xlist, timeout):
@@ -483,13 +976,26 @@ async def test_interactive_mode_no_key_timeout(monkeypatch):
         return ([sys.stdin], [], [])
 
     def mock_read(n):
-        return 'q'
+        return "q"
 
     monkeypatch.setattr(main_mod._select_module, "select", mock_select)
     monkeypatch.setattr(sys.stdin, "read", mock_read)
 
     cfg = _make_interactive_config(monkeypatch)
-    mock_res = {"kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=5, limit=100, remaining=95, percent=5, reset_at=None, unit="%")]}
+    mock_res = {
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=5,
+                limit=100,
+                remaining=95,
+                percent=5,
+                reset_at=None,
+                unit="%",
+            )
+        ]
+    }
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live"):
@@ -510,17 +1016,21 @@ async def test_main_interactive_flag(monkeypatch):
 
 # ── save_theme (config.py) unit tests ─────────────────────────────────────
 
+
 def test_save_theme_creates_config(tmp_path):
     """save_theme creates the config file and directory if they don't exist."""
     from kimi_code_usage.config import save_theme as cfg_save
+
     dest = tmp_path / "subdir" / "config.json"
     cfg_save("sky-dark", config_path=dest)
     data = json.loads(dest.read_text())
     assert data["general"]["theme"] == "sky-dark"
 
+
 def test_save_theme_updates_existing(tmp_path):
     """save_theme updates general.theme while preserving other keys."""
     from kimi_code_usage.config import save_theme as cfg_save
+
     dest = tmp_path / "config.json"
     dest.write_text(json.dumps({"general": {"theme": "old", "foo": "bar"}, "other": 1}))
     cfg_save("viridian-dark", language="zh", visible_providers=["kimi"], config_path=dest)
@@ -528,12 +1038,14 @@ def test_save_theme_updates_existing(tmp_path):
     assert data["general"]["theme"] == "viridian-dark"
     assert data["general"]["language"] == "zh"
     assert data["general"]["visibleProviders"] == ["kimi"]
-    assert data["general"]["foo"] == "bar"   # preserved
-    assert data["other"] == 1                 # preserved
+    assert data["general"]["foo"] == "bar"  # preserved
+    assert data["other"] == 1  # preserved
+
 
 def test_save_theme_corrupt_json(tmp_path):
     """save_theme silently recovers from corrupt existing JSON."""
     from kimi_code_usage.config import save_theme as cfg_save
+
     dest = tmp_path / "config.json"
     dest.write_text("NOT VALID JSON{{{")
     cfg_save("monochrome", config_path=dest)
@@ -543,22 +1055,46 @@ def test_save_theme_corrupt_json(tmp_path):
 
 # ── Enter key → save theme integration test ───────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_interactive_mode_enter_saves_theme(monkeypatch, tmp_path):
     """Press Enter → save_theme called; saved_notice shown; next key clears it."""
     _mock_terminal(monkeypatch)
     # Enter (\r), then another key to clear notice, then q
-    mock_select, mock_read = _make_select_and_read(['\r', 'r', 'q'])
+    mock_select, mock_read = _make_select_and_read(["\r", "r", "q"])
     import kimi_code_usage.main as main_mod
+
     monkeypatch.setattr(main_mod._select_module, "select", mock_select)
     monkeypatch.setattr(sys.stdin, "read", mock_read)
 
     cfg = _make_interactive_config(monkeypatch)
-    mock_res = {"kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=5, limit=100, remaining=95, percent=5, reset_at=None, unit="%")]}
+    mock_res = {
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=5,
+                limit=100,
+                remaining=95,
+                percent=5,
+                reset_at=None,
+                unit="%",
+            )
+        ]
+    }
 
     saved_calls = []
-    def fake_save(theme, language=None, visible_providers=None, or_metric=None, days_window=None, config_path=None):
-        saved_calls.append((theme, language, visible_providers, or_metric, days_window))
+
+    def fake_save(
+        theme,
+        language=None,
+        visible_providers=None,
+        or_metric=None,
+        days_window=None,
+        provider_order=None,
+        config_path=None,
+    ):
+        saved_calls.append((theme, language, visible_providers, or_metric, days_window, provider_order))
 
     with patch("kimi_code_usage.main.save_theme", fake_save):
         with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
@@ -571,6 +1107,7 @@ async def test_interactive_mode_enter_saves_theme(monkeypatch, tmp_path):
     assert saved_calls[0][0] == "blue-dark"
     assert saved_calls[0][1] in ("zh", "en")
     assert "kimi" in saved_calls[0][2]
+    assert saved_calls[0][5] == list(cfg.provider_order)
     # panel updated at least twice (Enter update + subsequent updates)
     assert mock_live.update.call_count >= 2
 
@@ -610,7 +1147,6 @@ def test_localization_helpers():
     assert _get_localized_label("45m Limit", lang_zh=False) == "45m Limit"
     assert _get_localized_label("30s Limit", lang_zh=True) == "30s 限额"  # falls back to replacing "Limit" with "限额"
     assert _get_localized_label("30s Limit", lang_zh=False) == "30s Limit"
-
 
     # 2. Test _get_localized_text_value
     assert _get_localized_text_value(None, lang_zh=True) is None
@@ -653,13 +1189,20 @@ def test_format_aggregated_results_edge_cases():
     # 1. Non-empty results with multiple errors
     results = {
         "kimi": [
-            ProviderUsage(provider="kimi", label="API Plan", used=0, limit=None, remaining=None, percent=None, reset_at=None, unit="text", text_value=None)
+            ProviderUsage(
+                provider="kimi",
+                label="API Plan",
+                used=0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                text_value=None,
+            )
         ]
     }
-    errors = {
-        "kimi": "error1",
-        "openai": "error2"
-    }
+    errors = {"kimi": "error1", "openai": "error2"}
     text = _format_aggregated_results(results, errors)
     raw_text = str(text)
     assert "error1" in raw_text
@@ -675,18 +1218,27 @@ def test_format_aggregated_results_edge_cases():
     # 3. Test "Not configured" error in Chinese and long error message width adjustment
     results_edge = {
         "kimi": [
-            ProviderUsage(provider="kimi", label="API Plan", used=0, limit=None, remaining=None, percent=None, reset_at=None, unit="text", text_value="Short")
+            ProviderUsage(
+                provider="kimi",
+                label="API Plan",
+                used=0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                text_value="Short",
+            )
         ]
     }
     errors_edge = {
         "openai": "Not configured",
-        "anthropic": "This is an extremely long error message that exceeds the maximum visual width of any successful panel rows"
+        "anthropic": "This is an extremely long error message that exceeds the maximum visual width of any successful panel rows",
     }
     text_zh = _format_aggregated_results(results_edge, errors_edge, lang_zh=True)
     raw_text_zh = str(text_zh)
     assert "未配置" in raw_text_zh
     assert "This is an extremely long error message" in raw_text_zh
-
 
 
 @pytest.mark.asyncio
@@ -695,7 +1247,18 @@ async def test_main_json_output_no_errors(monkeypatch, capsys):
     monkeypatch.setattr("sys.argv", ["prog", "--json"])
 
     mock_results = {
-        "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=10, limit=100, remaining=90, percent=10, reset_at=None, unit="%")]
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=10,
+                limit=100,
+                remaining=90,
+                percent=10,
+                reset_at=None,
+                unit="%",
+            )
+        ]
     }
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_results, {}))):
@@ -713,7 +1276,7 @@ async def test_interactive_mode_escape_keys(monkeypatch):
     import kimi_code_usage.main as main_mod
 
     # Case 1: Escape followed by non-'[' character (e.g. '\x1b', 'A', 'q')
-    inputs_1 = ['\x1b', 'A', 'q']
+    inputs_1 = ["\x1b", "A", "q"]
     idx_1 = [0]
 
     def mock_select_1(rlist, wlist, xlist, timeout):
@@ -730,14 +1293,27 @@ async def test_interactive_mode_escape_keys(monkeypatch):
     monkeypatch.setattr(sys.stdin, "read", mock_read_1)
 
     cfg = _make_interactive_config(monkeypatch)
-    mock_res = {"kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=5, limit=100, remaining=95, percent=5, reset_at=None, unit="%")]}
+    mock_res = {
+        "kimi": [
+            ProviderUsage(
+                provider="kimi",
+                label="Weekly Usage",
+                used=5,
+                limit=100,
+                remaining=95,
+                percent=5,
+                reset_at=None,
+                unit="%",
+            )
+        ]
+    }
 
     with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
         with patch("kimi_code_usage.main.Live"):
             await _interactive_mode(cfg, "blue-dark")
 
     # Case 2: Escape followed by '[', but no 3rd character (timeout on r3)
-    inputs_2 = ['\x1b', '[', 'q']
+    inputs_2 = ["\x1b", "[", "q"]
     idx_2 = [0]
 
     def mock_select_2(rlist, wlist, xlist, timeout):
@@ -801,12 +1377,19 @@ def test_render_daily_chart_variants():
     assert short_date("06-12") == "06-12"
     # Trim branch: 90-day window exceeds max_chart_width, so only recent days are shown
     from datetime import datetime, timedelta
+
     base = datetime(2026, 3, 16)
     wide_daily = [
-        DailyUsage(date=(base + timedelta(days=i)).strftime("%Y-%m-%d"), models=[ModelUsage(model="m1", requests=1)], total=0.01)
+        DailyUsage(
+            date=(base + timedelta(days=i)).strftime("%Y-%m-%d"),
+            models=[ModelUsage(model="m1", requests=1)],
+            total=0.01,
+        )
         for i in range(90)
     ]
-    text_wide = _render_daily_chart(wide_daily, lang_zh=False, theme=THEME_MAP["blue-dark"], metric="requests", days_window=90)
+    text_wide = _render_daily_chart(
+        wide_daily, lang_zh=False, theme=THEME_MAP["blue-dark"], metric="requests", days_window=90
+    )
     raw_wide = str(text_wide)
     assert "Daily Requests" in raw_wide
     # Trimmed to the most recent 70 days, so the earliest visible label is 04-05
@@ -831,7 +1414,13 @@ def test_render_daily_chart_variants():
 
     # Tokens metric and short date fallback
     text_tokens = _render_daily_chart(
-        [DailyUsage(date="2026-06-12", models=[ModelUsage(model="no-slash", requests=1, prompt_tokens=1000, completion_tokens=500)], total=0)],
+        [
+            DailyUsage(
+                date="2026-06-12",
+                models=[ModelUsage(model="no-slash", requests=1, prompt_tokens=1000, completion_tokens=500)],
+                total=0,
+            )
+        ],
         lang_zh=False,
         theme=THEME_MAP["blue-dark"],
         metric="tokens",
@@ -856,17 +1445,20 @@ def test_render_daily_chart_variants():
             ],
         ),
     ]
-    text_others = _render_daily_chart(lots_of_models, lang_zh=False, theme=THEME_MAP["blue-dark"], metric="requests", days_window=7)
+    text_others = _render_daily_chart(
+        lots_of_models, lang_zh=False, theme=THEME_MAP["blue-dark"], metric="requests", days_window=7
+    )
     assert "Daily Requests" in str(text_others)
 
 
-
-
-@pytest.mark.parametrize("metric,expected", [
-    ("spend", "$"),
-    ("requests", "1,000"),
-    ("tokens", "1.0M"),
-])
+@pytest.mark.parametrize(
+    "metric,expected",
+    [
+        ("spend", "$"),
+        ("requests", "1,000"),
+        ("tokens", "1.0M"),
+    ],
+)
 def test_render_top_models_metrics(metric, expected):
     models = [
         ModelUsage(
@@ -946,8 +1538,14 @@ def test_format_aggregated_results_with_openrouter_activity():
                 reset_at=None,
                 unit="text",
                 daily_activity=[
-                    DailyUsage(date="2026-06-10", models=[ModelUsage(model="anthropic/claude-opus-4", requests=10, spend=3.5)], total=3.5),
-                    DailyUsage(date="2026-06-11", models=[ModelUsage(model="openai/gpt-4.1", requests=5, spend=0.8)], total=0.8),
+                    DailyUsage(
+                        date="2026-06-10",
+                        models=[ModelUsage(model="anthropic/claude-opus-4", requests=10, spend=3.5)],
+                        total=3.5,
+                    ),
+                    DailyUsage(
+                        date="2026-06-11", models=[ModelUsage(model="openai/gpt-4.1", requests=5, spend=0.8)], total=0.8
+                    ),
                 ],
             ),
             ProviderUsage(
@@ -968,7 +1566,7 @@ def test_format_aggregated_results_with_openrouter_activity():
     }
     text = _format_aggregated_results(results, {}, order=["openrouter"], lang_zh=False)
     raw = str(text)
-    assert "Openrouter" in raw
+    assert "OpenRouter" in raw
     assert "Credits" in raw
     assert "Req: 45" in raw
     assert "Daily Requests" in raw
@@ -1004,28 +1602,42 @@ def test_build_openrouter_color_map():
     colors = _model_colors(theme)
     # Prefer the top_models row; rank by the displayed metric (tokens), not the row's spend order
     top_row = ProviderUsage(
-        provider="openrouter", label="Top Models", used=0.0, limit=None, remaining=None,
-        percent=None, reset_at=None, unit="text",
+        provider="openrouter",
+        label="Top Models",
+        used=0.0,
+        limit=None,
+        remaining=None,
+        percent=None,
+        reset_at=None,
+        unit="text",
         top_models=[
             ModelUsage(model="laguna", spend=5.0, prompt_tokens=1_000_000),
             ModelUsage(model="hy3", spend=1.0, prompt_tokens=9_000_000),
         ],
     )
     cmap = _build_openrouter_color_map([top_row], metric="tokens", theme=theme)
-    assert cmap["hy3"] == colors[0]      # 9M tokens → ranked first
-    assert cmap["laguna"] == colors[1]   # 1M tokens → second
+    assert cmap["hy3"] == colors[0]  # 9M tokens → ranked first
+    assert cmap["laguna"] == colors[1]  # 1M tokens → second
 
     # No model breakdown → None (e.g. non-OpenRouter providers)
-    plain_row = ProviderUsage(provider="kimi", label="x", used=0.0, limit=None, remaining=None,
-                              percent=None, reset_at=None, unit="text")
+    plain_row = ProviderUsage(
+        provider="kimi", label="x", used=0.0, limit=None, remaining=None, percent=None, reset_at=None, unit="text"
+    )
     assert _build_openrouter_color_map([plain_row], metric="tokens", theme=theme) is None
 
     # Falls back to daily_activity when there is no top_models row
     daily_row = ProviderUsage(
-        provider="openrouter", label="Daily", used=0.0, limit=None, remaining=None,
-        percent=None, reset_at=None, unit="text",
-        daily_activity=[DailyUsage(date="2026-07-10",
-                                   models=[ModelUsage(model="z", prompt_tokens=5_000_000)], total=0.0)],
+        provider="openrouter",
+        label="Daily",
+        used=0.0,
+        limit=None,
+        remaining=None,
+        percent=None,
+        reset_at=None,
+        unit="text",
+        daily_activity=[
+            DailyUsage(date="2026-07-10", models=[ModelUsage(model="z", prompt_tokens=5_000_000)], total=0.0)
+        ],
     )
     assert _build_openrouter_color_map([daily_row], metric="tokens", theme=theme) == {"z": colors[0]}
 
@@ -1041,13 +1653,18 @@ def test_daily_and_top_models_share_colors():
     assert hy3_color != color_map["laguna-m.1"]
 
     daily = [
-        DailyUsage(date="2026-07-10",
-                   models=[ModelUsage(model="hy3", prompt_tokens=9_000_000),
-                           ModelUsage(model="laguna-m.1", prompt_tokens=1_000_000)],
-                   total=0.0),
+        DailyUsage(
+            date="2026-07-10",
+            models=[
+                ModelUsage(model="hy3", prompt_tokens=9_000_000),
+                ModelUsage(model="laguna-m.1", prompt_tokens=1_000_000),
+            ],
+            total=0.0,
+        ),
     ]
-    daily_text = _render_daily_chart(daily, lang_zh=False, theme=theme, metric="tokens",
-                                     days_window=7, color_map=color_map)
+    daily_text = _render_daily_chart(
+        daily, lang_zh=False, theme=theme, metric="tokens", days_window=7, color_map=color_map
+    )
     daily_styles = {str(s.style) for s in daily_text.spans}
     assert hy3_color in daily_styles
 
@@ -1105,14 +1722,14 @@ def test_fit_scroll_body():
     big = Text("\n".join(f"L{i}" for i in range(20)))
     out, off = _fit_scroll_body(big, budget=10, scroll_offset=0, lang_zh=False)
     lines = out.plain.split("\n")
-    assert len(lines) == 10           # 9 content + 1 indicator
+    assert len(lines) == 10  # 9 content + 1 indicator
     assert "L0" in lines[0]
     assert "▼" in lines[-1] and "/20" in lines[-1]  # more below, position shown
-    assert "▲" not in lines[-1]                      # at top → no up arrow
+    assert "▲" not in lines[-1]  # at top → no up arrow
 
     # Offset beyond the end clamps to max, last content line is the final one
     out2, off2 = _fit_scroll_body(big, budget=10, scroll_offset=999, lang_zh=False)
-    assert off2 == 20 - 9             # max_off = total - view_rows
+    assert off2 == 20 - 9  # max_off = total - view_rows
     lines2 = out2.plain.split("\n")
     assert "L19" in lines2[-2]
     assert "▲" in lines2[-1] and "▼" not in lines2[-1]  # at bottom → only up arrow

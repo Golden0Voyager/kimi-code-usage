@@ -51,3 +51,6 @@ tokscale-export-*.json
 
 # Coverage
 htmlcov/
+
+# Isolated development worktrees
+.worktrees/

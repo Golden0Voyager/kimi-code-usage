@@ -30,6 +30,16 @@ L_EN = {
     "error_api": "API Error",
 }
 
+_SHORT = {
+    "anthropic": "Anthropic",
+    "openai": "OpenAI API",
+    "openrouter": "Openrouter",
+    "kimi": "Kimi",
+    "codex": "ChatGPT+",
+    "claude": "Claude",
+}
+
+
 L_ZH = {
     "title": "AI 用量配额监控",
     "weekly_limit": "周用量限额",
@@ -40,6 +50,7 @@ L_ZH = {
     "no_data": "未找到用量数据，或未配置任何服务商。",
     "error_api": "API 错误",
 }
+
 
 L = L_ZH if IS_ZH else L_EN
 
@@ -53,12 +64,12 @@ _PROVIDER_SETUP_HELP = {
         "note_zh": "使用 Kimi Code / Coding Plan 密钥（sk-kimi-...），不要使用 https://api.moonshot.cn/v1。",
     },
     "openai": {
-        "name": "OpenAI",
+        "name": "OpenAI API",
         "key_envs": ("OPENAI_API_KEY",),
         "base_env": "OPENAI_BASE_URL",
         "default_url": "https://api.openai.com",
-        "note_en": "Use an OpenAI API key with organization usage access.",
-        "note_zh": "使用具备用量接口权限的 OpenAI API Key。",
+        "note_en": "OpenAI Platform API billing (requires Org Admin key). Not ChatGPT Plus subscription.",
+        "note_zh": "OpenAI 平台 API 账单（需 Org Admin 密钥）。不是 ChatGPT Plus 订阅。",
     },
     "anthropic": {
         "name": "Anthropic",
@@ -76,10 +87,28 @@ _PROVIDER_SETUP_HELP = {
         "note_en": "Set OPENROUTER_MANAGEMENT_KEY or OPENROUTER_ADMIN_KEY for activity details.",
         "note_zh": "如需活动明细，设置 OPENROUTER_MANAGEMENT_KEY 或 OPENROUTER_ADMIN_KEY。",
     },
+    "codex": {
+        "name": "ChatGPT Plus",
+        "key_envs": ("CODEX_ENABLED",),
+        "base_env": "CODEX_BASE_URL",
+        "default_url": "https://chatgpt.com/backend-api",
+        "note_en": "ChatGPT Plus subscription usage. Reads ~/.codex/auth.json. Set CODEX_ENABLED=true to enable.",
+        "note_zh": "ChatGPT Plus 订阅用量。读取 ~/.codex/auth.json 本地认证文件。设置 CODEX_ENABLED=true 启用。",
+    },
+    "claude": {
+        "name": "Claude",
+        "key_envs": ("CLAUDE_ENABLED",),
+        "base_env": "CLAUDE_BASE_URL",
+        "default_url": "https://api.anthropic.com",
+        "note_en": "Claude subscription usage. Reads ~/.claude/.credentials.json. Set CLAUDE_ENABLED=true to enable.",
+        "note_zh": "Claude 订阅用量。读取 ~/.claude/.credentials.json 本地认证文件。设置 CLAUDE_ENABLED=true 启用。",
+    },
 }
+
 
 def _get_visual_width(s: str) -> int:
     import unicodedata
+
     width = 0
     for char in s:
         if unicodedata.east_asian_width(char) in ("W", "F", "A"):
@@ -95,6 +124,7 @@ def _mask_secret(secret: str | None) -> str:
     if len(secret) <= 8:
         return secret[:2] + "..."
     return f"{secret[:7]}...{secret[-4:]}"
+
 
 def _get_localized_label(label: str, lang_zh: bool = IS_ZH) -> str:
     _L = L_ZH if lang_zh else L_EN
@@ -157,6 +187,7 @@ def _get_localized_text_value(text_val: str, lang_zh: bool) -> str:
     # OpenRouter period usage pattern
     if "Daily: $" in text_val or "今日: $" in text_val:
         import re
+
         floats = re.findall(r"\d+\.\d+", text_val)
         if len(floats) == 3:
             u_daily, u_weekly, u_monthly = float(floats[0]), float(floats[1]), float(floats[2])
@@ -200,6 +231,50 @@ def _get_localized_text_value(text_val: str, lang_zh: bool) -> str:
     return text_val
 
 
+def _render_setting_view(
+    config: "AppConfig",
+    visible_providers: set,
+    settings_cursor: int = 0,
+    lang_zh: bool = False,
+) -> Text:
+    """Render the settings page for toggling and reordering providers."""
+    text = Text()
+    title = "面板设置" if lang_zh else "Panel Settings"
+    text.append(f"{title}\n\n", style="bold")
+
+    order = config.provider_order
+    max_keys = min(len(order), 9)
+    for i, p in enumerate(order):
+        short = _SHORT.get(p, p[:4].title())
+        icon = "●" if p in visible_providers else "○"
+        num = i + 1
+        cursor = "▸" if i == settings_cursor else " "
+        line = f"{cursor} {icon} [{num}] {short}"
+        if i == settings_cursor:
+            text.append(line, style="bold reverse")
+        elif p in visible_providers:
+            text.append(line, style="bold")
+        else:
+            text.append(line, style="dim")
+        text.append("\n")
+
+    text.append("\n", style="bold")
+    if lang_zh:
+        text.append(f"  [1-{max_keys}] 开关面板\n", style="grey62")
+        text.append("  [↑/↓] 移动光标\n", style="grey62")
+        text.append("  [←/→] 移动选中面板\n", style="grey62")
+        text.append("  [s]   返回用量视图\n", style="grey62")
+        text.append("  Enter 保存设置\n", style="grey62")
+    else:
+        text.append(f"  [1-{max_keys}] toggle panels\n", style="grey62")
+        text.append("  [↑/↓] move cursor\n", style="grey62")
+        text.append("  [←/→] move selected panel\n", style="grey62")
+        text.append("  [s]   back to usage\n", style="grey62")
+        text.append("  Enter save settings\n", style="grey62")
+
+    return text
+
+
 def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_window: int = 30) -> Text:
     text = Text()
     title = "交互帮助" if lang_zh else "Interactive Help"
@@ -210,7 +285,9 @@ def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_wi
             ("r", "刷新用量"),
             ("h / ?", "显示或隐藏帮助"),
             ("c", "显示或隐藏配置引导"),
-            ("1-4", "切换服务商面板"),
+            ("s", "面板设置"),
+            ("1-N (usage)", "切换可见服务商面板"),
+            ("1-N (settings)", "切换任意服务商显示/隐藏"),
             ("l", "切换中英文"),
             ("←/→ 或 [ / ]", "切换主题"),
             ("m", f"切换 OpenRouter 指标（当前：{_metric_label(or_metric, True)}）"),
@@ -224,7 +301,9 @@ def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_wi
             ("r", "refresh usage"),
             ("h / ?", "show or hide help"),
             ("c", "show or hide configuration guide"),
-            ("1-4", "toggle provider panels"),
+            ("s", "panel settings"),
+            ("1-N (usage)", "toggle visible provider panels"),
+            ("1-N (settings)", "toggle any provider visibility"),
             ("l", "toggle language"),
             ("←/→ or [ / ]", "cycle theme"),
             ("m", f"cycle OpenRouter metric (current: {_metric_label(or_metric, False)})"),
@@ -254,7 +333,10 @@ def _render_config_guide(
         text.append("读取优先级: config.json > 环境变量 / 当前目录 .env > 默认 base URL\n\n", style="grey62")
     else:
         text.append(f"Config file: {path}\n", style="grey62")
-        text.append("Resolution order: config.json > environment variables / current .env > default base URL\n\n", style="grey62")
+        text.append(
+            "Resolution order: config.json > environment variables / current .env > default base URL\n\n",
+            style="grey62",
+        )
 
     provider_order = list(config.provider_order)
     for provider_name in _PROVIDER_SETUP_HELP:
@@ -309,6 +391,7 @@ def _render_config_guide(
             style="grey62",
         )
     return text
+
 
 # (typing already imported at top)
 
@@ -430,30 +513,30 @@ def _handle_key(ch: str, idx: int, n: int) -> tuple[int, bool, bool, int | None,
     Returns:
         (new_idx, should_quit, should_refresh, toggle_provider_num, lang_toggle, metric_toggle, days_toggle)
     """
-    if ch in ('q', 'Q', '\x03', '\x04'):       # q  Ctrl-C  Ctrl-D
+    if ch in ("q", "Q", "\x03", "\x04"):  # q  Ctrl-C  Ctrl-D
         return idx, True, False, None, False, False, False
-    if ch in (']', 'n', '\t', '\x1b[C'):        # ]  n  Tab  →
+    if ch in ("]", "n", "\t", "\x1b[C"):  # ]  n  Tab  →
         return (idx + 1) % n, False, False, None, False, False, False
-    if ch in ('[', 'p', '\x1b[D'):              # [  p  ←
+    if ch in ("[", "p", "\x1b[D"):  # [  p  ←
         return (idx - 1) % n, False, False, None, False, False, False
-    if ch in ('r', 'R'):                        # r → refresh data
+    if ch in ("r", "R"):  # r → refresh data
         return idx, False, True, None, False, False, False
-    if ch in ('1', '2', '3', '4'):              # 1-4 → toggle provider panel
+    if ch in ("1", "2", "3", "4", "5", "6", "7", "8", "9"):  # 1-9 → toggle provider panel
         return idx, False, False, int(ch) - 1, False, False, False
-    if ch in ('l', 'L'):                        # l → toggle language zh/en
+    if ch in ("l", "L"):  # l → toggle language zh/en
         return idx, False, False, None, True, False, False
-    if ch in ('m', 'M'):                        # m → toggle OpenRouter metric
+    if ch in ("m", "M"):  # m → toggle OpenRouter metric
         return idx, False, False, None, False, True, False
-    if ch in ('d', 'D'):                        # d → toggle days window
+    if ch in ("d", "D"):  # d → toggle days window
         return idx, False, False, None, False, False, True
     return idx, False, False, None, False, False, False
 
 
 def _format_tokens(n: float) -> str:
     if n >= 1_000_000:
-        return f"{n/1_000_000:.1f}M"
+        return f"{n / 1_000_000:.1f}M"
     if n >= 1_000:
-        return f"{n/1_000:.1f}K"
+        return f"{n / 1_000:.1f}K"
     return f"{n:.0f}"
 
 
@@ -558,7 +641,14 @@ def _render_activity_totals(totals, lang_zh: bool, theme: dict) -> Text:
     return text
 
 
-def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str = OR_METRIC_REQUESTS, days_window: int = 30, color_map: dict[str, str] | None = None) -> Text:
+def _render_daily_chart(
+    daily_activity,
+    lang_zh: bool,
+    theme: dict,
+    metric: str = OR_METRIC_REQUESTS,
+    days_window: int = 30,
+    color_map: dict[str, str] | None = None,
+) -> Text:
     if not daily_activity:
         return Text()
     metric = _parse_or_metric(metric)
@@ -704,7 +794,9 @@ def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str 
         text.append("\n")
 
     # X-axis line
-    text.append(chart_indent + empty_gutter + "└" + "─" * (col_width * len(days)) + "\n", style=theme.get("meta", "grey62"))
+    text.append(
+        chart_indent + empty_gutter + "└" + "─" * (col_width * len(days)) + "\n", style=theme.get("meta", "grey62")
+    )
 
     # Date labels: distribute evenly based on how many column slots a label
     # occupies. A date label is 5 chars; we want at least 2 chars of visual gap.
@@ -822,9 +914,8 @@ def short_date(date: str) -> str:
 
 def truncate(s: str, max_len: int) -> str:
     if len(s) > max_len:
-        return s[:max_len - 3] + "..."
+        return s[: max_len - 3] + "..."
     return s
-
 
 
 def _window_top_models(daily_activity, days_window: int, metric: str) -> list[ModelUsage]:
@@ -874,7 +965,14 @@ def _window_top_models(daily_activity, days_window: int, metric: str) -> list[Mo
     return sorted(agg.values(), key=lambda m: (-_metric_value_model(m, metric), m.model))
 
 
-def _render_top_models(top_models, lang_zh: bool, theme: dict, metric: str = OR_METRIC_REQUESTS, chart_width: int = 20, color_map: dict[str, str] | None = None) -> Text:
+def _render_top_models(
+    top_models,
+    lang_zh: bool,
+    theme: dict,
+    metric: str = OR_METRIC_REQUESTS,
+    chart_width: int = 20,
+    color_map: dict[str, str] | None = None,
+) -> Text:
     if not top_models:
         return Text()
     metric = _parse_or_metric(metric)
@@ -903,7 +1001,6 @@ def _render_top_models(top_models, lang_zh: bool, theme: dict, metric: str = OR_
         text.append("█" * bar_len, style=color)
         text.append("░" * (chart_width - bar_len) + "\n", style="grey50")
     return text
-
 
 
 def _format_aggregated_results(
@@ -940,9 +1037,9 @@ def _format_aggregated_results(
         has_countdown = any(r.countdown for r in p_items)
         has_reset = any(r.reset_at for r in p_items)
         if has_countdown:
-            visual_widths.append(_get_visual_width(_L['countdown']))
+            visual_widths.append(_get_visual_width(_L["countdown"]))
         if has_reset:
-            visual_widths.append(_get_visual_width(_L['reset']))
+            visual_widths.append(_get_visual_width(_L["reset"]))
 
         max_visual_width = max(visual_widths) if visual_widths else 0
         max_visual_width = max(max_visual_width, 6)
@@ -969,12 +1066,32 @@ def _format_aggregated_results(
                 if row.daily_activity:
                     if i > 0 or row.activity_totals:
                         body_text.append("\n")
-                    body_text.append(_render_daily_chart(row.daily_activity, lang_zh, theme, metric=or_metric, days_window=days_window, color_map=model_color_map))
+                    body_text.append(
+                        _render_daily_chart(
+                            row.daily_activity,
+                            lang_zh,
+                            theme,
+                            metric=or_metric,
+                            days_window=days_window,
+                            color_map=model_color_map,
+                        )
+                    )
                 if row.top_models:
                     if i > 0 or row.activity_totals or row.daily_activity:
                         body_text.append("\n")
-                    _windowed = _window_top_models(_daily_row.daily_activity, days_window, or_metric) if _daily_row else []
-                    body_text.append(_render_top_models(_windowed or row.top_models, lang_zh, theme, metric=or_metric, chart_width=20, color_map=model_color_map))
+                    _windowed = (
+                        _window_top_models(_daily_row.daily_activity, days_window, or_metric) if _daily_row else []
+                    )
+                    body_text.append(
+                        _render_top_models(
+                            _windowed or row.top_models,
+                            lang_zh,
+                            theme,
+                            metric=or_metric,
+                            chart_width=20,
+                            color_map=model_color_map,
+                        )
+                    )
                 continue
 
             loc_label = _get_localized_label(row.label, lang_zh)
@@ -993,11 +1110,19 @@ def _format_aggregated_results(
                 body_text.append("·" * (bar_width - filled), style="grey50")
 
                 if row.unit == "%":
-                    body_text.append(f"  {used_ratio * 100:.0f}%   {remaining_percent:.0f}% {_L['remaining']}", style="bold")
+                    body_text.append(
+                        f"  {used_ratio * 100:.0f}%   {remaining_percent:.0f}% {_L['remaining']}", style="bold"
+                    )
                 elif row.unit == "$":
-                    body_text.append(f"  ${row.used:.2f} / ${row.limit:.2f} ({remaining_percent:.0f}% {_L['remaining']})", style="bold")
+                    body_text.append(
+                        f"  ${row.used:.2f} / ${row.limit:.2f} ({remaining_percent:.0f}% {_L['remaining']})",
+                        style="bold",
+                    )
                 else:
-                    body_text.append(f"  {row.used:,.0f} / {row.limit:,.0f} {row.unit} ({remaining_percent:.0f}% {_L['remaining']})", style="bold")
+                    body_text.append(
+                        f"  {row.used:,.0f} / {row.limit:,.0f} {row.unit} ({remaining_percent:.0f}% {_L['remaining']})",
+                        style="bold",
+                    )
             else:
                 if row.unit == "$":
                     body_text.append(f"  ${row.used:.2f}", style="bold")
@@ -1010,13 +1135,13 @@ def _format_aggregated_results(
 
             if row.countdown:
                 body_text.append("\n")
-                meta_label = _L['countdown']
+                meta_label = _L["countdown"]
                 meta_padding = " " * (max_visual_width - _get_visual_width(meta_label))
                 body_text.append(f"  {meta_label}{meta_padding}  ", style=theme["label"])
                 body_text.append(row.countdown, style="bold")
             if row.reset_at:
                 body_text.append("\n")
-                meta_label = _L['reset']
+                meta_label = _L["reset"]
                 meta_padding = " " * (max_visual_width - _get_visual_width(meta_label))
                 body_text.append(f"  {meta_label}{meta_padding}  ", style=theme["label"])
                 body_text.append(row.reset_at, style="bold")
@@ -1056,7 +1181,23 @@ def _format_aggregated_results(
         body_text = provider_bodies.get(p)
         err_msg = error_msgs.get(p)
 
-        title_str = "Kimi" if p == "kimi" else p.capitalize()
+        # Dynamic title for codex: use plan_type from API response
+        if p == "codex":
+            p_items = results.get(p, [])
+            plan_row = next((r for r in p_items if r.label == "Plan"), None)
+            plan_title = plan_row.text_value if plan_row and plan_row.text_value else "ChatGPT Plus"
+        else:
+            plan_title = None
+
+        _PROVIDER_TITLES = {
+            "kimi": "Kimi",
+            "codex": plan_title or "ChatGPT Plus",
+            "openai": "OpenAI API",
+            "anthropic": "Anthropic",
+            "openrouter": "OpenRouter",
+            "claude": "Claude",
+        }
+        title_str = _PROVIDER_TITLES.get(p, p.capitalize())
         divider_line = f"───────── {title_str} ─────────"
 
         if body_text:
@@ -1095,7 +1236,7 @@ def _fit_scroll_body(body: Text, budget: int, scroll_offset: int, lang_zh: bool)
     view_rows = max(1, budget - 1)  # reserve one line for the scroll indicator
     max_off = max(0, total - view_rows)
     off = max(0, min(scroll_offset, max_off))
-    visible = list(lines[off:off + view_rows])
+    visible = list(lines[off : off + view_rows])
     up = "▲" if off > 0 else "·"
     down = "▼" if off + view_rows < total else "·"
     label = "滚动" if lang_zh else "scroll"
@@ -1144,34 +1285,43 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
     days_window: int = _parse_days_window(config.days_window)
     current_view = "usage"
 
-    saved_notice: list = [None]   # holds the saved theme name briefly, then None
-    scroll: list = [0]            # in-panel vertical scroll offset (lines from top)
+    saved_notice: list = [None]  # holds the saved theme name briefly, then None
+    scroll: list = [0]  # in-panel vertical scroll offset (lines from top)
+    settings_cursor: list = [0]  # cursor position in settings view
 
-    _SHORT = {
-        "anthropic": "Anthropic", "openai": "Openai",
-        "openrouter": "Openrouter",    "kimi": "Kimi",
-    }
+    def _visible_order() -> list[str]:
+        return [p for p in config.provider_order if p in visible_providers]
 
     def _build_panel() -> Panel:
-        visible_order = [p for p in config.provider_order if p in visible_providers]
+        visible_order = _visible_order()
         _L = L_ZH if lang_zh else L_EN
         if current_view == "help":
             body = _render_interactive_help(lang_zh, or_metric=or_metric, days_window=days_window)
         elif current_view == "config":
             body = _render_config_guide(config, lang_zh=lang_zh, config_path=config_path)
+        elif current_view == "settings":
+            body = _render_setting_view(config, visible_providers, settings_cursor=settings_cursor[0], lang_zh=lang_zh)
         else:
-            body = _format_aggregated_results(results, errors, visible_order, themes[idx], lang_zh, enabled_providers=set(config.enabled_providers), or_metric=or_metric, days_window=days_window)
+            body = _format_aggregated_results(
+                results,
+                errors,
+                visible_order,
+                themes[idx],
+                lang_zh,
+                enabled_providers=set(config.enabled_providers),
+                or_metric=or_metric,
+                days_window=days_window,
+            )
 
         top_bar = Text()
-        # Provider toggles
-        for i, p in enumerate(config.provider_order, 1):
+        # Provider toggles (visible only)
+        for i, p in enumerate(visible_order, 1):
             short = _SHORT.get(p, p[:4].title())
-            if p in visible_providers:
-                top_bar.append("● ", style="bold")
-                top_bar.append(f"[{i}]{short}  ", style="bold")
-            else:
-                top_bar.append("○ ", style="dim")
-                top_bar.append(f"[{i}]{short}  ", style="dim italic")
+            top_bar.append("● ", style="bold")
+            top_bar.append(f"[{i}]{short}  ", style="bold")
+        if not visible_order:
+            placeholder = "（无可见面板）" if lang_zh else "(no visible panels)"
+            top_bar.append(placeholder, style="dim")
         # Theme name
         top_bar.append("│  ", style="dim")
         top_bar.append("主题: " if lang_zh else "theme: ", style="dim")
@@ -1179,20 +1329,30 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
         top_bar.justify = "center"
 
         hint = Text()
+        if current_view == "settings":
+            panel_range = str(len(config.provider_order))
+        else:
+            panel_range = str(len(visible_order)) if visible_order else None
         # Keybindings grouped logically: navigation / view / data / persistence
         bindings = [
             ("[q]", "退出" if lang_zh else "quit"),
             ("[r]", "刷新" if lang_zh else "refresh"),
             ("[h/?]", "帮助" if lang_zh else "help"),
             ("[c]", "配置" if lang_zh else "config"),
+            ("[s]", "设置" if lang_zh else "settings"),
             ("[←/→]", "主题" if lang_zh else "theme"),
-            ("[1-4]", "面板" if lang_zh else "panels"),
             ("[↑↓]", "滚动" if lang_zh else "scroll"),
             ("[l]", "英" if lang_zh else "ZH"),
             ("[m]", _metric_label(or_metric, lang_zh)),
             ("[d]", f"{days_window}d"),
             ("[⏎ ]", "保存" if lang_zh else "save"),
         ]
+        if panel_range is not None:
+            if current_view == "settings":
+                panel_label = "开关面板" if lang_zh else "toggle panels"
+            else:
+                panel_label = "面板" if lang_zh else "panels"
+            bindings.insert(6, (f"[1-{panel_range}]", panel_label))
         for i, (key, label) in enumerate(bindings):
             if i > 0:
                 hint.append("  ", style="dim")
@@ -1215,28 +1375,29 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
         if isinstance(body, Text):
             body, scroll[0] = _fit_scroll_body(body, body_budget, scroll[0], lang_zh)
 
-        panel_content = Group(
-            top_bar,
-            Text(""),
-            body,
-            hint
-        )
+        panel_content = Group(top_bar, Text(""), body, hint)
 
-        return Panel(panel_content, title=f"[bold]{_L['title']}[/bold]", subtitle=None,
-                     expand=True, padding=(1, 2, 1, 2))
+        return Panel(
+            panel_content, title=f"[bold]{_L['title']}[/bold]", subtitle=None, expand=True, padding=(1, 2, 1, 2)
+        )
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
 
     def _read_char() -> str:
         # Prevent input buffering split by using os.read in raw terminal; fall back to stdin.read under tests
-        is_mock = hasattr(sys.stdin.read, "mock") or hasattr(sys.stdin.read, "_mock_self") or "mock" in type(sys.stdin.read).__name__.lower()
+        is_mock = (
+            hasattr(sys.stdin.read, "mock")
+            or hasattr(sys.stdin.read, "_mock_self")
+            or "mock" in type(sys.stdin.read).__name__.lower()
+        )
         if not is_mock and hasattr(sys.stdin, "isatty") and sys.stdin.isatty():  # pragma: no cover
             import os
+
             try:
                 b = os.read(fd, 1)
                 if b:
-                    return b.decode('utf-8', errors='ignore')
+                    return b.decode("utf-8", errors="ignore")
             except Exception:
                 pass
         return sys.stdin.read(1)
@@ -1254,11 +1415,11 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                     if not ch:  # pragma: no cover
                         continue
 
-                    if ch == '\x1b':
+                    if ch == "\x1b":
                         r2, _, _ = _select_module.select([sys.stdin], [], [], 0.05)
                         if r2:
                             ch2 = _read_char()
-                            if ch2 == '[':
+                            if ch2 == "[":
                                 r3, _, _ = _select_module.select([sys.stdin], [], [], 0.05)
                                 if r3:
                                     ch3 = _read_char()
@@ -1266,29 +1427,35 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                                         # CSI sequences like PgUp (\x1b[5~) / PgDn (\x1b[6~)
                                         r4, _, _ = _select_module.select([sys.stdin], [], [], 0.05)
                                         tilde = _read_char() if r4 else ""
-                                        ch = f'\x1b[{ch3}{tilde}'
+                                        ch = f"\x1b[{ch3}{tilde}"
                                     else:
-                                        ch = f'\x1b[{ch3}'
+                                        ch = f"\x1b[{ch3}"
 
-                    if saved_notice[0]:     # clear notice on any new keypress
+                    if saved_notice[0]:  # clear notice on any new keypress
                         saved_notice[0] = None
-                    if ch in ('h', 'H', '?'):
+                    if ch in ("h", "H", "?"):
                         current_view = "usage" if current_view == "help" else "help"
                         scroll[0] = 0
                         live.update(_build_panel(), refresh=True)
                         continue
-                    if ch in ('c', 'C'):
+                    if ch in ("c", "C"):
                         current_view = "usage" if current_view == "config" else "config"
                         scroll[0] = 0
                         live.update(_build_panel(), refresh=True)
                         continue
-                    if ch in ('\r', '\n'):  # Enter → save settings to config file
+                    if ch in ("s", "S"):
+                        current_view = "usage" if current_view == "settings" else "settings"
+                        scroll[0] = 0
+                        live.update(_build_panel(), refresh=True)
+                        continue
+                    if ch in ("\r", "\n"):  # Enter → save settings to config file
                         save_theme(
                             themes[idx],
                             language="zh" if lang_zh else "en",
                             visible_providers=list(visible_providers),
                             or_metric=or_metric,
-                            days_window=days_window
+                            days_window=days_window,
+                            provider_order=list(config.provider_order),
                         )
                         saved_notice[0] = themes[idx]
                         live.update(_build_panel(), refresh=True)
@@ -1297,31 +1464,63 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                             r_extra, _, _ = _select_module.select([sys.stdin], [], [], 0.0)
                             if r_extra:  # pragma: no cover
                                 extra_ch = _read_char()
-                                if extra_ch in ('\r', '\n'):  # pragma: no cover
+                                if extra_ch in ("\r", "\n"):  # pragma: no cover
                                     continue
                             break
                         continue
-                    if ch == '\x1b[A':          # ↑ → scroll up
-                        scroll[0] = max(0, scroll[0] - 3)
+                    if ch == "\x1b[A":  # ↑ → scroll up or move cursor up in settings
+                        if current_view == "settings":
+                            settings_cursor[0] = max(0, settings_cursor[0] - 1)
+                            live.update(_build_panel(), refresh=True)
+                        else:
+                            scroll[0] = max(0, scroll[0] - 3)
+                            live.update(_build_panel(), refresh=True)
+                        continue
+                    if ch == "\x1b[B":  # ↓ → scroll down or move cursor down in settings
+                        if current_view == "settings":
+                            providers = config.provider_order
+                            settings_cursor[0] = min(len(providers) - 1, settings_cursor[0] + 1)
+                            live.update(_build_panel(), refresh=True)
+                        else:
+                            scroll[0] += 3
+                            live.update(_build_panel(), refresh=True)
+                        continue
+                    if ch in ("\x1b[C", "]") and current_view == "settings":  # → / ] → move item right/down in settings
+                        providers = config.provider_order
+                        cur = settings_cursor[0]
+                        if cur < len(providers) - 1:
+                            providers[cur], providers[cur + 1] = providers[cur + 1], providers[cur]
+                            settings_cursor[0] = cur + 1
                         live.update(_build_panel(), refresh=True)
                         continue
-                    if ch == '\x1b[B':          # ↓ → scroll down
-                        scroll[0] += 3
+                    # In usage view, fall through to _handle_key for theme cycling
+                    if ch in ("\x1b[D", "[") and current_view == "settings":  # ← / [ → move item left/up in settings
+                        providers = config.provider_order
+                        cur = settings_cursor[0]
+                        if cur > 0:
+                            providers[cur], providers[cur - 1] = providers[cur - 1], providers[cur]
+                            settings_cursor[0] = cur - 1
                         live.update(_build_panel(), refresh=True)
                         continue
-                    if ch in ('\x1b[5~', '\x1b[6~'):  # PgUp / PgDn → page scroll
+                    # In usage view, fall through to _handle_key for theme cycling
+                    if ch in ("\x1b[5~", "\x1b[6~"):  # PgUp / PgDn → page scroll
                         page = max(1, console.size.height - 8)
-                        scroll[0] = max(0, scroll[0] + (page if ch == '\x1b[6~' else -page))
+                        scroll[0] = max(0, scroll[0] + (page if ch == "\x1b[6~" else -page))
                         live.update(_build_panel(), refresh=True)
                         continue
-                    idx, quit_flag, refresh_flag, toggle_num, lang_toggle, metric_toggle, days_toggle = _handle_key(ch, idx, len(themes))
+                    idx, quit_flag, refresh_flag, toggle_num, lang_toggle, metric_toggle, days_toggle = _handle_key(
+                        ch, idx, len(themes)
+                    )
                     if quit_flag:
                         running = False
                     elif refresh_flag:
                         results, errors = await dispatch_all(config)
                         scroll[0] = 0
                     elif toggle_num is not None:
-                        providers = list(config.provider_order)
+                        if current_view == "settings":
+                            providers = list(config.provider_order)
+                        else:
+                            providers = _visible_order()
                         if toggle_num < len(providers):
                             p = providers[toggle_num]
                             if p in visible_providers:
@@ -1345,11 +1544,18 @@ async def main():
     parser = argparse.ArgumentParser(description="Multi-Provider AI Quota Tracker CLI")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--plain", action="store_true")
-    parser.add_argument("-i", "--interactive", action="store_true",
-                        help="Interactive mode: h help, c config, ←/→ or [/] themes, r refresh, q quit")
+    parser.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        help="Interactive mode: h help, c config, ←/→ or [/] themes, r refresh, q quit",
+    )
     parser.add_argument("--provider", help="Comma-separated providers to query (kimi,openai,anthropic,openrouter)")
     parser.add_argument("--config", help="Custom configuration file path")
-    parser.add_argument("--theme", help="Specify color theme: blue-dark, blue-light, sky-dark, salmon-dark, turquoise-dark, pink-light, violet-dark, amber-dark, mint-dark, monochrome, blind-deuteranopia, blind-tritanopia")
+    parser.add_argument(
+        "--theme",
+        help="Specify color theme: blue-dark, blue-light, sky-dark, salmon-dark, turquoise-dark, pink-light, violet-dark, amber-dark, mint-dark, monochrome, blind-deuteranopia, blind-tritanopia",
+    )
     parser.add_argument("--serve", action="store_true", help="Start web server instead of CLI output")
     parser.add_argument("--port", type=int, default=8765, help="Web server port (default: 8765)")
     args = parser.parse_args()
@@ -1397,7 +1603,7 @@ async def main():
                     "remaining": item.remaining,
                     "percent": item.percent,
                     "reset_at": item.reset_at,
-                    "unit": item.unit
+                    "unit": item.unit,
                 }
                 for item in items
             ]
@@ -1438,10 +1644,27 @@ async def main():
                 display_order = [p for p in config.provider_order if p in config.visible_providers]
             or_metric = _parse_or_metric(config.or_metric)
             days_window = _parse_days_window(config.days_window)
-            console.print(Panel(_format_aggregated_results(results, errors, display_order, theme_name, enabled_providers=set(config.enabled_providers), or_metric=or_metric, days_window=days_window), title=f"[bold]{L['title']}[/bold]", expand=True, padding=(1, 2, 1, 2)))
+            console.print(
+                Panel(
+                    _format_aggregated_results(
+                        results,
+                        errors,
+                        display_order,
+                        theme_name,
+                        enabled_providers=set(config.enabled_providers),
+                        or_metric=or_metric,
+                        days_window=days_window,
+                    ),
+                    title=f"[bold]{L['title']}[/bold]",
+                    expand=True,
+                    padding=(1, 2, 1, 2),
+                )
+            )
+
 
 def run_cli():
     asyncio.run(main())
+
 
 if __name__ == "__main__":
     run_cli()

@@ -55,6 +55,8 @@ async def dispatch_all(config: AppConfig) -> tuple[dict[str, list[ProviderUsage]
     Returns a tuple of (results, errors) dicts.
     """
     from .anthropic import fetch_anthropic_usage
+    from .claude import fetch_claude_usage
+    from .codex import fetch_codex_usage
     from .kimi import fetch_kimi_usage
     from .openai import fetch_openai_usage
     from .openrouter import fetch_openrouter_usage
@@ -64,6 +66,8 @@ async def dispatch_all(config: AppConfig) -> tuple[dict[str, list[ProviderUsage]
         "openai": fetch_openai_usage,
         "anthropic": fetch_anthropic_usage,
         "openrouter": fetch_openrouter_usage,
+        "codex": fetch_codex_usage,
+        "claude": fetch_claude_usage,
     }
 
     results: dict[str, list[ProviderUsage]] = {}

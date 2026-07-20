@@ -15,6 +15,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "fastmcp>=0.1.0",
     "httpx[socks]>=0.20.0",
+    "cloudscraper>=1.2.0",
 ]
 
 [project.urls]
