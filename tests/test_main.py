@@ -457,6 +457,29 @@ async def test_interactive_mode_top_bar_shows_only_visible_providers(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_interactive_mode_top_bar_placeholder_when_all_hidden(monkeypatch):
+    """When all providers are hidden, top bar shows a dim placeholder."""
+    _mock_terminal(monkeypatch)
+    mock_select, mock_read = _make_select_and_read(["q"])
+    import kimi_code_usage.main as main_mod
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    cfg = _make_interactive_config(monkeypatch)
+    cfg.provider_order = ["kimi", "openai"]
+    cfg.visible_providers = []
+    mock_res = {}
+
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+        with patch("kimi_code_usage.main.Live") as mock_live_cls:
+            mock_live = mock_live_cls.return_value.__enter__.return_value
+            await _interactive_mode(cfg, "blue-dark")
+
+    rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
+    assert "(no visible panels)" in rendered or "（无可见面板）" in rendered
+
+
+@pytest.mark.asyncio
 async def test_interactive_mode_number_key_uses_visible_index(monkeypatch):
     """In usage view, number keys map to visible-only provider indices."""
     _mock_terminal(monkeypatch)
