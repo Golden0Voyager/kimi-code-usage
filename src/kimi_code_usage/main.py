@@ -271,11 +271,10 @@ def _render_setting_view(
     return text
 
 
-def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_window: int = 30, provider_count: int = 6) -> Text:
+def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_window: int = 30) -> Text:
     text = Text()
     title = "交互帮助" if lang_zh else "Interactive Help"
     text.append(f"{title}\n\n", style="bold")
-    key_range = f"1-{provider_count}"
     if lang_zh:
         rows = [
             ("q / Ctrl-C", "退出"),
@@ -283,7 +282,8 @@ def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_wi
             ("h / ?", "显示或隐藏帮助"),
             ("c", "显示或隐藏配置引导"),
             ("s", "面板设置"),
-            (key_range, "切换服务商面板"),
+            ("1-N (usage)", "切换可见服务商面板"),
+            ("1-N (settings)", "切换任意服务商显示/隐藏"),
             ("l", "切换中英文"),
             ("←/→ 或 [ / ]", "切换主题"),
             ("m", f"切换 OpenRouter 指标（当前：{_metric_label(or_metric, True)}）"),
@@ -298,7 +298,8 @@ def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_wi
             ("h / ?", "show or hide help"),
             ("c", "show or hide configuration guide"),
             ("s", "panel settings"),
-            (key_range, "toggle provider panels"),
+            ("1-N (usage)", "toggle visible provider panels"),
+            ("1-N (settings)", "toggle any provider visibility"),
             ("l", "toggle language"),
             ("←/→ or [ / ]", "cycle theme"),
             ("m", f"cycle OpenRouter metric (current: {_metric_label(or_metric, False)})"),
@@ -1245,7 +1246,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
         visible_order = [p for p in config.provider_order if p in visible_providers]
         _L = L_ZH if lang_zh else L_EN
         if current_view == "help":
-            body = _render_interactive_help(lang_zh, or_metric=or_metric, days_window=days_window, provider_count=len(config.provider_order))
+            body = _render_interactive_help(lang_zh, or_metric=or_metric, days_window=days_window)
         elif current_view == "config":
             body = _render_config_guide(config, lang_zh=lang_zh, config_path=config_path)
         elif current_view == "settings":
@@ -1269,6 +1270,10 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
         top_bar.justify = "center"
 
         hint = Text()
+        if current_view == "settings":
+            panel_range = str(len(config.provider_order))
+        else:
+            panel_range = str(len(visible_order))
         # Keybindings grouped logically: navigation / view / data / persistence
         bindings = [
             ("[q]", "退出" if lang_zh else "quit"),
@@ -1277,7 +1282,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
             ("[c]", "配置" if lang_zh else "config"),
             ("[s]", "设置" if lang_zh else "settings"),
             ("[←/→]", "主题" if lang_zh else "theme"),
-            (f"[1-{len(config.provider_order)}]", "面板" if lang_zh else "panels"),
+            (f"[1-{panel_range}]", "面板" if lang_zh else "panels"),
             ("[↑↓]", "滚动" if lang_zh else "scroll"),
             ("[l]", "英" if lang_zh else "ZH"),
             ("[m]", _metric_label(or_metric, lang_zh)),

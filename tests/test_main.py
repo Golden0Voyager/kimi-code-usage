@@ -551,6 +551,38 @@ async def test_interactive_mode_settings_number_key_toggles_full_list(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_interactive_mode_footer_hints_reflect_visible_count(monkeypatch):
+    """Footer number range matches visible count in usage view and full count in settings view."""
+    _mock_terminal(monkeypatch)
+    # Refresh first to force a usage-view update (the initial panel is rendered by
+    # Live on entry, not via update()), then switch to settings and quit.
+    mock_select, mock_read = _make_select_and_read(["r", "s", "q"])
+    import kimi_code_usage.main as main_mod
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    cfg = _make_interactive_config(monkeypatch)
+    cfg.provider_order = ["kimi", "openai", "anthropic", "openrouter", "codex", "claude"]
+    cfg.visible_providers = ["kimi", "openai"]
+    mock_res = {
+        "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=5, limit=100, remaining=95, percent=5, reset_at=None, unit="%")],
+        "openai": [ProviderUsage(provider="openai", label="Tokens", used=100, limit=1000, remaining=900, percent=10, reset_at=None, unit="tokens")],
+    }
+
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+        with patch("kimi_code_usage.main.Live") as mock_live_cls:
+            mock_live = mock_live_cls.return_value.__enter__.return_value
+            await _interactive_mode(cfg, "blue-dark")
+
+    rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
+    # Usage view after 'r' should show [1-2]
+    # Settings view after 's' should show [1-6]
+    # Because the test renders both views, assert both ranges appear at some point.
+    assert "[1-2]" in rendered
+    assert "[1-6]" in rendered
+
+
+@pytest.mark.asyncio
 async def test_interactive_mode_lone_escape(monkeypatch):
     """A lone ESC with no follow-up → treated as unknown key (no-op), then q."""
     _mock_terminal(monkeypatch)
