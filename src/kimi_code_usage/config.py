@@ -5,12 +5,14 @@ from pathlib import Path
 
 DEFAULT_CONFIG_PATH = Path.home() / ".kimi-usage" / "config.json"
 
+
 @dataclass
 class ProviderConfig:
     api_key: str | None = None
     base_url: str | None = None
     enabled: bool = True
     management_key: str | None = None
+
 
 @dataclass
 class AppConfig:
@@ -27,6 +29,7 @@ class AppConfig:
     @property
     def enabled_providers(self) -> list[str]:
         return [name for name, p_conf in self.providers.items() if p_conf.api_key and p_conf.enabled]
+
 
 class ConfigResolver:
     def __init__(self, config_path: str | None = None):
@@ -56,9 +59,10 @@ class ConfigResolver:
             theme = os.getenv("KIMI_USAGE_THEME", "blue-dark")
         self.config.theme = theme
 
-        # Get language and visible providers from JSON
+        # Get language, visible providers, and provider order from JSON
         self.config.language = general_data.get("language")
         self.config.visible_providers = general_data.get("visibleProviders")
+        saved_provider_order = general_data.get("providerOrder")
 
         # Get OpenRouter metric preference, default requests
         or_metric = general_data.get("orMetric", "requests")
@@ -171,6 +175,14 @@ class ConfigResolver:
             if p not in final_order:
                 final_order.append(p)
 
+        # Persisted order from settings view takes precedence over derived order
+        if saved_provider_order:
+            saved_order = [p for p in saved_provider_order if p in all_providers]
+            for p in default_order:
+                if p not in saved_order:
+                    saved_order.append(p)
+            final_order = saved_order
+
         self.config.provider_order = final_order
 
         return self.config
@@ -182,7 +194,8 @@ def save_theme(
     visible_providers: list[str] | None = None,
     or_metric: str | None = None,
     days_window: int | None = None,
-    config_path: Path | None = None
+    provider_order: list[str] | None = None,
+    config_path: Path | None = None,
 ) -> None:
     """Persist settings into ``general`` in the JSON config file.
 
@@ -210,6 +223,8 @@ def save_theme(
         general["orMetric"] = or_metric
     if days_window is not None:
         general["daysWindow"] = days_window
+    if provider_order is not None:
+        general["providerOrder"] = provider_order
     data["general"] = general
 
     with open(path, "w", encoding="utf-8") as fh:

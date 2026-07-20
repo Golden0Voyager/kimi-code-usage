@@ -1455,6 +1455,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                             visible_providers=list(visible_providers),
                             or_metric=or_metric,
                             days_window=days_window,
+                            provider_order=list(config.provider_order),
                         )
                         saved_notice[0] = themes[idx]
                         live.update(_build_panel(), refresh=True)

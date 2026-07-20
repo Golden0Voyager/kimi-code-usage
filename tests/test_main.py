@@ -1085,8 +1085,16 @@ async def test_interactive_mode_enter_saves_theme(monkeypatch, tmp_path):
 
     saved_calls = []
 
-    def fake_save(theme, language=None, visible_providers=None, or_metric=None, days_window=None, config_path=None):
-        saved_calls.append((theme, language, visible_providers, or_metric, days_window))
+    def fake_save(
+        theme,
+        language=None,
+        visible_providers=None,
+        or_metric=None,
+        days_window=None,
+        provider_order=None,
+        config_path=None,
+    ):
+        saved_calls.append((theme, language, visible_providers, or_metric, days_window, provider_order))
 
     with patch("kimi_code_usage.main.save_theme", fake_save):
         with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
@@ -1099,6 +1107,7 @@ async def test_interactive_mode_enter_saves_theme(monkeypatch, tmp_path):
     assert saved_calls[0][0] == "blue-dark"
     assert saved_calls[0][1] in ("zh", "en")
     assert "kimi" in saved_calls[0][2]
+    assert saved_calls[0][5] == list(cfg.provider_order)
     # panel updated at least twice (Enter update + subsequent updates)
     assert mock_live.update.call_count >= 2
 
