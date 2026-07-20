@@ -31,9 +31,12 @@ L_EN = {
 }
 
 _SHORT = {
-    "anthropic": "Anthropic", "openai": "OpenAI API",
-    "openrouter": "Openrouter",    "kimi": "Kimi",
-    "codex": "ChatGPT+", "claude": "Claude",
+    "anthropic": "Anthropic",
+    "openai": "OpenAI API",
+    "openrouter": "Openrouter",
+    "kimi": "Kimi",
+    "codex": "ChatGPT+",
+    "claude": "Claude",
 }
 
 
@@ -47,7 +50,6 @@ L_ZH = {
     "no_data": "未找到用量数据，或未配置任何服务商。",
     "error_api": "API 错误",
 }
-
 
 
 L = L_ZH if IS_ZH else L_EN
@@ -104,9 +106,9 @@ _PROVIDER_SETUP_HELP = {
 }
 
 
-
 def _get_visual_width(s: str) -> int:
     import unicodedata
+
     width = 0
     for char in s:
         if unicodedata.east_asian_width(char) in ("W", "F", "A"):
@@ -122,6 +124,7 @@ def _mask_secret(secret: str | None) -> str:
     if len(secret) <= 8:
         return secret[:2] + "..."
     return f"{secret[:7]}...{secret[-4:]}"
+
 
 def _get_localized_label(label: str, lang_zh: bool = IS_ZH) -> str:
     _L = L_ZH if lang_zh else L_EN
@@ -184,6 +187,7 @@ def _get_localized_text_value(text_val: str, lang_zh: bool) -> str:
     # OpenRouter period usage pattern
     if "Daily: $" in text_val or "今日: $" in text_val:
         import re
+
         floats = re.findall(r"\d+\.\d+", text_val)
         if len(floats) == 3:
             u_daily, u_weekly, u_monthly = float(floats[0]), float(floats[1]), float(floats[2])
@@ -329,7 +333,10 @@ def _render_config_guide(
         text.append("读取优先级: config.json > 环境变量 / 当前目录 .env > 默认 base URL\n\n", style="grey62")
     else:
         text.append(f"Config file: {path}\n", style="grey62")
-        text.append("Resolution order: config.json > environment variables / current .env > default base URL\n\n", style="grey62")
+        text.append(
+            "Resolution order: config.json > environment variables / current .env > default base URL\n\n",
+            style="grey62",
+        )
 
     provider_order = list(config.provider_order)
     for provider_name in _PROVIDER_SETUP_HELP:
@@ -384,6 +391,7 @@ def _render_config_guide(
             style="grey62",
         )
     return text
+
 
 # (typing already imported at top)
 
@@ -499,38 +507,36 @@ THEME_MAP = {
 }
 
 
-
-
 def _handle_key(ch: str, idx: int, n: int) -> tuple[int, bool, bool, int | None, bool, bool, bool]:
     """Map a keypress to a TUI action.
 
     Returns:
         (new_idx, should_quit, should_refresh, toggle_provider_num, lang_toggle, metric_toggle, days_toggle)
     """
-    if ch in ('q', 'Q', '\x03', '\x04'):       # q  Ctrl-C  Ctrl-D
+    if ch in ("q", "Q", "\x03", "\x04"):  # q  Ctrl-C  Ctrl-D
         return idx, True, False, None, False, False, False
-    if ch in (']', 'n', '\t', '\x1b[C'):        # ]  n  Tab  →
+    if ch in ("]", "n", "\t", "\x1b[C"):  # ]  n  Tab  →
         return (idx + 1) % n, False, False, None, False, False, False
-    if ch in ('[', 'p', '\x1b[D'):              # [  p  ←
+    if ch in ("[", "p", "\x1b[D"):  # [  p  ←
         return (idx - 1) % n, False, False, None, False, False, False
-    if ch in ('r', 'R'):                        # r → refresh data
+    if ch in ("r", "R"):  # r → refresh data
         return idx, False, True, None, False, False, False
-    if ch in ("1", "2", "3", "4", "5", "6", "7", "8", "9"):              # 1-6 → toggle provider panel
+    if ch in ("1", "2", "3", "4", "5", "6", "7", "8", "9"):  # 1-6 → toggle provider panel
         return idx, False, False, int(ch) - 1, False, False, False
-    if ch in ('l', 'L'):                        # l → toggle language zh/en
+    if ch in ("l", "L"):  # l → toggle language zh/en
         return idx, False, False, None, True, False, False
-    if ch in ('m', 'M'):                        # m → toggle OpenRouter metric
+    if ch in ("m", "M"):  # m → toggle OpenRouter metric
         return idx, False, False, None, False, True, False
-    if ch in ('d', 'D'):                        # d → toggle days window
+    if ch in ("d", "D"):  # d → toggle days window
         return idx, False, False, None, False, False, True
     return idx, False, False, None, False, False, False
 
 
 def _format_tokens(n: float) -> str:
     if n >= 1_000_000:
-        return f"{n/1_000_000:.1f}M"
+        return f"{n / 1_000_000:.1f}M"
     if n >= 1_000:
-        return f"{n/1_000:.1f}K"
+        return f"{n / 1_000:.1f}K"
     return f"{n:.0f}"
 
 
@@ -635,7 +641,14 @@ def _render_activity_totals(totals, lang_zh: bool, theme: dict) -> Text:
     return text
 
 
-def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str = OR_METRIC_REQUESTS, days_window: int = 30, color_map: dict[str, str] | None = None) -> Text:
+def _render_daily_chart(
+    daily_activity,
+    lang_zh: bool,
+    theme: dict,
+    metric: str = OR_METRIC_REQUESTS,
+    days_window: int = 30,
+    color_map: dict[str, str] | None = None,
+) -> Text:
     if not daily_activity:
         return Text()
     metric = _parse_or_metric(metric)
@@ -781,7 +794,9 @@ def _render_daily_chart(daily_activity, lang_zh: bool, theme: dict, metric: str 
         text.append("\n")
 
     # X-axis line
-    text.append(chart_indent + empty_gutter + "└" + "─" * (col_width * len(days)) + "\n", style=theme.get("meta", "grey62"))
+    text.append(
+        chart_indent + empty_gutter + "└" + "─" * (col_width * len(days)) + "\n", style=theme.get("meta", "grey62")
+    )
 
     # Date labels: distribute evenly based on how many column slots a label
     # occupies. A date label is 5 chars; we want at least 2 chars of visual gap.
@@ -899,9 +914,8 @@ def short_date(date: str) -> str:
 
 def truncate(s: str, max_len: int) -> str:
     if len(s) > max_len:
-        return s[:max_len - 3] + "..."
+        return s[: max_len - 3] + "..."
     return s
-
 
 
 def _window_top_models(daily_activity, days_window: int, metric: str) -> list[ModelUsage]:
@@ -951,7 +965,14 @@ def _window_top_models(daily_activity, days_window: int, metric: str) -> list[Mo
     return sorted(agg.values(), key=lambda m: (-_metric_value_model(m, metric), m.model))
 
 
-def _render_top_models(top_models, lang_zh: bool, theme: dict, metric: str = OR_METRIC_REQUESTS, chart_width: int = 20, color_map: dict[str, str] | None = None) -> Text:
+def _render_top_models(
+    top_models,
+    lang_zh: bool,
+    theme: dict,
+    metric: str = OR_METRIC_REQUESTS,
+    chart_width: int = 20,
+    color_map: dict[str, str] | None = None,
+) -> Text:
     if not top_models:
         return Text()
     metric = _parse_or_metric(metric)
@@ -980,7 +1001,6 @@ def _render_top_models(top_models, lang_zh: bool, theme: dict, metric: str = OR_
         text.append("█" * bar_len, style=color)
         text.append("░" * (chart_width - bar_len) + "\n", style="grey50")
     return text
-
 
 
 def _format_aggregated_results(
@@ -1017,9 +1037,9 @@ def _format_aggregated_results(
         has_countdown = any(r.countdown for r in p_items)
         has_reset = any(r.reset_at for r in p_items)
         if has_countdown:
-            visual_widths.append(_get_visual_width(_L['countdown']))
+            visual_widths.append(_get_visual_width(_L["countdown"]))
         if has_reset:
-            visual_widths.append(_get_visual_width(_L['reset']))
+            visual_widths.append(_get_visual_width(_L["reset"]))
 
         max_visual_width = max(visual_widths) if visual_widths else 0
         max_visual_width = max(max_visual_width, 6)
@@ -1046,12 +1066,32 @@ def _format_aggregated_results(
                 if row.daily_activity:
                     if i > 0 or row.activity_totals:
                         body_text.append("\n")
-                    body_text.append(_render_daily_chart(row.daily_activity, lang_zh, theme, metric=or_metric, days_window=days_window, color_map=model_color_map))
+                    body_text.append(
+                        _render_daily_chart(
+                            row.daily_activity,
+                            lang_zh,
+                            theme,
+                            metric=or_metric,
+                            days_window=days_window,
+                            color_map=model_color_map,
+                        )
+                    )
                 if row.top_models:
                     if i > 0 or row.activity_totals or row.daily_activity:
                         body_text.append("\n")
-                    _windowed = _window_top_models(_daily_row.daily_activity, days_window, or_metric) if _daily_row else []
-                    body_text.append(_render_top_models(_windowed or row.top_models, lang_zh, theme, metric=or_metric, chart_width=20, color_map=model_color_map))
+                    _windowed = (
+                        _window_top_models(_daily_row.daily_activity, days_window, or_metric) if _daily_row else []
+                    )
+                    body_text.append(
+                        _render_top_models(
+                            _windowed or row.top_models,
+                            lang_zh,
+                            theme,
+                            metric=or_metric,
+                            chart_width=20,
+                            color_map=model_color_map,
+                        )
+                    )
                 continue
 
             loc_label = _get_localized_label(row.label, lang_zh)
@@ -1070,11 +1110,19 @@ def _format_aggregated_results(
                 body_text.append("·" * (bar_width - filled), style="grey50")
 
                 if row.unit == "%":
-                    body_text.append(f"  {used_ratio * 100:.0f}%   {remaining_percent:.0f}% {_L['remaining']}", style="bold")
+                    body_text.append(
+                        f"  {used_ratio * 100:.0f}%   {remaining_percent:.0f}% {_L['remaining']}", style="bold"
+                    )
                 elif row.unit == "$":
-                    body_text.append(f"  ${row.used:.2f} / ${row.limit:.2f} ({remaining_percent:.0f}% {_L['remaining']})", style="bold")
+                    body_text.append(
+                        f"  ${row.used:.2f} / ${row.limit:.2f} ({remaining_percent:.0f}% {_L['remaining']})",
+                        style="bold",
+                    )
                 else:
-                    body_text.append(f"  {row.used:,.0f} / {row.limit:,.0f} {row.unit} ({remaining_percent:.0f}% {_L['remaining']})", style="bold")
+                    body_text.append(
+                        f"  {row.used:,.0f} / {row.limit:,.0f} {row.unit} ({remaining_percent:.0f}% {_L['remaining']})",
+                        style="bold",
+                    )
             else:
                 if row.unit == "$":
                     body_text.append(f"  ${row.used:.2f}", style="bold")
@@ -1087,13 +1135,13 @@ def _format_aggregated_results(
 
             if row.countdown:
                 body_text.append("\n")
-                meta_label = _L['countdown']
+                meta_label = _L["countdown"]
                 meta_padding = " " * (max_visual_width - _get_visual_width(meta_label))
                 body_text.append(f"  {meta_label}{meta_padding}  ", style=theme["label"])
                 body_text.append(row.countdown, style="bold")
             if row.reset_at:
                 body_text.append("\n")
-                meta_label = _L['reset']
+                meta_label = _L["reset"]
                 meta_padding = " " * (max_visual_width - _get_visual_width(meta_label))
                 body_text.append(f"  {meta_label}{meta_padding}  ", style=theme["label"])
                 body_text.append(row.reset_at, style="bold")
@@ -1188,7 +1236,7 @@ def _fit_scroll_body(body: Text, budget: int, scroll_offset: int, lang_zh: bool)
     view_rows = max(1, budget - 1)  # reserve one line for the scroll indicator
     max_off = max(0, total - view_rows)
     off = max(0, min(scroll_offset, max_off))
-    visible = list(lines[off:off + view_rows])
+    visible = list(lines[off : off + view_rows])
     up = "▲" if off > 0 else "·"
     down = "▼" if off + view_rows < total else "·"
     label = "滚动" if lang_zh else "scroll"
@@ -1237,10 +1285,9 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
     days_window: int = _parse_days_window(config.days_window)
     current_view = "usage"
 
-    saved_notice: list = [None]   # holds the saved theme name briefly, then None
-    scroll: list = [0]            # in-panel vertical scroll offset (lines from top)
-    settings_cursor: list = [0]       # cursor position in settings view
-
+    saved_notice: list = [None]  # holds the saved theme name briefly, then None
+    scroll: list = [0]  # in-panel vertical scroll offset (lines from top)
+    settings_cursor: list = [0]  # cursor position in settings view
 
     def _build_panel() -> Panel:
         visible_order = [p for p in config.provider_order if p in visible_providers]
@@ -1252,7 +1299,16 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
         elif current_view == "settings":
             body = _render_setting_view(config, visible_providers, settings_cursor=settings_cursor[0], lang_zh=lang_zh)
         else:
-            body = _format_aggregated_results(results, errors, visible_order, themes[idx], lang_zh, enabled_providers=set(config.enabled_providers), or_metric=or_metric, days_window=days_window)
+            body = _format_aggregated_results(
+                results,
+                errors,
+                visible_order,
+                themes[idx],
+                lang_zh,
+                enabled_providers=set(config.enabled_providers),
+                or_metric=or_metric,
+                days_window=days_window,
+            )
 
         top_bar = Text()
         # Provider toggles (visible only)
@@ -1311,28 +1367,29 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
         if isinstance(body, Text):
             body, scroll[0] = _fit_scroll_body(body, body_budget, scroll[0], lang_zh)
 
-        panel_content = Group(
-            top_bar,
-            Text(""),
-            body,
-            hint
-        )
+        panel_content = Group(top_bar, Text(""), body, hint)
 
-        return Panel(panel_content, title=f"[bold]{_L['title']}[/bold]", subtitle=None,
-                     expand=True, padding=(1, 2, 1, 2))
+        return Panel(
+            panel_content, title=f"[bold]{_L['title']}[/bold]", subtitle=None, expand=True, padding=(1, 2, 1, 2)
+        )
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
 
     def _read_char() -> str:
         # Prevent input buffering split by using os.read in raw terminal; fall back to stdin.read under tests
-        is_mock = hasattr(sys.stdin.read, "mock") or hasattr(sys.stdin.read, "_mock_self") or "mock" in type(sys.stdin.read).__name__.lower()
+        is_mock = (
+            hasattr(sys.stdin.read, "mock")
+            or hasattr(sys.stdin.read, "_mock_self")
+            or "mock" in type(sys.stdin.read).__name__.lower()
+        )
         if not is_mock and hasattr(sys.stdin, "isatty") and sys.stdin.isatty():  # pragma: no cover
             import os
+
             try:
                 b = os.read(fd, 1)
                 if b:
-                    return b.decode('utf-8', errors='ignore')
+                    return b.decode("utf-8", errors="ignore")
             except Exception:
                 pass
         return sys.stdin.read(1)
@@ -1350,11 +1407,11 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                     if not ch:  # pragma: no cover
                         continue
 
-                    if ch == '\x1b':
+                    if ch == "\x1b":
                         r2, _, _ = _select_module.select([sys.stdin], [], [], 0.05)
                         if r2:
                             ch2 = _read_char()
-                            if ch2 == '[':
+                            if ch2 == "[":
                                 r3, _, _ = _select_module.select([sys.stdin], [], [], 0.05)
                                 if r3:
                                     ch3 = _read_char()
@@ -1362,34 +1419,34 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                                         # CSI sequences like PgUp (\x1b[5~) / PgDn (\x1b[6~)
                                         r4, _, _ = _select_module.select([sys.stdin], [], [], 0.05)
                                         tilde = _read_char() if r4 else ""
-                                        ch = f'\x1b[{ch3}{tilde}'
+                                        ch = f"\x1b[{ch3}{tilde}"
                                     else:
-                                        ch = f'\x1b[{ch3}'
+                                        ch = f"\x1b[{ch3}"
 
-                    if saved_notice[0]:     # clear notice on any new keypress
+                    if saved_notice[0]:  # clear notice on any new keypress
                         saved_notice[0] = None
-                    if ch in ('h', 'H', '?'):
+                    if ch in ("h", "H", "?"):
                         current_view = "usage" if current_view == "help" else "help"
                         scroll[0] = 0
                         live.update(_build_panel(), refresh=True)
                         continue
-                    if ch in ('c', 'C'):
+                    if ch in ("c", "C"):
                         current_view = "usage" if current_view == "config" else "config"
                         scroll[0] = 0
                         live.update(_build_panel(), refresh=True)
                         continue
-                    if ch in ('s', 'S'):
+                    if ch in ("s", "S"):
                         current_view = "usage" if current_view == "settings" else "settings"
                         scroll[0] = 0
                         live.update(_build_panel(), refresh=True)
                         continue
-                    if ch in ('\r', '\n'):  # Enter → save settings to config file
+                    if ch in ("\r", "\n"):  # Enter → save settings to config file
                         save_theme(
                             themes[idx],
                             language="zh" if lang_zh else "en",
                             visible_providers=list(visible_providers),
                             or_metric=or_metric,
-                            days_window=days_window
+                            days_window=days_window,
                         )
                         saved_notice[0] = themes[idx]
                         live.update(_build_panel(), refresh=True)
@@ -1398,11 +1455,11 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                             r_extra, _, _ = _select_module.select([sys.stdin], [], [], 0.0)
                             if r_extra:  # pragma: no cover
                                 extra_ch = _read_char()
-                                if extra_ch in ('\r', '\n'):  # pragma: no cover
+                                if extra_ch in ("\r", "\n"):  # pragma: no cover
                                     continue
                             break
                         continue
-                    if ch == '\x1b[A':          # ↑ → scroll up or move cursor up in settings
+                    if ch == "\x1b[A":  # ↑ → scroll up or move cursor up in settings
                         if current_view == "settings":
                             settings_cursor[0] = max(0, settings_cursor[0] - 1)
                             live.update(_build_panel(), refresh=True)
@@ -1410,7 +1467,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                             scroll[0] = max(0, scroll[0] - 3)
                             live.update(_build_panel(), refresh=True)
                         continue
-                    if ch == '\x1b[B':          # ↓ → scroll down or move cursor down in settings
+                    if ch == "\x1b[B":  # ↓ → scroll down or move cursor down in settings
                         if current_view == "settings":
                             providers = config.provider_order
                             settings_cursor[0] = min(len(providers) - 1, settings_cursor[0] + 1)
@@ -1419,32 +1476,32 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                             scroll[0] += 3
                             live.update(_build_panel(), refresh=True)
                         continue
-                    if ch in ('\x1b[C', ']'):   # → / ] → move item right/down in settings
-                        if current_view == "settings":
-                            providers = config.provider_order
-                            cur = settings_cursor[0]
-                            if cur < len(providers) - 1:
-                                providers[cur], providers[cur+1] = providers[cur+1], providers[cur]
-                                settings_cursor[0] = cur + 1
-                            live.update(_build_panel(), refresh=True)
-                            continue
-                        # In usage view, fall through to _handle_key for theme cycling
-                    if ch in ('\x1b[D', '['):   # ← / [ → move item left/up in settings
-                        if current_view == "settings":
-                            providers = config.provider_order
-                            cur = settings_cursor[0]
-                            if cur > 0:
-                                providers[cur], providers[cur-1] = providers[cur-1], providers[cur]
-                                settings_cursor[0] = cur - 1
-                            live.update(_build_panel(), refresh=True)
-                            continue
-                        # In usage view, fall through to _handle_key for theme cycling
-                    if ch in ('\x1b[5~', '\x1b[6~'):  # PgUp / PgDn → page scroll
-                        page = max(1, console.size.height - 8)
-                        scroll[0] = max(0, scroll[0] + (page if ch == '\x1b[6~' else -page))
+                    if ch in ("\x1b[C", "]") and current_view == "settings":  # → / ] → move item right/down in settings
+                        providers = config.provider_order
+                        cur = settings_cursor[0]
+                        if cur < len(providers) - 1:
+                            providers[cur], providers[cur + 1] = providers[cur + 1], providers[cur]
+                            settings_cursor[0] = cur + 1
                         live.update(_build_panel(), refresh=True)
                         continue
-                    idx, quit_flag, refresh_flag, toggle_num, lang_toggle, metric_toggle, days_toggle = _handle_key(ch, idx, len(themes))
+                    # In usage view, fall through to _handle_key for theme cycling
+                    if ch in ("\x1b[D", "[") and current_view == "settings":  # ← / [ → move item left/up in settings
+                        providers = config.provider_order
+                        cur = settings_cursor[0]
+                        if cur > 0:
+                            providers[cur], providers[cur - 1] = providers[cur - 1], providers[cur]
+                            settings_cursor[0] = cur - 1
+                        live.update(_build_panel(), refresh=True)
+                        continue
+                    # In usage view, fall through to _handle_key for theme cycling
+                    if ch in ("\x1b[5~", "\x1b[6~"):  # PgUp / PgDn → page scroll
+                        page = max(1, console.size.height - 8)
+                        scroll[0] = max(0, scroll[0] + (page if ch == "\x1b[6~" else -page))
+                        live.update(_build_panel(), refresh=True)
+                        continue
+                    idx, quit_flag, refresh_flag, toggle_num, lang_toggle, metric_toggle, days_toggle = _handle_key(
+                        ch, idx, len(themes)
+                    )
                     if quit_flag:
                         running = False
                     elif refresh_flag:
@@ -1478,11 +1535,18 @@ async def main():
     parser = argparse.ArgumentParser(description="Multi-Provider AI Quota Tracker CLI")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--plain", action="store_true")
-    parser.add_argument("-i", "--interactive", action="store_true",
-                        help="Interactive mode: h help, c config, ←/→ or [/] themes, r refresh, q quit")
+    parser.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        help="Interactive mode: h help, c config, ←/→ or [/] themes, r refresh, q quit",
+    )
     parser.add_argument("--provider", help="Comma-separated providers to query (kimi,openai,anthropic,openrouter)")
     parser.add_argument("--config", help="Custom configuration file path")
-    parser.add_argument("--theme", help="Specify color theme: blue-dark, blue-light, sky-dark, salmon-dark, turquoise-dark, pink-light, violet-dark, amber-dark, mint-dark, monochrome, blind-deuteranopia, blind-tritanopia")
+    parser.add_argument(
+        "--theme",
+        help="Specify color theme: blue-dark, blue-light, sky-dark, salmon-dark, turquoise-dark, pink-light, violet-dark, amber-dark, mint-dark, monochrome, blind-deuteranopia, blind-tritanopia",
+    )
     parser.add_argument("--serve", action="store_true", help="Start web server instead of CLI output")
     parser.add_argument("--port", type=int, default=8765, help="Web server port (default: 8765)")
     args = parser.parse_args()
@@ -1530,7 +1594,7 @@ async def main():
                     "remaining": item.remaining,
                     "percent": item.percent,
                     "reset_at": item.reset_at,
-                    "unit": item.unit
+                    "unit": item.unit,
                 }
                 for item in items
             ]
@@ -1571,10 +1635,27 @@ async def main():
                 display_order = [p for p in config.provider_order if p in config.visible_providers]
             or_metric = _parse_or_metric(config.or_metric)
             days_window = _parse_days_window(config.days_window)
-            console.print(Panel(_format_aggregated_results(results, errors, display_order, theme_name, enabled_providers=set(config.enabled_providers), or_metric=or_metric, days_window=days_window), title=f"[bold]{L['title']}[/bold]", expand=True, padding=(1, 2, 1, 2)))
+            console.print(
+                Panel(
+                    _format_aggregated_results(
+                        results,
+                        errors,
+                        display_order,
+                        theme_name,
+                        enabled_providers=set(config.enabled_providers),
+                        or_metric=or_metric,
+                        days_window=days_window,
+                    ),
+                    title=f"[bold]{L['title']}[/bold]",
+                    expand=True,
+                    padding=(1, 2, 1, 2),
+                )
+            )
+
 
 def run_cli():
     asyncio.run(main())
+
 
 if __name__ == "__main__":
     run_cli()
