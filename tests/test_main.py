@@ -426,6 +426,37 @@ async def test_interactive_mode_help_and_config_keys(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_interactive_mode_top_bar_shows_only_visible_providers(monkeypatch):
+    """Top bar omits hidden providers and renumbers visible ones."""
+    _mock_terminal(monkeypatch)
+    mock_select, mock_read = _make_select_and_read(["q"])
+    import kimi_code_usage.main as main_mod
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    cfg = _make_interactive_config(monkeypatch)
+    cfg.provider_order = ["kimi", "openai", "anthropic", "openrouter", "codex", "claude"]
+    cfg.visible_providers = ["kimi", "openai"]
+    mock_res = {
+        "kimi": [ProviderUsage(provider="kimi", label="Weekly Usage", used=5, limit=100, remaining=95, percent=5, reset_at=None, unit="%")],
+        "openai": [ProviderUsage(provider="openai", label="Tokens", used=100, limit=1000, remaining=900, percent=10, reset_at=None, unit="tokens")],
+    }
+
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+        with patch("kimi_code_usage.main.Live") as mock_live_cls:
+            mock_live = mock_live_cls.return_value.__enter__.return_value
+            await _interactive_mode(cfg, "blue-dark")
+
+    rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
+    assert "[1]Kimi" in rendered
+    assert "[2]ChatGPT+" in rendered or "[2]OpenAI API" in rendered
+    assert "[3]" not in rendered
+    assert "[4]" not in rendered
+    assert "[5]" not in rendered
+    assert "[6]" not in rendered
+
+
+@pytest.mark.asyncio
 async def test_interactive_mode_lone_escape(monkeypatch):
     """A lone ESC with no follow-up → treated as unknown key (no-op), then q."""
     _mock_terminal(monkeypatch)

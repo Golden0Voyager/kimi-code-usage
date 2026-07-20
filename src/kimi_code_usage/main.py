@@ -1254,15 +1254,14 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
             body = _format_aggregated_results(results, errors, visible_order, themes[idx], lang_zh, enabled_providers=set(config.enabled_providers), or_metric=or_metric, days_window=days_window)
 
         top_bar = Text()
-        # Provider toggles
-        for i, p in enumerate(config.provider_order, 1):
+        # Provider toggles (visible only)
+        for i, p in enumerate(visible_order, 1):
             short = _SHORT.get(p, p[:4].title())
-            if p in visible_providers:
-                top_bar.append("● ", style="bold")
-                top_bar.append(f"[{i}]{short}  ", style="bold")
-            else:
-                top_bar.append("○ ", style="dim")
-                top_bar.append(f"[{i}]{short}  ", style="dim italic")
+            top_bar.append("● ", style="bold")
+            top_bar.append(f"[{i}]{short}  ", style="bold")
+        if not visible_order:
+            placeholder = "（无可见面板）" if lang_zh else "(no visible panels)"
+            top_bar.append(placeholder, style="dim")
         # Theme name
         top_bar.append("│  ", style="dim")
         top_bar.append("主题: " if lang_zh else "theme: ", style="dim")
