@@ -1,12 +1,20 @@
 import re
+from asyncio import TimeoutError
 from collections.abc import Mapping
 from typing import Any
+
+import aiohttp
 
 from . import ProviderUsage
 
 
 class MonthlyUsageUnavailable(Exception):
     """A recoverable failure while reading the local Kimi subscription page."""
+
+
+_BRIDGE_URL = "http://127.0.0.1:10086/command"
+_SUBSCRIPTION_URL = "https://www.kimi.com/membership/subscription?tab=quota"
+_SESSION = "kimi-usage"
 
 
 def _flatten_names(node: Any) -> list[str]:
@@ -76,3 +84,41 @@ def parse_monthly_usage_snapshot(
         reset_at=reset.group(1) if reset else None,
         unit="%",
     )
+
+
+async def _bridge_command(action: str, args: Mapping[str, Any]) -> Mapping[str, Any]:
+    payload = {"action": action, "args": dict(args), "session": _SESSION}
+    try:
+        timeout = aiohttp.ClientTimeout(total=3)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(_BRIDGE_URL, json=payload) as response:
+                if response.status != 200:
+                    raise MonthlyUsageUnavailable(
+                        "Kimi WebBridge is unavailable; start it and open the browser extension."
+                    )
+                data = await response.json()
+    except (aiohttp.ClientError, TimeoutError) as exc:
+        raise MonthlyUsageUnavailable(
+            "Kimi WebBridge is unavailable; start it and open the browser extension."
+        ) from exc
+    if not isinstance(data, Mapping) or not data.get("ok"):
+        raise MonthlyUsageUnavailable(
+            "Kimi WebBridge is unavailable; start it and open the browser extension."
+        )
+    return data
+
+
+async def fetch_monthly_usage_from_webbridge(*, lang_zh: bool) -> ProviderUsage:
+    found = await _bridge_command("find_tab", {"url": _SUBSCRIPTION_URL, "active": False})
+    if not bool((found.get("data") or {}).get("success")):
+        raise MonthlyUsageUnavailable(
+            "Kimi Subscription page is not open; log in and open it in the browser."
+        )
+    snapshot = await _bridge_command("snapshot", {})
+    data = snapshot.get("data")
+    row = parse_monthly_usage_snapshot(data if isinstance(data, Mapping) else {}, lang_zh=lang_zh)
+    if row is None:
+        raise MonthlyUsageUnavailable(
+            "Kimi monthly usage was not found; log in and open the Subscription page."
+        )
+    return row

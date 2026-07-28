@@ -1,4 +1,12 @@
-from kimi_code_usage.providers.kimi_membership import parse_monthly_usage_snapshot
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from kimi_code_usage.providers.kimi_membership import (
+    MonthlyUsageUnavailable,
+    fetch_monthly_usage_from_webbridge,
+    parse_monthly_usage_snapshot,
+)
 
 
 def test_parse_monthly_usage_snapshot_reads_first_total_card_in_usage_progress():
@@ -31,3 +39,25 @@ def test_parse_monthly_usage_snapshot_returns_none_without_usage_progress_card()
     snapshot = {"tree": [[{"role": "StaticText", "name": "账户"}]]}
 
     assert parse_monthly_usage_snapshot(snapshot, lang_zh=True) is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_monthly_usage_requests_snapshot_after_reusing_subscription_tab():
+    responses = [
+        {"ok": True, "data": {"success": True}},
+        {"ok": True, "data": {"tree": [[{"role": "heading", "name": "Usage Progress"}, {"role": "StaticText", "name": "Total Usage"}, {"role": "StaticText", "name": "25%"}]]}},
+    ]
+    with patch("kimi_code_usage.providers.kimi_membership._bridge_command", new=AsyncMock(side_effect=responses)) as command:
+        row = await fetch_monthly_usage_from_webbridge(lang_zh=False)
+    assert row.used == 25.0
+    assert [call.args[0] for call in command.await_args_list] == ["find_tab", "snapshot"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_monthly_usage_explains_disconnected_bridge():
+    with patch(
+        "kimi_code_usage.providers.kimi_membership._bridge_command",
+        new=AsyncMock(side_effect=MonthlyUsageUnavailable("Kimi WebBridge is unavailable")),
+    ):
+        with pytest.raises(MonthlyUsageUnavailable, match="WebBridge"):
+            await fetch_monthly_usage_from_webbridge(lang_zh=False)
