@@ -1,5 +1,4 @@
 import re
-from asyncio import TimeoutError
 from collections.abc import Mapping
 from typing import Any
 
@@ -8,8 +7,11 @@ import aiohttp
 from . import ProviderUsage
 
 
-class MonthlyUsageUnavailable(Exception):
+class MonthlyUsageUnavailableError(Exception):
     """A recoverable failure while reading the local Kimi subscription page."""
+
+
+MonthlyUsageUnavailable = MonthlyUsageUnavailableError
 
 
 _BRIDGE_URL = "http://127.0.0.1:10086/command"

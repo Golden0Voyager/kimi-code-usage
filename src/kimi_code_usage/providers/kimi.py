@@ -6,6 +6,7 @@ from typing import Any, cast
 import aiohttp
 
 from . import ProviderUsage
+from .kimi_membership import fetch_monthly_usage_from_webbridge
 
 
 def _to_int(v: Any) -> int | None:
@@ -135,6 +136,23 @@ def _kimi_headers(api_key: str) -> dict[str, str]:
 
 _KIMI_LANG_IS_ZH = "zh" in os.getenv("LANG", "en").lower()
 
+
+async def _monthly_usage_row() -> ProviderUsage:
+    try:
+        return await fetch_monthly_usage_from_webbridge(lang_zh=_KIMI_LANG_IS_ZH)
+    except Exception as exc:
+        return ProviderUsage(
+            provider="kimi",
+            label="月度额度" if _KIMI_LANG_IS_ZH else "Monthly Credits",
+            used=0.0,
+            limit=None,
+            remaining=None,
+            percent=None,
+            reset_at=None,
+            unit="text",
+            text_value=str(exc),
+        )
+
 def _kimi_error_hint(status: int, zh: bool | None = None) -> str:
     if zh is None:
         zh = _KIMI_LANG_IS_ZH
@@ -214,4 +232,4 @@ async def fetch_kimi_usage(api_key: str, base_url: str, management_key: str | No
             countdown=r.countdown,
             unit="%"
         ))
-    return res
+    return [await _monthly_usage_row(), *res]
