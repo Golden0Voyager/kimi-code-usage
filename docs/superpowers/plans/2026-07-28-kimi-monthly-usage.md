@@ -273,7 +273,7 @@ async def test_fetch_kimi_usage_appends_monthly_usage_from_webbridge():
         with patch("aiohttp.ClientSession", return_value=mock_session_for({"data": [{"model_name": "all", "limit": 100, "used": 14}]})):
             rows = await fetch_kimi_usage("test-key", "https://api.example.com/v1")
 
-    assert [row.label for row in rows] == ["Weekly Usage", "Monthly Credits"]
+    assert [row.label for row in rows] == ["Monthly Credits", "Weekly Usage"]
 
 
 @pytest.mark.asyncio
@@ -282,10 +282,10 @@ async def test_fetch_kimi_usage_keeps_api_rows_when_monthly_reader_is_unavailabl
         with patch("aiohttp.ClientSession", return_value=mock_session_for({"data": [{"model_name": "all", "limit": 100, "used": 14}]})):
             rows = await fetch_kimi_usage("test-key", "https://api.example.com/v1")
 
-    assert rows[0].label == "Weekly Usage"
-    assert rows[-1].label == "Monthly Credits"
-    assert rows[-1].unit == "text"
-    assert "WebBridge" in rows[-1].text_value
+    assert rows[0].label == "Monthly Credits"
+    assert rows[0].unit == "text"
+    assert "WebBridge" in rows[0].text_value
+    assert rows[1].label == "Weekly Usage"
 ```
 
 Add a local `mock_session_for` helper beside the existing async HTTP mocks. Import `ProviderUsage` and `MonthlyUsageUnavailable` in this test file.
