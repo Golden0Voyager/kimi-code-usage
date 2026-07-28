@@ -54,3 +54,6 @@ htmlcov/
 
 # Isolated development worktrees
 .worktrees/
+
+# Oh My OpenAgent local session artifacts
+.omo/
