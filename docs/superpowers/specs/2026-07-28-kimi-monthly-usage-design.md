@@ -10,7 +10,7 @@
 
 Kimi Code 的公开 `/usages` 接口目前只提供周额度和 5 小时窗口。月度额度由登录后的 `https://www.kimi.com/membership/subscription?tab=quota` 页面展示。
 
-CLI 通过本机 Kimi WebBridge 复用浏览器登录态：先定位或打开订阅页，再读取页面加载的月度额度数据。实现会优先解析页面的 XHR/Fetch JSON 响应；若页面直接含有足够的结构化额度数据，则仅将其作为兼容回退。不会保存 Cookie、令牌、浏览器响应或任何账户标识。
+CLI 通过本机 Kimi WebBridge 复用浏览器登录态：先定位或打开订阅页，再读取其可访问结构中的额度文本。已验证页面会提供“总使用量”“N%”和“YYYY-MM-DD 后重置”等字段。网络捕获没有暴露可用请求，因此本功能不依赖未公开的 XHR/Fetch 端点。不会保存 Cookie、令牌、页面快照或任何账户标识。
 
 该读取器是可选增强。WebBridge 未运行、扩展未连接、浏览器未登录、网页改版或请求失败时，命令仍成功返回现有周/5 小时数据，并为 Kimi 增加一条可恢复的月度读取错误。
 
@@ -19,8 +19,8 @@ CLI 通过本机 Kimi WebBridge 复用浏览器登录态：先定位或打开订
 新增一个独立的 Kimi membership reader，负责：
 
 1. 通过 WebBridge 守护进程检查浏览器桥接可用性。
-2. 复用或打开 Kimi 订阅页，并短时收集该页面的相关网络响应。
-3. 将已用、总额、剩余百分比和月度重置时间标准化为现有 `ProviderUsage`。
+2. 复用或打开 Kimi 订阅页，并读取其 WebBridge accessibility snapshot。
+3. 从“用量进度”中的“总使用量”卡片解析已用百分比和月度重置时间，再标准化为现有 `ProviderUsage`。
 4. 向 Kimi provider 返回该月度记录，或返回可读错误而不干扰 `/usages` 结果。
 
 Kimi provider 继续以 `/usages` 为主来源。membership reader 只附加一条 `Monthly Credits`（中文环境下为“月度额度”）记录；不改变其他 provider 的接口或渲染逻辑。
@@ -37,7 +37,7 @@ Kimi provider 继续以 `/usages` 为主来源。membership reader 只附加一�
 
 ## 测试
 
-使用录制且脱敏的 WebBridge 网络响应作为 fixture，覆盖：
+使用录制且脱敏的 WebBridge accessibility snapshot 作为 fixture，覆盖：
 
 - 月度有效响应的字段解析与百分比计算；
 - 已用/剩余两类响应形态；
