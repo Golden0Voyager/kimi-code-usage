@@ -54,6 +54,38 @@ async def test_fetch_monthly_usage_requests_snapshot_after_reusing_subscription_
 
 
 @pytest.mark.asyncio
+async def test_fetch_monthly_usage_opens_and_closes_subscription_tab_when_missing():
+    responses = [
+        {"ok": True, "data": {"success": True}},
+        {"ok": True, "data": {"tree": [[{"role": "heading", "name": "Usage Progress"}, {"role": "StaticText", "name": "Total Usage"}, {"role": "StaticText", "name": "25%"}]]}},
+        {"ok": True, "data": {"closed": True}},
+    ]
+    with patch(
+        "kimi_code_usage.providers.kimi_membership._bridge_command",
+        new=AsyncMock(side_effect=[MonthlyUsageUnavailable("no matching tab"), *responses]),
+    ) as command:
+        row = await fetch_monthly_usage_from_webbridge(lang_zh=False)
+
+    assert row.used == 25.0
+    assert [call.args[0] for call in command.await_args_list] == ["find_tab", "navigate", "snapshot", "close_tab"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_monthly_usage_retries_empty_snapshot_after_navigation():
+    responses = [
+        {"ok": True, "data": {"success": False}},
+        {"ok": True, "data": {"success": True}},
+        {"ok": True, "data": {"tree": [[{"role": "StaticText", "name": "Loading"}]]}},
+        {"ok": True, "data": {"tree": [[{"role": "heading", "name": "Usage Progress"}, {"role": "StaticText", "name": "Total Usage"}, {"role": "StaticText", "name": "25%"}]]}},
+        {"ok": True, "data": {"closed": True}},
+    ]
+    with patch("kimi_code_usage.providers.kimi_membership._bridge_command", new=AsyncMock(side_effect=responses)):
+        row = await fetch_monthly_usage_from_webbridge(lang_zh=False)
+
+    assert row.used == 25.0
+
+
+@pytest.mark.asyncio
 async def test_fetch_monthly_usage_explains_disconnected_bridge():
     with patch(
         "kimi_code_usage.providers.kimi_membership._bridge_command",

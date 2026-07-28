@@ -1,3 +1,4 @@
+import asyncio
 import re
 from collections.abc import Mapping
 from typing import Any
@@ -111,16 +112,32 @@ async def _bridge_command(action: str, args: Mapping[str, Any]) -> Mapping[str, 
 
 
 async def fetch_monthly_usage_from_webbridge(*, lang_zh: bool) -> ProviderUsage:
-    found = await _bridge_command("find_tab", {"url": _SUBSCRIPTION_URL, "active": False})
-    if not bool((found.get("data") or {}).get("success")):
-        raise MonthlyUsageUnavailable(
-            "Kimi Subscription page is not open; log in and open it in the browser."
+    try:
+        found = await _bridge_command(
+            "find_tab", {"url": _SUBSCRIPTION_URL, "active": False}
         )
-    snapshot = await _bridge_command("snapshot", {})
-    data = snapshot.get("data")
-    row = parse_monthly_usage_snapshot(data if isinstance(data, Mapping) else {}, lang_zh=lang_zh)
-    if row is None:
+        opened = not bool((found.get("data") or {}).get("success"))
+    except MonthlyUsageUnavailable:
+        opened = True
+    if opened:
+        await _bridge_command(
+            "navigate",
+            {"url": _SUBSCRIPTION_URL, "newTab": True, "group_title": "Kimi Usage"},
+        )
+    try:
+        for attempt in range(3):
+            snapshot = await _bridge_command("snapshot", {})
+            data = snapshot.get("data")
+            row = parse_monthly_usage_snapshot(
+                data if isinstance(data, Mapping) else {}, lang_zh=lang_zh
+            )
+            if row is not None:
+                return row
+            if attempt < 2:
+                await asyncio.sleep(0.5)
         raise MonthlyUsageUnavailable(
             "Kimi monthly usage was not found; log in and open the Subscription page."
         )
-    return row
+    finally:
+        if opened:
+            await _bridge_command("close_tab", {})
