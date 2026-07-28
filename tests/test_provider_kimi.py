@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from kimi_code_usage.providers import ProviderUsage
 from kimi_code_usage.providers.kimi import (
     _get_reset_info,
     _kimi_error_hint,
@@ -12,6 +13,7 @@ from kimi_code_usage.providers.kimi import (
     _to_usage_row,
     fetch_kimi_usage,
 )
+from kimi_code_usage.providers.kimi_membership import MonthlyUsageUnavailable
 
 
 # -- _to_int --
@@ -155,16 +157,71 @@ async def test_fetch_kimi_usage_success():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=None)
 
-    with patch('aiohttp.ClientSession', return_value=mock_session):
+    with patch('aiohttp.ClientSession', return_value=mock_session), patch(
+        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
+        new=AsyncMock(side_effect=Exception("bridge unavailable")),
+    ):
         res = await fetch_kimi_usage("test-key", "https://api.example.com/v1")
-        assert len(res) == 1
-        r = res[0]
+        assert len(res) == 2
+        r = res[1]
         assert r.provider == "kimi"
         assert r.used == 400.0
         assert r.limit == 1000.0
         assert r.remaining == 600.0
         assert r.percent == 40.0
         assert r.unit == "%"
+
+
+@pytest.mark.asyncio
+async def test_fetch_kimi_usage_prepends_monthly_usage_and_preserves_api_rows():
+    monthly = ProviderUsage("kimi", "Monthly Credits", 62.0, 100.0, 38.0, 62.0, "2026-08-12", "%")
+
+    async def mock_json(*args, **kwargs):
+        return {"data": [{"model_name": "all", "limit": 100, "used": 14}]}
+
+    cm = AsyncMock()
+    cm.__aenter__ = AsyncMock(return_value=cm)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    cm.status = 200
+    cm.json = mock_json
+    session = AsyncMock()
+    session.get = lambda *args, **kwargs: cm
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("aiohttp.ClientSession", return_value=session), patch(
+        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
+        new=AsyncMock(return_value=monthly),
+    ):
+        rows = await fetch_kimi_usage("test-key", "https://api.example.com/v1")
+
+    assert [row.label for row in rows] == ["Monthly Credits", "all"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_kimi_usage_keeps_api_rows_when_monthly_reader_is_unavailable():
+    async def mock_json(*args, **kwargs):
+        return {"data": [{"model_name": "all", "limit": 100, "used": 14}]}
+
+    cm = AsyncMock()
+    cm.__aenter__ = AsyncMock(return_value=cm)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    cm.status = 200
+    cm.json = mock_json
+    session = AsyncMock()
+    session.get = lambda *args, **kwargs: cm
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=None)
+    with patch("aiohttp.ClientSession", return_value=session), patch(
+        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
+        new=AsyncMock(side_effect=MonthlyUsageUnavailable("Kimi WebBridge is unavailable")),
+    ):
+        rows = await fetch_kimi_usage("test-key", "https://api.example.com/v1")
+
+    assert rows[0].label == "Monthly Credits"
+    assert rows[0].unit == "text"
+    assert "WebBridge" in rows[0].text_value
+    assert rows[1].label == "all"
 
 @pytest.mark.asyncio
 async def test_fetch_kimi_usage_fallback():
@@ -191,10 +248,13 @@ async def test_fetch_kimi_usage_fallback():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=None)
 
-    with patch('aiohttp.ClientSession', return_value=mock_session):
+    with patch('aiohttp.ClientSession', return_value=mock_session), patch(
+        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
+        new=AsyncMock(side_effect=Exception("bridge unavailable")),
+    ):
         res = await fetch_kimi_usage("test-key", "https://api.example.com/v1")
-        assert len(res) == 1
-        assert res[0].used == 200.0
+        assert len(res) == 2
+        assert res[1].used == 200.0
 
 @pytest.mark.asyncio
 async def test_fetch_kimi_usage_does_not_fallback_on_auth_error():

@@ -32,6 +32,8 @@
 
 **统一前提：** 在环境变量或 `.env` 文件中设置 `KIMI_API_KEY`（[Kimi Coding Plan](https://api.kimi.com/coding/v1) API Key，格式 `sk-kimi-xxx`）。
 
+> 月度会员额度为可选增强功能。请保持 Kimi WebBridge 运行、浏览器扩展已连接且 Kimi 已登录；不可用时，周用量和 5 小时用量仍会正常显示。
+
 ---
 
 ### ⚡ CLI 终端报告器

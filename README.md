@@ -32,6 +32,8 @@ In the era of "Vibecoding," transparency of resources is a prerequisite for flow
 
 **Prerequisite:** A [Kimi Coding Plan](https://api.kimi.com/coding/v1) API Key (`sk-kimi-xxx`), set as `KIMI_API_KEY` in your environment or `.env` file.
 
+> Monthly membership usage is optional. To display it, keep Kimi WebBridge running, the browser extension connected, and a logged-in Kimi browser session available. If it is unavailable, weekly and 5-hour Kimi usage still work normally.
+
 ---
 
 ### ⚡ CLI Reporter
