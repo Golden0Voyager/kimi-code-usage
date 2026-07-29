@@ -4,9 +4,11 @@ import pytest
 
 from kimi_code_usage.providers.kimi_membership import (
     MonthlyUsageUnavailable,
+    _webbridge_unavailable_message,
     fetch_monthly_usage_from_webbridge,
     parse_monthly_usage_snapshot,
 )
+from kimi_code_usage.providers.webbridge import WebBridgeStatus
 
 
 def test_parse_monthly_usage_snapshot_reads_first_total_card_in_usage_progress():
@@ -86,10 +88,96 @@ async def test_fetch_monthly_usage_retries_empty_snapshot_after_navigation():
 
 
 @pytest.mark.asyncio
+async def test_fetch_monthly_usage_waits_for_slow_subscription_card():
+    loading = {
+        "ok": True,
+        "data": {"tree": [[{"role": "StaticText", "name": "Loading"}]]},
+    }
+    loaded = {
+        "ok": True,
+        "data": {
+            "tree": [[
+                {"role": "heading", "name": "Usage Progress"},
+                {"role": "StaticText", "name": "Total Usage"},
+                {"role": "StaticText", "name": "25%"},
+            ]]
+        },
+    }
+    responses = [
+        {"ok": True, "data": {"success": True}},
+        loading,
+        loading,
+        loading,
+        loading,
+        loaded,
+    ]
+    with (
+        patch(
+            "kimi_code_usage.providers.kimi_membership._bridge_command",
+            new=AsyncMock(side_effect=responses),
+        ),
+        patch(
+            "kimi_code_usage.providers.kimi_membership.asyncio.sleep",
+            new=AsyncMock(),
+        ) as sleep,
+    ):
+        row = await fetch_monthly_usage_from_webbridge(lang_zh=False)
+
+    assert row.used == 25.0
+    assert sleep.await_count == 4
+
+
+@pytest.mark.asyncio
 async def test_fetch_monthly_usage_explains_disconnected_bridge():
     with patch(
         "kimi_code_usage.providers.kimi_membership._bridge_command",
         new=AsyncMock(side_effect=MonthlyUsageUnavailable("Kimi WebBridge is unavailable")),
     ):
         with pytest.raises(MonthlyUsageUnavailable, match="WebBridge"):
+            await fetch_monthly_usage_from_webbridge(lang_zh=False)
+
+
+@pytest.mark.parametrize(
+    ("status", "start_error", "expected"),
+    [
+        (WebBridgeStatus(False, False, False), None, "not installed"),
+        (WebBridgeStatus(True, False, False), None, "daemon is not running"),
+        (WebBridgeStatus(True, False, False), "cannot bind", "cannot bind"),
+        (
+            WebBridgeStatus(True, True, False),
+            None,
+            "browser extension is not connected",
+        ),
+    ],
+)
+def test_webbridge_unavailable_message_distinguishes_local_states(
+    status, start_error, expected
+):
+    with (
+        patch(
+            "kimi_code_usage.providers.kimi_membership.get_webbridge_status",
+            return_value=status,
+        ),
+        patch(
+            "kimi_code_usage.providers.kimi_membership.last_webbridge_start_error",
+            return_value=start_error,
+        ),
+    ):
+        assert expected in _webbridge_unavailable_message()
+
+
+@pytest.mark.asyncio
+async def test_fetch_monthly_usage_explains_logged_out_or_missing_page_data():
+    responses = [
+        {"ok": True, "data": {"success": True}},
+        *[
+            {"ok": True, "data": {"tree": [[{"name": "Sign in"}]]}}
+            for _ in range(8)
+        ],
+    ]
+    with patch(
+        "kimi_code_usage.providers.kimi_membership._bridge_command",
+        new=AsyncMock(side_effect=responses),
+    ):
+        with pytest.raises(MonthlyUsageUnavailable, match="log in"):
             await fetch_monthly_usage_from_webbridge(lang_zh=False)

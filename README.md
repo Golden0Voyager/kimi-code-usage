@@ -32,7 +32,9 @@ In the era of "Vibecoding," transparency of resources is a prerequisite for flow
 
 **Prerequisite:** A [Kimi Coding Plan](https://api.kimi.com/coding/v1) API Key (`sk-kimi-xxx`), set as `KIMI_API_KEY` in your environment or `.env` file.
 
-> Monthly membership usage is optional. To display it, keep Kimi WebBridge running, the browser extension connected, and a logged-in Kimi browser session available. If it is unavailable, weekly and 5-hour Kimi usage still work normally.
+> Monthly membership usage is optional. In interactive mode, if an installed Kimi WebBridge daemon is stopped, `kimi-usage` asks on every launch whether to start it. Declining affects only monthly credits. The browser extension must still be connected and Kimi must be logged in; weekly and 5-hour Kimi usage continue working when monthly usage is unavailable.
+
+> ChatGPT Plus usage reads the local Codex authentication file. After a 401 response, it refreshes the access token and retries once. If authentication still fails, run `codex login`.
 
 ---
 
@@ -44,6 +46,7 @@ In the era of "Vibecoding," transparency of resources is a prerequisite for flow
 ```bash
 pip install kimi-code-usage
 kimi-usage              # Aesthetic Rich panel
+kimi-usage -i           # Interactive panel with optional WebBridge startup prompt
 kimi-usage --json       # Machine-readable JSON
 kimi-usage --plain      # Plain text output
 ```

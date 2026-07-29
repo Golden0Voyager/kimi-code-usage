@@ -9,10 +9,16 @@ from dotenv import load_dotenv
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
+from rich.prompt import Confirm
 from rich.text import Text
 
 from kimi_code_usage.config import DEFAULT_CONFIG_PATH, AppConfig, ConfigResolver, save_theme
 from kimi_code_usage.providers import DailyUsage, ModelUsage, ProviderUsage, dispatch_all
+from kimi_code_usage.providers.webbridge import (
+    WebBridgeLifecycleError,
+    get_webbridge_status,
+    start_webbridge,
+)
 from kimi_code_usage.server import run_server
 
 # --- i18n ---
@@ -53,6 +59,32 @@ L_ZH = {
 
 
 L = L_ZH if IS_ZH else L_EN
+
+
+def _should_offer_webbridge_start(config: AppConfig) -> bool:
+    kimi = config.providers.get("kimi")
+    if not kimi or not kimi.enabled or not kimi.api_key:
+        return False
+    return config.visible_providers is None or "kimi" in config.visible_providers
+
+
+def _preflight_webbridge(config: AppConfig, *, lang_zh: bool) -> None:
+    if not _should_offer_webbridge_start(config):
+        return
+    status = get_webbridge_status()
+    if not status.installed or status.running or status.detail:
+        return
+    prompt = (
+        "是否启动 Kimi WebBridge 以获取月度额度？"
+        if lang_zh
+        else "Start Kimi WebBridge to fetch monthly credits?"
+    )
+    if Confirm.ask(prompt, default=True):
+        try:
+            start_webbridge()
+        except WebBridgeLifecycleError as exc:
+            Console().print(f"[yellow]{exc}[/yellow]")
+
 
 _PROVIDER_SETUP_HELP = {
     "kimi": {
@@ -1582,6 +1614,10 @@ async def main():
 
     # Interactive mode: hand off to TUI loop (handles its own dispatch)
     if args.interactive:
+        lang_zh = config.language == "zh" or (
+            config.language not in {"zh", "en"} and IS_ZH
+        )
+        _preflight_webbridge(config, lang_zh=lang_zh)
         await _interactive_mode(config, theme_name, config_path=str(resolver.config_path))
         return
 

@@ -6,6 +6,7 @@ from typing import Any
 import aiohttp
 
 from . import ProviderUsage
+from .webbridge import get_webbridge_status, last_webbridge_start_error
 
 
 class MonthlyUsageUnavailableError(Exception):
@@ -18,6 +19,27 @@ MonthlyUsageUnavailable = MonthlyUsageUnavailableError
 _BRIDGE_URL = "http://127.0.0.1:10086/command"
 _SUBSCRIPTION_URL = "https://www.kimi.com/membership/subscription?tab=quota"
 _SESSION = "kimi-usage"
+_SNAPSHOT_ATTEMPTS = 8
+_SNAPSHOT_INTERVAL_SECONDS = 1.0
+
+
+def _webbridge_unavailable_message() -> str:
+    status = get_webbridge_status()
+    if not status.installed:
+        return "Kimi WebBridge is not installed."
+    start_error = last_webbridge_start_error()
+    if not status.running:
+        if start_error:
+            return f"Kimi WebBridge failed to start: {start_error}"
+        if status.detail:
+            return f"Kimi WebBridge status check failed: {status.detail}"
+        return "Kimi WebBridge daemon is not running."
+    if not status.extension_connected:
+        return (
+            "Kimi WebBridge browser extension is not connected; "
+            "open the browser extension."
+        )
+    return status.detail or "Kimi WebBridge command failed."
 
 
 def _flatten_names(node: Any) -> list[str]:
@@ -96,18 +118,12 @@ async def _bridge_command(action: str, args: Mapping[str, Any]) -> Mapping[str, 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(_BRIDGE_URL, json=payload) as response:
                 if response.status != 200:
-                    raise MonthlyUsageUnavailable(
-                        "Kimi WebBridge is unavailable; start it and open the browser extension."
-                    )
+                    raise MonthlyUsageUnavailable(_webbridge_unavailable_message())
                 data = await response.json()
     except (aiohttp.ClientError, TimeoutError) as exc:
-        raise MonthlyUsageUnavailable(
-            "Kimi WebBridge is unavailable; start it and open the browser extension."
-        ) from exc
+        raise MonthlyUsageUnavailable(_webbridge_unavailable_message()) from exc
     if not isinstance(data, Mapping) or not data.get("ok"):
-        raise MonthlyUsageUnavailable(
-            "Kimi WebBridge is unavailable; start it and open the browser extension."
-        )
+        raise MonthlyUsageUnavailable(_webbridge_unavailable_message())
     return data
 
 
@@ -125,7 +141,7 @@ async def fetch_monthly_usage_from_webbridge(*, lang_zh: bool) -> ProviderUsage:
             {"url": _SUBSCRIPTION_URL, "newTab": True, "group_title": "Kimi Usage"},
         )
     try:
-        for attempt in range(3):
+        for attempt in range(_SNAPSHOT_ATTEMPTS):
             snapshot = await _bridge_command("snapshot", {})
             data = snapshot.get("data")
             row = parse_monthly_usage_snapshot(
@@ -133,8 +149,8 @@ async def fetch_monthly_usage_from_webbridge(*, lang_zh: bool) -> ProviderUsage:
             )
             if row is not None:
                 return row
-            if attempt < 2:
-                await asyncio.sleep(0.5)
+            if attempt < _SNAPSHOT_ATTEMPTS - 1:
+                await asyncio.sleep(_SNAPSHOT_INTERVAL_SECONDS)
         raise MonthlyUsageUnavailable(
             "Kimi monthly usage was not found; log in and open the Subscription page."
         )

@@ -2,6 +2,7 @@
 
 import json
 import os
+import stat
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,13 +10,12 @@ import pytest
 
 from kimi_code_usage.providers import ProviderUsage
 from kimi_code_usage.providers.codex import (
-    CODEX_AUTH_PATH,
     _parse_usage_response,
     _read_auth,
     _refresh_access_token,
+    _write_auth,
     fetch_codex_usage,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -108,6 +108,65 @@ def test_read_auth_missing_fields(tmp_path):
     with patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path):
         with pytest.raises(RuntimeError, match="missing 'access_token'"):
             _read_auth()
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# _write_auth
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def test_write_auth_atomically_preserves_fields_and_permissions(tmp_path):
+    auth_path = make_auth_file(
+        tmp_path,
+        {
+            "auth_mode": "chatgpt",
+            "other": {"keep": True},
+            "tokens": {
+                "access_token": "old",
+                "refresh_token": "old-refresh",
+                "account_id": "acct",
+                "id_token": "keep-id",
+            },
+        },
+    )
+    auth_path.chmod(0o600)
+
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch(
+            "kimi_code_usage.providers.codex.os.replace",
+            wraps=os.replace,
+        ) as replace,
+    ):
+        _write_auth(
+            {"access_token": "new", "refresh_token": "new-refresh"}
+        )
+
+    saved = json.loads(auth_path.read_text())
+    replace.assert_called_once()
+    assert saved["other"] == {"keep": True}
+    assert saved["tokens"]["id_token"] == "keep-id"
+    assert saved["tokens"]["account_id"] == "acct"
+    assert saved["tokens"]["access_token"] == "new"
+    assert saved["tokens"]["refresh_token"] == "new-refresh"
+    assert stat.S_IMODE(auth_path.stat().st_mode) == 0o600
+
+
+def test_write_auth_replace_failure_preserves_original_file(tmp_path):
+    auth_path = make_auth_file(tmp_path)
+    original = auth_path.read_text()
+
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch(
+            "kimi_code_usage.providers.codex.os.replace",
+            side_effect=OSError("replace failed"),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="replace failed"):
+            _write_auth({"access_token": "new"})
+
+    assert auth_path.read_text() == original
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -289,6 +348,149 @@ async def test_fetch_success(tmp_path):
     weekly = [r for r in rows if r.label == "Weekly Usage"]
     assert len(weekly) == 1
     assert weekly[0].used == 23.0
+
+
+@pytest.mark.asyncio
+async def test_fetch_401_refreshes_persists_and_retries_once(tmp_path):
+    auth_path = make_auth_file(tmp_path)
+    unauthorized = MagicMock(status_code=401, text="Unauthorized")
+    success = MagicMock(status_code=200, text="")
+    success.json.return_value = {"plan_type": "plus"}
+    scraper = MagicMock()
+    scraper.get.side_effect = [unauthorized, success]
+
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch("cloudscraper.create_scraper", return_value=scraper),
+        patch(
+            "kimi_code_usage.providers.codex._refresh_access_token",
+            new=AsyncMock(
+                return_value={
+                    "access_token": "fresh-access",
+                    "refresh_token": "fresh-refresh",
+                }
+            ),
+        ) as refresh,
+    ):
+        rows = await fetch_codex_usage(
+            "enabled", "https://chatgpt.com/backend-api"
+        )
+
+    assert rows[0].text_value == "ChatGPT Plus"
+    refresh.assert_awaited_once_with("test-refresh-token")
+    assert scraper.get.call_count == 2
+    assert (
+        scraper.get.call_args_list[1].kwargs["headers"]["Authorization"]
+        == "Bearer fresh-access"
+    )
+    saved = json.loads(auth_path.read_text())
+    assert saved["tokens"]["access_token"] == "fresh-access"
+    assert saved["tokens"]["refresh_token"] == "fresh-refresh"
+    assert saved["tokens"]["id_token"] == "test-id-token"
+
+
+@pytest.mark.asyncio
+async def test_fetch_second_401_stops_after_one_refresh_and_retry(tmp_path):
+    auth_path = make_auth_file(tmp_path)
+    unauthorized = MagicMock(status_code=401, text="Unauthorized")
+    scraper = MagicMock()
+    scraper.get.side_effect = [unauthorized, unauthorized]
+
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch("cloudscraper.create_scraper", return_value=scraper),
+        patch(
+            "kimi_code_usage.providers.codex._refresh_access_token",
+            new=AsyncMock(
+                return_value={
+                    "access_token": "fresh-access",
+                    "refresh_token": "fresh-refresh",
+                }
+            ),
+        ) as refresh,
+    ):
+        with pytest.raises(RuntimeError, match="codex login"):
+            await fetch_codex_usage(
+                "enabled", "https://chatgpt.com/backend-api"
+            )
+
+    assert refresh.await_count == 1
+    assert scraper.get.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_fetch_401_without_refresh_token_requests_login_once(tmp_path):
+    auth = json.loads(json.dumps(SAMPLE_AUTH))
+    auth["tokens"].pop("refresh_token")
+    auth_path = make_auth_file(tmp_path, auth)
+    original = auth_path.read_text()
+    scraper = make_mock_scraper(401, text="Unauthorized")
+
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch("cloudscraper.create_scraper", return_value=scraper),
+        patch(
+            "kimi_code_usage.providers.codex._refresh_access_token",
+            new=AsyncMock(),
+        ) as refresh,
+    ):
+        with pytest.raises(RuntimeError, match="codex login"):
+            await fetch_codex_usage(
+                "enabled", "https://chatgpt.com/backend-api"
+            )
+
+    refresh.assert_not_awaited()
+    assert scraper.get.call_count == 1
+    assert auth_path.read_text() == original
+
+
+@pytest.mark.asyncio
+async def test_fetch_refresh_failure_preserves_auth_and_requests_login(tmp_path):
+    auth_path = make_auth_file(tmp_path)
+    original = auth_path.read_text()
+    scraper = make_mock_scraper(401, text="Unauthorized")
+
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch("cloudscraper.create_scraper", return_value=scraper),
+        patch(
+            "kimi_code_usage.providers.codex._refresh_access_token",
+            new=AsyncMock(side_effect=RuntimeError("refresh rejected")),
+        ) as refresh,
+    ):
+        with pytest.raises(
+            RuntimeError, match="refresh rejected.*codex login"
+        ):
+            await fetch_codex_usage(
+                "enabled", "https://chatgpt.com/backend-api"
+            )
+
+    refresh.assert_awaited_once_with("test-refresh-token")
+    assert scraper.get.call_count == 1
+    assert auth_path.read_text() == original
+
+
+@pytest.mark.asyncio
+async def test_fetch_refresh_network_error_requests_login(tmp_path):
+    auth_path = make_auth_file(tmp_path)
+    original = auth_path.read_text()
+    scraper = make_mock_scraper(401, text="Unauthorized")
+
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch("cloudscraper.create_scraper", return_value=scraper),
+        patch(
+            "kimi_code_usage.providers.codex._refresh_access_token",
+            new=AsyncMock(side_effect=OSError("network down")),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="network down.*codex login"):
+            await fetch_codex_usage(
+                "enabled", "https://chatgpt.com/backend-api"
+            )
+
+    assert scraper.get.call_count == 1
+    assert auth_path.read_text() == original
 
 
 @pytest.mark.asyncio
