@@ -740,11 +740,13 @@ async def test_interactive_mode_help_and_config_keys(monkeypatch):
     assert "OPENAI_API_KEY" in rendered
     assert "ANTHROPIC_API_KEY" in rendered
     assert "OPENROUTER_API_KEY" in rendered
+    assert "1-N (usage)" not in rendered
+    assert "1-N (settings)" in rendered
 
 
 @pytest.mark.asyncio
-async def test_interactive_mode_top_bar_shows_only_visible_providers(monkeypatch):
-    """Top bar omits hidden providers and renumbers visible ones."""
+async def test_interactive_mode_top_bar_shows_unnumbered_visible_providers(monkeypatch):
+    """Top bar shows visible providers without shortcut numbers."""
     _mock_terminal(monkeypatch)
     mock_select, mock_read = _make_select_and_read(["q"])
     import kimi_code_usage.main as main_mod
@@ -788,12 +790,11 @@ async def test_interactive_mode_top_bar_shows_only_visible_providers(monkeypatch
             await _interactive_mode(cfg, "blue-dark")
 
     rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
-    assert "[1]Kimi" in rendered
-    assert "[2]ChatGPT+" in rendered or "[2]OpenAI API" in rendered
-    assert "[3]" not in rendered
-    assert "[4]" not in rendered
-    assert "[5]" not in rendered
-    assert "[6]" not in rendered
+    assert "● Kimi" in rendered
+    assert "● ChatGPT+" in rendered or "● OpenAI API" in rendered
+    assert "[1]Kimi" not in rendered
+    assert "[2]ChatGPT+" not in rendered
+    assert "[2]OpenAI API" not in rendered
 
 
 @pytest.mark.asyncio
@@ -823,8 +824,8 @@ async def test_interactive_mode_top_bar_placeholder_when_all_hidden(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_interactive_mode_usage_number_key_targets_visible_order(monkeypatch):
-    """Pressing [2] in usage view hides the second visible provider, not provider_order[1]."""
+async def test_interactive_mode_usage_number_key_is_ignored(monkeypatch):
+    """Pressing a number in usage view leaves visible providers unchanged."""
     _mock_terminal(monkeypatch)
     mock_select, mock_read = _make_select_and_read(["2", "q"])
     import kimi_code_usage.main as main_mod
@@ -834,7 +835,7 @@ async def test_interactive_mode_usage_number_key_targets_visible_order(monkeypat
 
     cfg = _make_interactive_config(monkeypatch)
     cfg.provider_order = ["kimi", "openai", "anthropic"]
-    cfg.visible_providers = ["kimi", "anthropic"]  # openai is hidden
+    cfg.visible_providers = ["kimi", "anthropic"]
     mock_res = {
         "kimi": [
             ProviderUsage(
@@ -863,21 +864,15 @@ async def test_interactive_mode_usage_number_key_targets_visible_order(monkeypat
         ],
     }
 
-    saved_calls = []
-
-    def fake_save(theme, language=None, visible_providers=None, or_metric=None, days_window=None, config_path=None):
-        saved_calls.append((theme, language, visible_providers, or_metric, days_window))
-
-    with patch("kimi_code_usage.main.save_theme", fake_save):
-        with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
-            with patch("kimi_code_usage.main.Live") as mock_live_cls:
-                mock_live = mock_live_cls.return_value.__enter__.return_value
-                await _interactive_mode(cfg, "blue-dark")
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+        with patch("kimi_code_usage.main.Live") as mock_live_cls:
+            mock_live = mock_live_cls.return_value.__enter__.return_value
+            await _interactive_mode(cfg, "blue-dark")
 
     rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
-    # anthropic was at [2] in the visible top bar; pressing 2 should hide it
-    assert "[2]Anthropic" not in rendered
-    assert "[1]Kimi" in rendered
+    assert "Kimi" in rendered
+    assert "Anthropic" in rendered
+    assert "Pro Plan" in rendered
 
 
 @pytest.mark.asyncio
@@ -938,8 +933,8 @@ async def test_interactive_mode_settings_number_key_toggles_full_list(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_interactive_mode_footer_hints_reflect_visible_count(monkeypatch):
-    """Footer number range matches visible count in usage view and full count in settings view."""
+async def test_interactive_mode_footer_number_hint_is_settings_only(monkeypatch):
+    """Only the settings view advertises number-key panel toggles."""
     _mock_terminal(monkeypatch)
     # Refresh first to force a usage-view update (the initial panel is rendered by
     # Live on entry, not via update()), then switch to settings and quit.
@@ -985,11 +980,9 @@ async def test_interactive_mode_footer_hints_reflect_visible_count(monkeypatch):
             await _interactive_mode(cfg, "blue-dark")
 
     rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
-    # Usage view after 'r' should show [1-2]
-    # Settings view after 's' should show [1-6]
-    # Because the test renders both views, assert both ranges appear at some point.
-    assert "[1-2]" in rendered
+    assert "[1-2]" not in rendered
     assert "[1-6]" in rendered
+    assert "toggle panels" in rendered or "开关面板" in rendered
 
 
 @pytest.mark.asyncio
