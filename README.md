@@ -34,6 +34,8 @@ In the era of "Vibecoding," transparency of resources is a prerequisite for flow
 
 > Monthly membership usage is optional. In interactive mode, if an installed Kimi WebBridge daemon is stopped, `kimi-usage` asks on every launch whether to start it. Declining affects only monthly credits. The browser extension must still be connected and Kimi must be logged in; weekly and 5-hour Kimi usage continue working when monthly usage is unavailable.
 
+> ChatGPT Plus usage reads the local Codex authentication file. After a 401 response, it refreshes the access token and retries once. If authentication still fails, run `codex login`.
+
 ---
 
 ### ⚡ CLI Reporter

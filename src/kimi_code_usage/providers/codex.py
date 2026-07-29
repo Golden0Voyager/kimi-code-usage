@@ -15,7 +15,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import stat
+import tempfile
 from collections.abc import Mapping
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -78,16 +81,41 @@ def _read_auth() -> dict[str, Any]:
 
 def _write_auth(auth_data: dict[str, Any]) -> None:
     """Write updated token data back to the Codex auth file."""
+    temp_path: Path | None = None
     try:
         existing: dict[str, Any] = {}
         if CODEX_AUTH_PATH.exists():
             with open(CODEX_AUTH_PATH, encoding="utf-8") as f:
                 existing = json.load(f)
-        existing.setdefault("tokens", {}).update(auth_data)
-        with open(CODEX_AUTH_PATH, "w", encoding="utf-8") as f:
+        tokens = existing.setdefault("tokens", {})
+        if not isinstance(tokens, dict):
+            raise RuntimeError("Codex auth file has invalid 'tokens' field.")
+        tokens.update(auth_data)
+
+        mode = (
+            stat.S_IMODE(CODEX_AUTH_PATH.stat().st_mode)
+            if CODEX_AUTH_PATH.exists()
+            else 0o600
+        )
+        fd, temp_name = tempfile.mkstemp(
+            prefix=f".{CODEX_AUTH_PATH.name}.",
+            suffix=".tmp",
+            dir=CODEX_AUTH_PATH.parent,
+        )
+        temp_path = Path(temp_name)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(existing, f, indent=2, ensure_ascii=False)
-    except OSError as exc:
-        raise RuntimeError(f"Failed to write updated tokens to auth file: {exc}") from exc
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(temp_path, mode)
+        os.replace(temp_path, CODEX_AUTH_PATH)
+        temp_path = None
+    except (json.JSONDecodeError, OSError) as exc:
+        raise RuntimeError(f"Failed to write Codex auth file: {exc}") from exc
+    finally:
+        if temp_path is not None:
+            with suppress(OSError):
+                temp_path.unlink(missing_ok=True)
 
 
 async def _refresh_access_token(refresh_token: str) -> dict[str, str]:
@@ -331,6 +359,23 @@ def _to_float(val: Any) -> float | None:
 # ---------------------------------------------------------------------------
 
 
+def _fetch_usage_response(
+    usage_url: str, access_token: str, account_id: str
+) -> tuple[int, str, dict[str, Any] | None]:
+    scraper = cloudscraper.create_scraper()
+    response = scraper.get(
+        usage_url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "ChatGPT-Account-Id": account_id,
+        },
+        timeout=15,
+    )
+    body = response.text if isinstance(response.text, str) else ""
+    data = response.json() if response.status_code == 200 else None
+    return response.status_code, body, data
+
+
 async def fetch_codex_usage(
     api_key: str, base_url: str, management_key: str | None = None
 ) -> list[ProviderUsage]:
@@ -361,31 +406,48 @@ async def fetch_codex_usage(
 
     # 2. Call the usage API (use /wham/usage for cloudscraper bypass)
     usage_url = f"{base_url.rstrip('/')}/wham/usage"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "ChatGPT-Account-Id": account_id,
-    }
-
-    def _sync_fetch() -> dict:
-        scraper = cloudscraper.create_scraper()
-        resp = scraper.get(usage_url, headers=headers, timeout=15)
-        if resp.status_code == 401 and refresh_token:
-            raise RuntimeError(
-                "Codex API returned 401. Token may be expired. "
-                "Try re-running `codex login`."
-            )
-        if resp.status_code != 200:
-            raise RuntimeError(
-                f"Codex API Error (HTTP {resp.status_code}): {resp.text[:500]}"
-            )
-        return resp.json()
 
     try:
-        data = await asyncio.to_thread(_sync_fetch)
+        status, body, data = await asyncio.to_thread(
+            _fetch_usage_response, usage_url, access_token, account_id
+        )
     except RuntimeError:
         raise
     except Exception as exc:
         raise RuntimeError(f"Codex API request failed: {exc}") from exc
+
+    if status == 401:
+        if not refresh_token:
+            raise RuntimeError(
+                "Codex API returned 401 and no refresh token is available. "
+                "Run `codex login`."
+            )
+        try:
+            refreshed = await _refresh_access_token(refresh_token)
+        except Exception as exc:
+            raise RuntimeError(f"{exc} Run `codex login`.") from exc
+        _write_auth(refreshed)
+        try:
+            status, body, data = await asyncio.to_thread(
+                _fetch_usage_response,
+                usage_url,
+                refreshed["access_token"],
+                account_id,
+            )
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"Codex API request failed: {exc}") from exc
+
+    if status == 401:
+        raise RuntimeError(
+            "Codex API still returned 401 after one token refresh. "
+            "Run `codex login`."
+        )
+    if status != 200:
+        raise RuntimeError(f"Codex API Error (HTTP {status}): {body[:500]}")
+    if data is None:
+        raise RuntimeError("Codex API response did not contain usage data.")
 
     # 3. Parse and return
     return _parse_usage_response(data)
