@@ -1548,11 +1548,8 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                     elif refresh_flag:
                         results, errors = await dispatch_all(config)
                         scroll[0] = 0
-                    elif toggle_num is not None:
-                        if current_view == "settings":
-                            providers = list(config.provider_order)
-                        else:
-                            providers = _visible_order()
+                    elif toggle_num is not None and current_view == "settings":
+                        providers = list(config.provider_order)
                         if toggle_num < len(providers):
                             p = providers[toggle_num]
                             if p in visible_providers:

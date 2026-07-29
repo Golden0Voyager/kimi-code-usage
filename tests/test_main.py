@@ -823,8 +823,8 @@ async def test_interactive_mode_top_bar_placeholder_when_all_hidden(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_interactive_mode_usage_number_key_targets_visible_order(monkeypatch):
-    """Pressing [2] in usage view hides the second visible provider, not provider_order[1]."""
+async def test_interactive_mode_usage_number_key_is_ignored(monkeypatch):
+    """Pressing a number in usage view leaves visible providers unchanged."""
     _mock_terminal(monkeypatch)
     mock_select, mock_read = _make_select_and_read(["2", "q"])
     import kimi_code_usage.main as main_mod
@@ -834,7 +834,7 @@ async def test_interactive_mode_usage_number_key_targets_visible_order(monkeypat
 
     cfg = _make_interactive_config(monkeypatch)
     cfg.provider_order = ["kimi", "openai", "anthropic"]
-    cfg.visible_providers = ["kimi", "anthropic"]  # openai is hidden
+    cfg.visible_providers = ["kimi", "anthropic"]
     mock_res = {
         "kimi": [
             ProviderUsage(
@@ -863,21 +863,15 @@ async def test_interactive_mode_usage_number_key_targets_visible_order(monkeypat
         ],
     }
 
-    saved_calls = []
-
-    def fake_save(theme, language=None, visible_providers=None, or_metric=None, days_window=None, config_path=None):
-        saved_calls.append((theme, language, visible_providers, or_metric, days_window))
-
-    with patch("kimi_code_usage.main.save_theme", fake_save):
-        with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
-            with patch("kimi_code_usage.main.Live") as mock_live_cls:
-                mock_live = mock_live_cls.return_value.__enter__.return_value
-                await _interactive_mode(cfg, "blue-dark")
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(mock_res, {}))):
+        with patch("kimi_code_usage.main.Live") as mock_live_cls:
+            mock_live = mock_live_cls.return_value.__enter__.return_value
+            await _interactive_mode(cfg, "blue-dark")
 
     rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
-    # anthropic was at [2] in the visible top bar; pressing 2 should hide it
-    assert "[2]Anthropic" not in rendered
-    assert "[1]Kimi" in rendered
+    assert "Kimi" in rendered
+    assert "Anthropic" in rendered
+    assert "Pro Plan" in rendered
 
 
 @pytest.mark.asyncio
