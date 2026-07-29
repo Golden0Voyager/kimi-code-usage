@@ -4,9 +4,11 @@ import pytest
 
 from kimi_code_usage.providers.kimi_membership import (
     MonthlyUsageUnavailable,
+    _webbridge_unavailable_message,
     fetch_monthly_usage_from_webbridge,
     parse_monthly_usage_snapshot,
 )
+from kimi_code_usage.providers.webbridge import WebBridgeStatus
 
 
 def test_parse_monthly_usage_snapshot_reads_first_total_card_in_usage_progress():
@@ -92,4 +94,50 @@ async def test_fetch_monthly_usage_explains_disconnected_bridge():
         new=AsyncMock(side_effect=MonthlyUsageUnavailable("Kimi WebBridge is unavailable")),
     ):
         with pytest.raises(MonthlyUsageUnavailable, match="WebBridge"):
+            await fetch_monthly_usage_from_webbridge(lang_zh=False)
+
+
+@pytest.mark.parametrize(
+    ("status", "start_error", "expected"),
+    [
+        (WebBridgeStatus(False, False, False), None, "not installed"),
+        (WebBridgeStatus(True, False, False), None, "daemon is not running"),
+        (WebBridgeStatus(True, False, False), "cannot bind", "cannot bind"),
+        (
+            WebBridgeStatus(True, True, False),
+            None,
+            "browser extension is not connected",
+        ),
+    ],
+)
+def test_webbridge_unavailable_message_distinguishes_local_states(
+    status, start_error, expected
+):
+    with (
+        patch(
+            "kimi_code_usage.providers.kimi_membership.get_webbridge_status",
+            return_value=status,
+        ),
+        patch(
+            "kimi_code_usage.providers.kimi_membership.last_webbridge_start_error",
+            return_value=start_error,
+        ),
+    ):
+        assert expected in _webbridge_unavailable_message()
+
+
+@pytest.mark.asyncio
+async def test_fetch_monthly_usage_explains_logged_out_or_missing_page_data():
+    responses = [
+        {"ok": True, "data": {"success": True}},
+        *[
+            {"ok": True, "data": {"tree": [[{"name": "Sign in"}]]}}
+            for _ in range(3)
+        ],
+    ]
+    with patch(
+        "kimi_code_usage.providers.kimi_membership._bridge_command",
+        new=AsyncMock(side_effect=responses),
+    ):
+        with pytest.raises(MonthlyUsageUnavailable, match="log in"):
             await fetch_monthly_usage_from_webbridge(lang_zh=False)
