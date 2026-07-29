@@ -9,12 +9,10 @@ import pytest
 
 from kimi_code_usage.providers import ProviderUsage
 from kimi_code_usage.providers.claude import (
-    CLAUDE_CREDENTIALS_PATH,
     _parse_usage_response,
     _read_oauth_token,
     fetch_claude_usage,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Fixtures
