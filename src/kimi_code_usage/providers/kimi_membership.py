@@ -19,6 +19,8 @@ MonthlyUsageUnavailable = MonthlyUsageUnavailableError
 _BRIDGE_URL = "http://127.0.0.1:10086/command"
 _SUBSCRIPTION_URL = "https://www.kimi.com/membership/subscription?tab=quota"
 _SESSION = "kimi-usage"
+_SNAPSHOT_ATTEMPTS = 8
+_SNAPSHOT_INTERVAL_SECONDS = 1.0
 
 
 def _webbridge_unavailable_message() -> str:
@@ -139,7 +141,7 @@ async def fetch_monthly_usage_from_webbridge(*, lang_zh: bool) -> ProviderUsage:
             {"url": _SUBSCRIPTION_URL, "newTab": True, "group_title": "Kimi Usage"},
         )
     try:
-        for attempt in range(3):
+        for attempt in range(_SNAPSHOT_ATTEMPTS):
             snapshot = await _bridge_command("snapshot", {})
             data = snapshot.get("data")
             row = parse_monthly_usage_snapshot(
@@ -147,8 +149,8 @@ async def fetch_monthly_usage_from_webbridge(*, lang_zh: bool) -> ProviderUsage:
             )
             if row is not None:
                 return row
-            if attempt < 2:
-                await asyncio.sleep(0.5)
+            if attempt < _SNAPSHOT_ATTEMPTS - 1:
+                await asyncio.sleep(_SNAPSHOT_INTERVAL_SECONDS)
         raise MonthlyUsageUnavailable(
             "Kimi monthly usage was not found; log in and open the Subscription page."
         )

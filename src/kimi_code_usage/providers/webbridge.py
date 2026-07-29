@@ -66,7 +66,10 @@ def _set_start_error(message: str | None) -> None:
 
 
 def start_webbridge(
-    *, timeout_seconds: float = 3.0, poll_interval: float = 0.1
+    *,
+    timeout_seconds: float = 3.0,
+    extension_timeout_seconds: float = 30.0,
+    poll_interval: float = 0.5,
 ) -> WebBridgeStatus:
     if not WEBBRIDGE_BIN.exists():
         message = "Kimi WebBridge is not installed"
@@ -94,8 +97,19 @@ def start_webbridge(
     while time.monotonic() < deadline:
         status = get_webbridge_status()
         if status.running:
-            return status
+            break
         time.sleep(poll_interval)
-    message = "Kimi WebBridge did not become ready before timeout"
-    _set_start_error(message)
-    raise WebBridgeLifecycleError(message)
+    else:
+        message = "Kimi WebBridge did not become ready before timeout"
+        _set_start_error(message)
+        raise WebBridgeLifecycleError(message)
+
+    extension_deadline = time.monotonic() + extension_timeout_seconds
+    while not status.extension_connected and time.monotonic() < extension_deadline:
+        time.sleep(poll_interval)
+        status = get_webbridge_status()
+        if not status.running:
+            message = status.detail or "Kimi WebBridge stopped before extension connected"
+            _set_start_error(message)
+            raise WebBridgeLifecycleError(message)
+    return status

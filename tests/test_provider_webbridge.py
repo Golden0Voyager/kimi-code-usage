@@ -64,11 +64,12 @@ def test_status_returns_diagnostic_for_command_failure(tmp_path, completed, deta
     assert detail in (status.detail or "")
 
 
-def test_start_runs_binary_and_stops_after_daemon_is_ready(tmp_path):
+def test_start_waits_for_browser_extension_after_daemon_is_ready(tmp_path):
     binary = tmp_path / "kimi-webbridge"
     binary.touch()
     stopped = WebBridgeStatus(True, False, False)
     running = WebBridgeStatus(True, True, False)
+    connected = WebBridgeStatus(True, True, True)
     with (
         patch("kimi_code_usage.providers.webbridge.WEBBRIDGE_BIN", binary),
         patch(
@@ -77,11 +78,18 @@ def test_start_runs_binary_and_stops_after_daemon_is_ready(tmp_path):
         ) as run,
         patch(
             "kimi_code_usage.providers.webbridge.get_webbridge_status",
-            side_effect=[stopped, running],
+            side_effect=[stopped, running, connected],
         ),
         patch("kimi_code_usage.providers.webbridge.time.sleep"),
     ):
-        assert start_webbridge(timeout_seconds=1, poll_interval=0.01) == running
+        assert (
+            start_webbridge(
+                timeout_seconds=1,
+                extension_timeout_seconds=30,
+                poll_interval=0.01,
+            )
+            == connected
+        )
     assert run.call_args.args[0] == [str(binary), "start"]
     assert run.call_args.kwargs["shell"] is False
 

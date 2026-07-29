@@ -88,6 +88,46 @@ async def test_fetch_monthly_usage_retries_empty_snapshot_after_navigation():
 
 
 @pytest.mark.asyncio
+async def test_fetch_monthly_usage_waits_for_slow_subscription_card():
+    loading = {
+        "ok": True,
+        "data": {"tree": [[{"role": "StaticText", "name": "Loading"}]]},
+    }
+    loaded = {
+        "ok": True,
+        "data": {
+            "tree": [[
+                {"role": "heading", "name": "Usage Progress"},
+                {"role": "StaticText", "name": "Total Usage"},
+                {"role": "StaticText", "name": "25%"},
+            ]]
+        },
+    }
+    responses = [
+        {"ok": True, "data": {"success": True}},
+        loading,
+        loading,
+        loading,
+        loading,
+        loaded,
+    ]
+    with (
+        patch(
+            "kimi_code_usage.providers.kimi_membership._bridge_command",
+            new=AsyncMock(side_effect=responses),
+        ),
+        patch(
+            "kimi_code_usage.providers.kimi_membership.asyncio.sleep",
+            new=AsyncMock(),
+        ) as sleep,
+    ):
+        row = await fetch_monthly_usage_from_webbridge(lang_zh=False)
+
+    assert row.used == 25.0
+    assert sleep.await_count == 4
+
+
+@pytest.mark.asyncio
 async def test_fetch_monthly_usage_explains_disconnected_bridge():
     with patch(
         "kimi_code_usage.providers.kimi_membership._bridge_command",
@@ -132,7 +172,7 @@ async def test_fetch_monthly_usage_explains_logged_out_or_missing_page_data():
         {"ok": True, "data": {"success": True}},
         *[
             {"ok": True, "data": {"tree": [[{"name": "Sign in"}]]}}
-            for _ in range(3)
+            for _ in range(8)
         ],
     ]
     with patch(
