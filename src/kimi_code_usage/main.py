@@ -318,7 +318,6 @@ def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_wi
             ("h / ?", "显示或隐藏帮助"),
             ("c", "显示或隐藏配置引导"),
             ("s", "面板设置"),
-            ("1-N (usage)", "切换可见服务商面板"),
             ("1-N (settings)", "切换任意服务商显示/隐藏"),
             ("l", "切换中英文"),
             ("←/→ 或 [ / ]", "切换主题"),
@@ -334,7 +333,6 @@ def _render_interactive_help(lang_zh: bool, or_metric: str = "requests", days_wi
             ("h / ?", "show or hide help"),
             ("c", "show or hide configuration guide"),
             ("s", "panel settings"),
-            ("1-N (usage)", "toggle visible provider panels"),
             ("1-N (settings)", "toggle any provider visibility"),
             ("l", "toggle language"),
             ("←/→ or [ / ]", "cycle theme"),
@@ -1284,7 +1282,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
 
     Keys:
         ←/→ or [ / ]  — cycle theme
-        1 / 2 / 3 / 4  — toggle provider panels
+        1–9 (settings only) — toggle provider panels
         r              — refresh data
         q / Ctrl-C     — quit
     """
@@ -1346,11 +1344,11 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
             )
 
         top_bar = Text()
-        # Provider toggles (visible only)
-        for i, p in enumerate(visible_order, 1):
+        # Visible provider indicators; numeric shortcuts are settings-only.
+        for p in visible_order:
             short = _SHORT.get(p, p[:4].title())
             top_bar.append("● ", style="bold")
-            top_bar.append(f"[{i}]{short}  ", style="bold")
+            top_bar.append(f"{short}  ", style="bold")
         if not visible_order:
             placeholder = "（无可见面板）" if lang_zh else "(no visible panels)"
             top_bar.append(placeholder, style="dim")
@@ -1361,10 +1359,11 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
         top_bar.justify = "center"
 
         hint = Text()
-        if current_view == "settings":
-            panel_range = str(len(config.provider_order))
-        else:
-            panel_range = str(len(visible_order)) if visible_order else None
+        panel_range = (
+            str(len(config.provider_order))
+            if current_view == "settings"
+            else None
+        )
         # Keybindings grouped logically: navigation / view / data / persistence
         bindings = [
             ("[q]", "退出" if lang_zh else "quit"),
@@ -1380,10 +1379,7 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
             ("[⏎ ]", "保存" if lang_zh else "save"),
         ]
         if panel_range is not None:
-            if current_view == "settings":
-                panel_label = "开关面板" if lang_zh else "toggle panels"
-            else:
-                panel_label = "面板" if lang_zh else "panels"
+            panel_label = "开关面板" if lang_zh else "toggle panels"
             bindings.insert(6, (f"[1-{panel_range}]", panel_label))
         for i, (key, label) in enumerate(bindings):
             if i > 0:

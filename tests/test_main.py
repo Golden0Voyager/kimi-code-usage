@@ -740,11 +740,13 @@ async def test_interactive_mode_help_and_config_keys(monkeypatch):
     assert "OPENAI_API_KEY" in rendered
     assert "ANTHROPIC_API_KEY" in rendered
     assert "OPENROUTER_API_KEY" in rendered
+    assert "1-N (usage)" not in rendered
+    assert "1-N (settings)" in rendered
 
 
 @pytest.mark.asyncio
-async def test_interactive_mode_top_bar_shows_only_visible_providers(monkeypatch):
-    """Top bar omits hidden providers and renumbers visible ones."""
+async def test_interactive_mode_top_bar_shows_unnumbered_visible_providers(monkeypatch):
+    """Top bar shows visible providers without shortcut numbers."""
     _mock_terminal(monkeypatch)
     mock_select, mock_read = _make_select_and_read(["q"])
     import kimi_code_usage.main as main_mod
@@ -788,12 +790,11 @@ async def test_interactive_mode_top_bar_shows_only_visible_providers(monkeypatch
             await _interactive_mode(cfg, "blue-dark")
 
     rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
-    assert "[1]Kimi" in rendered
-    assert "[2]ChatGPT+" in rendered or "[2]OpenAI API" in rendered
-    assert "[3]" not in rendered
-    assert "[4]" not in rendered
-    assert "[5]" not in rendered
-    assert "[6]" not in rendered
+    assert "● Kimi" in rendered
+    assert "● ChatGPT+" in rendered or "● OpenAI API" in rendered
+    assert "[1]Kimi" not in rendered
+    assert "[2]ChatGPT+" not in rendered
+    assert "[2]OpenAI API" not in rendered
 
 
 @pytest.mark.asyncio
@@ -932,8 +933,8 @@ async def test_interactive_mode_settings_number_key_toggles_full_list(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_interactive_mode_footer_hints_reflect_visible_count(monkeypatch):
-    """Footer number range matches visible count in usage view and full count in settings view."""
+async def test_interactive_mode_footer_number_hint_is_settings_only(monkeypatch):
+    """Only the settings view advertises number-key panel toggles."""
     _mock_terminal(monkeypatch)
     # Refresh first to force a usage-view update (the initial panel is rendered by
     # Live on entry, not via update()), then switch to settings and quit.
@@ -979,11 +980,9 @@ async def test_interactive_mode_footer_hints_reflect_visible_count(monkeypatch):
             await _interactive_mode(cfg, "blue-dark")
 
     rendered = "\n".join(_panel_plain(call.args[0]) for call in mock_live.update.call_args_list)
-    # Usage view after 'r' should show [1-2]
-    # Settings view after 's' should show [1-6]
-    # Because the test renders both views, assert both ranges appear at some point.
-    assert "[1-2]" in rendered
+    assert "[1-2]" not in rendered
     assert "[1-6]" in rendered
+    assert "toggle panels" in rendered or "开关面板" in rendered
 
 
 @pytest.mark.asyncio
