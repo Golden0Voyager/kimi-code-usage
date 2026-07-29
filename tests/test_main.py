@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from rich.text import Text
 
+from kimi_code_usage.config import AppConfig, ProviderConfig
 from kimi_code_usage.main import (
     THEME_MAP,
     _format_aggregated_results,
@@ -12,13 +13,19 @@ from kimi_code_usage.main import (
     _get_visual_width,
     _handle_key,
     _interactive_mode,
+    _preflight_webbridge,
     _render_activity_totals,
     _render_daily_chart,
     _render_top_models,
+    _should_offer_webbridge_start,
     main,
     run_cli,
 )
 from kimi_code_usage.providers import ActivityTotals, DailyUsage, ModelUsage, ProviderUsage
+from kimi_code_usage.providers.webbridge import (
+    WebBridgeLifecycleError,
+    WebBridgeStatus,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -446,6 +453,88 @@ def _make_interactive_config(monkeypatch):
 
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
     return ConfigResolver().resolve()
+
+
+def _enabled_visible_kimi_config():
+    return AppConfig(
+        providers={"kimi": ProviderConfig(api_key="kimi-key", enabled=True)},
+        provider_order=["kimi"],
+        visible_providers=["kimi"],
+    )
+
+
+def test_should_offer_webbridge_start_requires_enabled_visible_kimi():
+    cfg = _enabled_visible_kimi_config()
+    assert _should_offer_webbridge_start(cfg) is True
+
+    cfg.visible_providers = []
+    assert _should_offer_webbridge_start(cfg) is False
+
+    cfg.visible_providers = ["kimi"]
+    cfg.providers["kimi"].enabled = False
+    assert _should_offer_webbridge_start(cfg) is False
+
+    cfg.providers["kimi"].enabled = True
+    cfg.providers["kimi"].api_key = None
+    assert _should_offer_webbridge_start(cfg) is False
+
+    cfg.providers["kimi"].api_key = "kimi-key"
+    cfg.visible_providers = None
+    assert _should_offer_webbridge_start(cfg) is True
+
+
+@pytest.mark.parametrize("answer", [True, False])
+def test_preflight_prompts_each_time_daemon_is_stopped(answer):
+    cfg = _enabled_visible_kimi_config()
+    stopped = WebBridgeStatus(True, False, False)
+    with (
+        patch("kimi_code_usage.main.get_webbridge_status", return_value=stopped),
+        patch("kimi_code_usage.main.Confirm.ask", return_value=answer) as ask,
+        patch("kimi_code_usage.main.start_webbridge") as start,
+    ):
+        _preflight_webbridge(cfg, lang_zh=False)
+
+    ask.assert_called_once_with(
+        "Start Kimi WebBridge to fetch monthly credits?", default=True
+    )
+    assert start.called is answer
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        WebBridgeStatus(False, False, False),
+        WebBridgeStatus(True, True, False),
+        WebBridgeStatus(True, False, False, "status failed"),
+    ],
+)
+def test_preflight_skips_missing_running_or_unknown_webbridge(status):
+    cfg = _enabled_visible_kimi_config()
+    with (
+        patch("kimi_code_usage.main.get_webbridge_status", return_value=status),
+        patch("kimi_code_usage.main.Confirm.ask") as ask,
+    ):
+        _preflight_webbridge(cfg, lang_zh=False)
+
+    ask.assert_not_called()
+
+
+def test_preflight_reports_start_failure_without_blocking_tui():
+    cfg = _enabled_visible_kimi_config()
+    stopped = WebBridgeStatus(True, False, False)
+    with (
+        patch("kimi_code_usage.main.get_webbridge_status", return_value=stopped),
+        patch("kimi_code_usage.main.Confirm.ask", return_value=True),
+        patch(
+            "kimi_code_usage.main.start_webbridge",
+            side_effect=WebBridgeLifecycleError("cannot bind"),
+        ),
+        patch("kimi_code_usage.main.Console") as console,
+    ):
+        _preflight_webbridge(cfg, lang_zh=True)
+
+    console.return_value.print.assert_called_once()
+    assert "cannot bind" in str(console.return_value.print.call_args.args[0])
 
 
 def _mock_terminal(monkeypatch):
@@ -1008,10 +1097,44 @@ async def test_main_interactive_flag(monkeypatch):
     """--interactive flag routes to _interactive_mode and returns."""
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
     monkeypatch.setattr("sys.argv", ["prog", "--interactive"])
+    events = []
 
-    with patch("kimi_code_usage.main._interactive_mode", new=AsyncMock()) as mock_im:
+    def record_preflight(*args, **kwargs):
+        events.append("preflight")
+
+    async def record_interactive(*args, **kwargs):
+        events.append("interactive")
+
+    with (
+        patch(
+            "kimi_code_usage.main._preflight_webbridge",
+            side_effect=record_preflight,
+        ) as preflight,
+        patch(
+            "kimi_code_usage.main._interactive_mode",
+            new=AsyncMock(side_effect=record_interactive),
+        ) as mock_im,
+    ):
         await main()
-        mock_im.assert_called_once()
+    preflight.assert_called_once()
+    mock_im.assert_awaited_once()
+    assert events == ["preflight", "interactive"]
+
+
+@pytest.mark.asyncio
+async def test_main_plain_mode_never_runs_webbridge_preflight(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["prog", "--plain"])
+
+    with (
+        patch("kimi_code_usage.main._preflight_webbridge") as preflight,
+        patch(
+            "kimi_code_usage.main.dispatch_all",
+            new=AsyncMock(return_value=({}, {})),
+        ),
+    ):
+        await main()
+
+    preflight.assert_not_called()
 
 
 # ── save_theme (config.py) unit tests ─────────────────────────────────────

@@ -32,7 +32,7 @@
 
 **统一前提：** 在环境变量或 `.env` 文件中设置 `KIMI_API_KEY`（[Kimi Coding Plan](https://api.kimi.com/coding/v1) API Key，格式 `sk-kimi-xxx`）。
 
-> 月度会员额度为可选增强功能。请保持 Kimi WebBridge 运行、浏览器扩展已连接且 Kimi 已登录；不可用时，周用量和 5 小时用量仍会正常显示。
+> 月度会员额度为可选增强功能。在交互模式中，如果已安装的 Kimi WebBridge daemon 尚未运行，`kimi-usage` 每次启动都会询问是否启动它；拒绝只影响月度额度。浏览器扩展仍须保持连接且 Kimi 必须已登录；月度额度不可用时，周用量和 5 小时用量仍会正常显示。
 
 ---
 
@@ -44,6 +44,7 @@
 ```bash
 pip install kimi-code-usage
 kimi-usage              # 美观的 Rich 面板
+kimi-usage -i           # 带可选 WebBridge 启动询问的交互面板
 kimi-usage --json       # 机器可读的 JSON
 kimi-usage --plain      # 纯文本输出
 ```
