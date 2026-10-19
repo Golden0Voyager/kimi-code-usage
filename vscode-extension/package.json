@@ -255,7 +255,7 @@
     "build": "npm run compile && npm run assets",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint src",
+    "lint": "eslint src --max-warnings 47",
     "format": "prettier --write src",
     "format:check": "prettier --check src"
   },
