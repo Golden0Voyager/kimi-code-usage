@@ -423,12 +423,7 @@ export function isLinkIssue(err: unknown): boolean {
   );
 }
 
-const KIMI_CLI_CREDENTIALS_PATH = path.join(
-  os.homedir(),
-  '.kimi-code',
-  'credentials',
-  'kimi-code.json',
-);
+const KIMI_CLI_CREDENTIALS_PATH = path.join(os.homedir(), '.kimi-code', 'credentials', 'kimi-code.json');
 const OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS = 300;
 
 /**
@@ -448,10 +443,7 @@ export function readKimiCliAccessToken(credentialPath?: string): string | null {
     const token = data.access_token;
     if (typeof token !== 'string' || token.length === 0) return null;
     const expiresAt = data.expires_at;
-    if (
-      typeof expiresAt === 'number' &&
-      expiresAt - OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS <= Date.now() / 1000
-    ) {
+    if (typeof expiresAt === 'number' && expiresAt - OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS <= Date.now() / 1000) {
       return null;
     }
     return token;

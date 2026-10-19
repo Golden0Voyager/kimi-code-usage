@@ -10,7 +10,7 @@ authors = [
 license = { text = "MIT" }
 keywords = ["kimi", "moonshot", "mcp", "usage", "monitor", "curated"]
 dependencies = [
-    "aiohttp>=3.8.0",
+    "aiohttp>=3.14.3",
     "rich>=12.0.0",
     "python-dotenv>=1.0.0",
     "fastmcp>=0.1.0",
