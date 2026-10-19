@@ -58,11 +58,11 @@ def _build_daily_activity(items: list[dict]) -> list[DailyUsage]:
         date = item.get("date", "")
         if not date:
             continue
-        models = by_date.setdefault(date, {})
+        day_models = by_date.setdefault(date, {})
         model_name = item.get("model", "unknown")
-        if model_name not in models:
-            models[model_name] = ModelUsage(model=model_name)
-        m = models[model_name]
+        if model_name not in day_models:
+            day_models[model_name] = ModelUsage(model=model_name)
+        m = day_models[model_name]
         m.spend += float(item.get("usage") or 0)
         m.requests += float(item.get("requests") or 0)
         m.prompt_tokens += float(item.get("prompt_tokens") or 0)
@@ -130,9 +130,9 @@ async def fetch_openrouter_usage(api_key: str, base_url: str, management_key: st
     credits_payload = results[0]
     activity_payload = results[1]
 
-    if isinstance(credits_payload, Exception):
+    if isinstance(credits_payload, BaseException):
         credits_payload = None
-    if isinstance(activity_payload, Exception):  # pragma: no cover
+    if isinstance(activity_payload, BaseException):  # pragma: no cover
         activity_payload = None
 
     key_data = key_payload.get("data", {})
@@ -154,8 +154,8 @@ async def fetch_openrouter_usage(api_key: str, base_url: str, management_key: st
         if total_credits is not None and total_usage is not None:
             t_credits = float(total_credits)
             t_usage = float(total_usage)
-            remaining_val = t_credits - t_usage
-            percent_val = (t_usage / t_credits * 100) if t_credits > 0 else None
+            remaining_val: float | None = t_credits - t_usage
+            percent_val: float | None = (t_usage / t_credits * 100) if t_credits > 0 else None
 
             res.append(ProviderUsage(
                 provider="openrouter",
