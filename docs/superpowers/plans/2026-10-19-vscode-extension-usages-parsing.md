@@ -471,3 +471,17 @@ The whole-branch review found **no Critical** issue and killed 8 of 12 mutations
 | A blank or non-decimal `used_ratio` (`''`, `'0x10'`) fabricated a "0% used / 100% left" row | `ratioRow` now requires a plain decimal string (`DECIMAL_RATIO_PATTERN`); assertions added to `skips unusable usages entries`, watched failing first |
 
 Final state: **396 passed / 13 files**, `npm run compile` silent, `npm run lint` 0 errors / 47 warnings.
+
+### CI went red on its first run — root cause and fix (Ruling 6)
+
+GitHub discovered the new workflow on PR #20 and ran it for the first time. The `Install dependencies` step failed after 12 s with:
+
+```
+npm error Cannot read properties of null (reading 'edgesOut')
+```
+
+Root cause — not this repository's code, and not how the workflow was written: **Node 22 bundles npm 10.9.x, whose `@npmcli/arborist` peer-dependency resolver crashes while building a fresh, lock-less ideal tree for this package.** Evidence chain: reproduced byte-for-byte in a clean directory holding only `package.json`; bisected per dependency, where `vitest@^4.1.8` (or `@vitest/ui`) alone is sufficient; an exact `vitest@4.1.8` pin still triggers it, so it is not a version-range problem; `--legacy-peer-deps` avoids it and npm 11 resolves the same tree cleanly; the stack is `build-ideal-tree.js #fetchManifest -> #nodeFromEdge -> #buildDepStep`. `npm ci` never resolves, which is why every locked local run was green.
+
+Fix: the job installs npm 11 before installing dependencies, and logs `node --version` / `npm --version` so the toolchain is visible in every run. Verified by replaying the exact CI commands against a fresh lock-less install of the floating tree (vitest 4.1.12 / eslint 10.13.0 / typescript 5.9.3): `npm run compile`, `npm run lint` and `npm test` all exit 0 — 396 passed, 0 lint errors, 47 warnings.
+
+The durable fix remains committing `vscode-extension/package-lock.json` and switching to `npm ci` — see Ruling 1. This incident is also the concrete demonstration of the floating-version risk the review flagged: the same range that CI resolves today is not the range the repository builds against locally.
