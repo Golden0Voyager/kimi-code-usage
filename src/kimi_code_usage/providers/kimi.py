@@ -69,6 +69,23 @@ def _limit_label(window: Mapping[str, Any], idx: int) -> str:
         return f"{duration}s Limit"
     return f"Limit #{idx + 1}"
 
+def _window_minutes(window: Any) -> float | None:
+    if not isinstance(window, Mapping):
+        return None
+    duration = _to_int(window.get("duration"))
+    if duration is None:
+        return None
+    time_unit = str(window.get("timeUnit") or window.get("time_unit") or "").upper()
+    if "MINUTE" in time_unit:
+        return float(duration)
+    if "HOUR" in time_unit:
+        return duration * 60.0
+    if "DAY" in time_unit:
+        return duration * 1440.0
+    if "MONTH" in time_unit:
+        return duration * 43200.0
+    return duration / 60.0
+
 class KimiRow:
     def __init__(self, label: str, used: int, limit: int, reset_at: str | None = None, countdown: str | None = None):
         self.label = label
@@ -96,6 +113,23 @@ def _to_usage_row(data: Mapping[str, Any], default_label: str) -> KimiRow | None
         countdown=countdown,
     )
 
+def _ratio_usage_row(entry: Any, label: str) -> KimiRow | None:
+    if not isinstance(entry, Mapping):
+        return None
+    ratio = entry.get("used_ratio")
+    if not isinstance(ratio, (int, float)):
+        return None
+    percent = max(0.0, min(float(ratio) * 100.0, 100.0))
+    reset_info = _get_reset_info(entry)
+    reset_at, countdown = reset_info if reset_info else (None, None)
+    return KimiRow(
+        label=label,
+        used=round(percent),
+        limit=100,
+        reset_at=reset_at,
+        countdown=countdown,
+    )
+
 def _parse_usage_payload(payload: Mapping[str, Any]) -> tuple[KimiRow | None, list[KimiRow]]:
     summary = None
     limits = []
@@ -116,6 +150,7 @@ def _parse_usage_payload(payload: Mapping[str, Any]) -> tuple[KimiRow | None, li
         usage = payload.get("usage")
         if isinstance(usage, Mapping):
             summary = _to_usage_row(cast(Mapping, usage), default_label="Weekly Usage")
+        limit_windows: list[float] = []
         raw_limits = payload.get("limits")
         if isinstance(raw_limits, Sequence):
             for idx, item in enumerate(raw_limits):
@@ -125,8 +160,24 @@ def _parse_usage_payload(payload: Mapping[str, Any]) -> tuple[KimiRow | None, li
                 detail = raw_detail if isinstance(raw_detail, Mapping) else item
                 raw_window = item.get("window")
                 window = raw_window if isinstance(raw_window, Mapping) else {}
+                window_minutes = _window_minutes(window)
                 row = _to_usage_row(detail, default_label=_limit_label(window, idx))
                 if row:
+                    limits.append(row)
+                    if window_minutes is not None:
+                        limit_windows.append(window_minutes)
+
+        usages = payload.get("usages")
+        if isinstance(usages, Mapping):
+            if summary is None:
+                entry = usages.get("limit_7d")
+                row = _ratio_usage_row(entry, "Weekly Usage") if isinstance(entry, Mapping) else None
+                if row is not None:
+                    summary = row
+            if 300.0 not in limit_windows:
+                entry = usages.get("limit_5h")
+                row = _ratio_usage_row(entry, "5h Limit") if isinstance(entry, Mapping) else None
+                if row is not None:
                     limits.append(row)
 
     return summary, limits
@@ -139,7 +190,7 @@ def _price_in_yuan(data: Any) -> float | None:
 
 
 def _extra_usage_rows(payload: Mapping[str, Any], *, lang_zh: bool) -> list[ProviderUsage]:
-    """Rows for newer /usages fields: totalQuota, boosterWallet, parallel."""
+    """Rows for newer /usages fields: totalQuota, boosterWallet, booster_wallet, parallel."""
     rows: list[ProviderUsage] = []
 
     total_quota = payload.get("totalQuota")
@@ -159,7 +210,7 @@ def _extra_usage_rows(payload: Mapping[str, Any], *, lang_zh: bool) -> list[Prov
                 unit="%",
             ))
 
-    wallet = payload.get("boosterWallet")
+    wallet = payload.get("booster_wallet") or payload.get("boosterWallet")
     if isinstance(wallet, Mapping) and wallet:
         label = "加油包" if lang_zh else "Extra Usage"
         if str(wallet.get("status") or "") == "STATUS_ENABLED":
@@ -233,11 +284,11 @@ _KIMI_LANG_IS_ZH = "zh" in os.getenv("LANG", "en").lower()
 
 async def _monthly_usage_row() -> ProviderUsage:
     try:
-        oauth_row = await fetch_monthly_usage_from_oauth(lang_zh=_KIMI_LANG_IS_ZH)
-        if oauth_row is not None:
-            return oauth_row
-    except Exception:
-        pass
+        oauth_row, oauth_reason = await fetch_monthly_usage_from_oauth(lang_zh=_KIMI_LANG_IS_ZH)
+    except Exception as exc:
+        oauth_row, oauth_reason = None, f"request failed: {exc}"
+    if oauth_row is not None:
+        return oauth_row
     try:
         return await fetch_monthly_usage_from_webbridge(lang_zh=_KIMI_LANG_IS_ZH)
     except Exception as exc:
@@ -250,7 +301,7 @@ async def _monthly_usage_row() -> ProviderUsage:
             percent=None,
             reset_at=None,
             unit="text",
-            text_value=str(exc),
+            text_value=f"OAuth: {oauth_reason} | WebBridge: {exc}",
         )
 
 def _kimi_error_hint(status: int, zh: bool | None = None) -> str:
