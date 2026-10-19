@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as https from 'https';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 vi.mock('https', () => ({
   get: vi.fn(),
@@ -21,6 +24,8 @@ import {
   isLowRemaining,
   formatResetTime,
   secondsUntil,
+  readKimiCliAccessToken,
+  fetchMonthlyUsageViaOAuth,
 } from './api';
 import { setTranslator, type Translator } from './i18n';
 
@@ -266,6 +271,377 @@ describe('parsePayload', () => {
     const result = parsePayload(raw);
     expect(result).toHaveLength(1);
     expect(result[0].label).toBe('90m limit');
+  });
+});
+
+describe('parsePayload parallel / boosterWallet / totalQuota', () => {
+  it('parses the real 2026-08-28 API response shape', () => {
+    const payload = {
+      usage: { limit: '100', used: '67', remaining: '33', resetTime: '2026-09-02T08:22:11.102028Z' },
+      limits: [
+        {
+          window: { duration: 300, timeUnit: 'TIME_UNIT_MINUTE' },
+          detail: { limit: '100', used: '21', remaining: '79', resetTime: '2026-08-28T09:22:11.102028Z' },
+        },
+      ],
+      parallel: { limit: '20' },
+      totalQuota: {},
+      boosterWallet: {
+        status: 'STATUS_DISABLED',
+        allowTopup: true,
+        monthlyUsed: { currency: 'CNY', priceInCents: '0' },
+        monthlyChargeLimit: { currency: 'CNY', priceInCents: '10000' },
+      },
+    };
+    const items = parsePayload(payload);
+    expect(items).toHaveLength(3);
+    const parallel = items.find((i) => i.label === 'Parallel limit');
+    expect(parallel).toBeDefined();
+    expect(parallel!.used).toBe(0);
+    expect(parallel!.limit).toBe(20);
+    expect(parallel!.remaining).toBe(20);
+    expect(parallel!.percent_left).toBe(100);
+    expect(parallel!.reset_hint).toBeNull();
+    expect(parallel!.reset_seconds).toBeNull();
+    expect(parallel!.reset_at).toBeNull();
+    expect(items.some((i) => i.label === 'Extra Usage')).toBe(false);
+    expect(items.some((i) => i.label === 'Total quota')).toBe(false);
+  });
+
+  it('parses parallel limit as number', () => {
+    const items = parsePayload({ parallel: { limit: 5 } });
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('Parallel limit');
+    expect(items[0].limit).toBe(5);
+  });
+
+  it('skips parallel when missing, non-object, or limit not numeric', () => {
+    expect(parsePayload({})).toHaveLength(0);
+    expect(parsePayload({ parallel: null })).toHaveLength(0);
+    expect(parsePayload({ parallel: 'nope' } as any)).toHaveLength(0);
+    expect(parsePayload({ parallel: {} })).toHaveLength(0);
+    expect(parsePayload({ parallel: { limit: 'abc' } })).toHaveLength(0);
+  });
+
+  it('clamps negative parallel limit to zero', () => {
+    const items = parsePayload({ parallel: { limit: '-3' } });
+    expect(items).toHaveLength(1);
+    expect(items[0].limit).toBe(0);
+  });
+
+  it('parses enabled boosterWallet with string cents values', () => {
+    const payload = {
+      boosterWallet: {
+        status: 'STATUS_ENABLED',
+        monthlyUsed: { currency: 'CNY', priceInCents: '1234' },
+        monthlyChargeLimit: { currency: 'CNY', priceInCents: '10000' },
+      },
+    };
+    const items = parsePayload(payload);
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('Extra Usage');
+    expect(items[0].used).toBeCloseTo(12.34);
+    expect(items[0].limit).toBe(100);
+    expect(items[0].remaining).toBeCloseTo(87.66);
+    expect(items[0].percent_left).toBeCloseTo(87.66);
+    expect(items[0].reset_at).toBeNull();
+  });
+
+  it('treats zero booster charge limit as unlimited', () => {
+    const payload = {
+      boosterWallet: {
+        status: 'STATUS_ENABLED',
+        monthlyUsed: { currency: 'CNY', priceInCents: '500' },
+        monthlyChargeLimit: { currency: 'CNY', priceInCents: '0' },
+      },
+    };
+    const items = parsePayload(payload);
+    expect(items).toHaveLength(1);
+    expect(items[0].limit).toBe(0);
+    expect(items[0].remaining).toBe(0);
+    expect(items[0].percent_left).toBe(100);
+  });
+
+  it('clamps booster percent when used exceeds limit', () => {
+    const payload = {
+      boosterWallet: {
+        status: 'STATUS_ENABLED',
+        monthlyUsed: { priceInCents: 15000 },
+        monthlyChargeLimit: { priceInCents: 10000 },
+      },
+    };
+    const items = parsePayload(payload);
+    expect(items[0].remaining).toBe(0);
+    expect(items[0].percent_left).toBe(0);
+  });
+
+  it('skips boosterWallet when disabled', () => {
+    const payload = {
+      boosterWallet: {
+        status: 'STATUS_DISABLED',
+        monthlyUsed: { priceInCents: '500' },
+        monthlyChargeLimit: { priceInCents: '10000' },
+      },
+    };
+    expect(parsePayload(payload)).toHaveLength(0);
+  });
+
+  it('skips boosterWallet when missing, non-object, or both money fields missing', () => {
+    expect(parsePayload({ boosterWallet: null })).toHaveLength(0);
+    expect(parsePayload({ boosterWallet: 42 } as any)).toHaveLength(0);
+    expect(parsePayload({ boosterWallet: { status: 'STATUS_ENABLED' } })).toHaveLength(0);
+    expect(
+      parsePayload({
+        boosterWallet: {
+          status: 'STATUS_ENABLED',
+          monthlyUsed: { priceInCents: 'oops' },
+          monthlyChargeLimit: 'not-an-object',
+        },
+      }),
+    ).toHaveLength(0);
+  });
+
+  it('defaults missing booster used to 0 when charge limit present', () => {
+    const payload = {
+      boosterWallet: {
+        status: 'STATUS_ENABLED',
+        monthlyChargeLimit: { priceInCents: '10000' },
+      },
+    };
+    const items = parsePayload(payload);
+    expect(items).toHaveLength(1);
+    expect(items[0].used).toBe(0);
+    expect(items[0].limit).toBe(100);
+    expect(items[0].percent_left).toBe(100);
+  });
+
+  it('parses totalQuota with string values', () => {
+    const payload = { totalQuota: { limit: '500', used: '125' } };
+    const items = parsePayload(payload);
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('Total quota');
+    expect(items[0].used).toBe(125);
+    expect(items[0].limit).toBe(500);
+    expect(items[0].percent_left).toBe(75);
+  });
+
+  it('skips empty or unusable totalQuota', () => {
+    expect(parsePayload({ totalQuota: {} })).toHaveLength(0);
+    expect(parsePayload({ totalQuota: null })).toHaveLength(0);
+    expect(parsePayload({ totalQuota: 'x' } as any)).toHaveLength(0);
+  });
+
+  it('does not throw on hostile input', () => {
+    expect(() =>
+      parsePayload({
+        usage: null,
+        limits: 'not-an-array',
+        parallel: { limit: { nested: true } },
+        boosterWallet: { status: 'STATUS_ENABLED', monthlyUsed: [], monthlyChargeLimit: null },
+        totalQuota: [],
+      } as any),
+    ).not.toThrow();
+  });
+});
+
+describe('readKimiCliAccessToken', () => {
+  it('returns the token for a valid, unexpired credential file', () => {
+    const tmp = path.join(os.tmpdir(), `kimi-cred-valid-${Date.now()}-${Math.random()}.json`);
+    fs.writeFileSync(
+      tmp,
+      JSON.stringify({
+        access_token: 'valid-token',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+      }),
+    );
+    try {
+      expect(readKimiCliAccessToken(tmp)).toBe('valid-token');
+    } finally {
+      fs.unlinkSync(tmp);
+    }
+  });
+
+  it('returns null when the token is expired (expires_at very small)', () => {
+    const tmp = path.join(os.tmpdir(), `kimi-cred-expired-${Date.now()}-${Math.random()}.json`);
+    fs.writeFileSync(
+      tmp,
+      JSON.stringify({
+        access_token: 'valid-token',
+        expires_at: 100,
+      }),
+    );
+    try {
+      expect(readKimiCliAccessToken(tmp)).toBeNull();
+    } finally {
+      fs.unlinkSync(tmp);
+    }
+  });
+
+  it('returns null when the credential file does not exist', () => {
+    expect(readKimiCliAccessToken('/nonexistent/path/kimi-code.json')).toBeNull();
+  });
+
+  it('returns null when access_token is missing or not a string', () => {
+    const tmp = path.join(os.tmpdir(), `kimi-cred-bad-${Date.now()}-${Math.random()}.json`);
+    fs.writeFileSync(tmp, JSON.stringify({ expires_at: Math.floor(Date.now() / 1000) + 3600 }));
+    try {
+      expect(readKimiCliAccessToken(tmp)).toBeNull();
+    } finally {
+      fs.unlinkSync(tmp);
+    }
+
+    const tmp2 = path.join(os.tmpdir(), `kimi-cred-bad2-${Date.now()}-${Math.random()}.json`);
+    fs.writeFileSync(tmp2, JSON.stringify({ access_token: 12345 }));
+    try {
+      expect(readKimiCliAccessToken(tmp2)).toBeNull();
+    } finally {
+      fs.unlinkSync(tmp2);
+    }
+  });
+
+  it('returns null when the file is not valid JSON', () => {
+    const tmp = path.join(os.tmpdir(), `kimi-cred-json-${Date.now()}-${Math.random()}.json`);
+    fs.writeFileSync(tmp, 'not-json{');
+    try {
+      expect(readKimiCliAccessToken(tmp)).toBeNull();
+    } finally {
+      fs.unlinkSync(tmp);
+    }
+  });
+});
+
+describe('fetchMonthlyUsageViaOAuth', () => {
+  let mockReq: { on: any; destroy: any };
+  let mockRes: { on: any; statusCode: number };
+
+  const writeCred = (body: unknown): string => {
+    const tmp = path.join(os.tmpdir(), `kimi-oauth-cred-${Date.now()}-${Math.random()}.json`);
+    fs.writeFileSync(tmp, JSON.stringify(body));
+    return tmp;
+  };
+
+  const validCredPath = (): string =>
+    writeCred({
+      access_token: 'oauth-token',
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+    });
+
+  beforeEach(() => {
+    vi.mocked(https.get).mockReset();
+    mockReq = { on: vi.fn(), destroy: vi.fn() };
+    mockRes = { on: vi.fn(), statusCode: 200 };
+  });
+
+  it('returns a Monthly UsageItem when totalQuota has data', async () => {
+    const credPath = validCredPath();
+    const resetTime = new Date(Date.now() + 60_000).toISOString();
+    const chunks = [
+      JSON.stringify({ totalQuota: { limit: '500', used: '125', resetTime } }),
+    ];
+    mockRes.on = vi.fn((event: string, cb: any) => {
+      if (event === 'data') chunks.forEach((c) => cb(c));
+      if (event === 'end') cb();
+    });
+    vi.mocked(https.get).mockImplementation((_url: any, _opts: any, cb: any) => {
+      cb(mockRes);
+      return mockReq;
+    });
+
+    const result = await fetchMonthlyUsageViaOAuth(
+      'https://api.kimi.com/coding/v1',
+      credPath,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.label).toBe('Monthly');
+    expect(result!.used).toBe(125);
+    expect(result!.limit).toBe(500);
+    expect(result!.percent_left).toBe(75);
+    expect(result!.reset_seconds).not.toBeNull();
+    fs.unlinkSync(credPath);
+  });
+
+  it('returns null when totalQuota is empty', async () => {
+    const credPath = validCredPath();
+    const chunks = [JSON.stringify({ totalQuota: {} })];
+    mockRes.on = vi.fn((event: string, cb: any) => {
+      if (event === 'data') chunks.forEach((c) => cb(c));
+      if (event === 'end') cb();
+    });
+    vi.mocked(https.get).mockImplementation((_url: any, _opts: any, cb: any) => {
+      cb(mockRes);
+      return mockReq;
+    });
+
+    const result = await fetchMonthlyUsageViaOAuth(
+      'https://api.kimi.com/coding/v1',
+      credPath,
+    );
+    expect(result).toBeNull();
+    fs.unlinkSync(credPath);
+  });
+
+  it('returns null on HTTP error status', async () => {
+    const credPath = validCredPath();
+    mockRes.statusCode = 429;
+    mockRes.on = vi.fn((event: string, cb: any) => {
+      if (event === 'data') cb('Too Many Requests');
+      if (event === 'end') cb();
+    });
+    vi.mocked(https.get).mockImplementation((_url: any, _opts: any, cb: any) => {
+      cb(mockRes);
+      return mockReq;
+    });
+
+    const result = await fetchMonthlyUsageViaOAuth(
+      'https://api.kimi.com/coding/v1',
+      credPath,
+    );
+    expect(result).toBeNull();
+    fs.unlinkSync(credPath);
+  });
+
+  it('returns null when no token is available', async () => {
+    const result = await fetchMonthlyUsageViaOAuth(
+      'https://api.kimi.com/coding/v1',
+      '/nonexistent/path/kimi-code.json',
+    );
+    expect(result).toBeNull();
+  });
+
+  it('returns null on network error without throwing', async () => {
+    const credPath = validCredPath();
+    const errorHandlers: any[] = [];
+    mockReq.on = vi.fn((event: string, cb: any) => {
+      if (event === 'error') errorHandlers.push(cb);
+      return mockReq;
+    });
+    vi.mocked(https.get).mockReturnValue(mockReq);
+
+    const promise = fetchMonthlyUsageViaOAuth(
+      'https://api.kimi.com/coding/v1',
+      credPath,
+    );
+    errorHandlers.forEach((cb) => cb(new Error('ENOTFOUND')));
+    await expect(promise).resolves.toBeNull();
+    fs.unlinkSync(credPath);
+  });
+
+  it('strips a trailing slash from baseUrl', async () => {
+    const credPath = validCredPath();
+    let capturedUrl: any;
+    mockRes.on = vi.fn((event: string, cb: any) => {
+      if (event === 'data') cb('{"totalQuota":{}}');
+      if (event === 'end') cb();
+    });
+    vi.mocked(https.get).mockImplementation((url: any, _opts: any, cb: any) => {
+      capturedUrl = url;
+      cb(mockRes);
+      return mockReq;
+    });
+
+    await fetchMonthlyUsageViaOAuth('https://api.kimi.com/coding/v1/', credPath);
+    expect(String(capturedUrl)).toBe('https://api.kimi.com/coding/v1/usages');
+    fs.unlinkSync(credPath);
   });
 });
 
