@@ -1,12 +1,106 @@
 import asyncio
+import json
+import os
 import re
+import time
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 import aiohttp
 
 from . import ProviderUsage
 from .webbridge import get_webbridge_status, last_webbridge_start_error
+
+_KIMI_CLI_CREDENTIALS_PATH = os.path.expanduser("~/.kimi-code/credentials/kimi-code.json")
+_KIMI_OAUTH_USAGES_URL = "https://api.kimi.com/coding/v1/usages"
+_OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS = 300
+
+
+def load_kimi_cli_access_token() -> str | None:
+    """Return a non-expired Kimi Code CLI OAuth access token, or None.
+
+    The token is read from the credential file produced by `kimi login`. If the
+    file is missing, unreadable, or the token is expired, returns None so the
+    caller can fall back to another data source (e.g. WebBridge).
+    """
+    try:
+        with open(_KIMI_CLI_CREDENTIALS_PATH) as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    token = data.get("access_token")
+    if not isinstance(token, str) or not token:
+        return None
+    expires_at = data.get("expires_at")
+    if isinstance(expires_at, (int, float)) and expires_at - _OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS <= time.time():
+        return None
+    return token
+
+
+def _to_int(v: Any) -> int | None:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _total_quota_reset_at(total: Mapping[str, Any]) -> str | None:
+    raw = total.get("resetTime") or total.get("reset_at") or total.get("reset_time")
+    if not raw:
+        return None
+    try:
+        if isinstance(raw, (int, float)):
+            dt = datetime.fromtimestamp(raw, tz=UTC)
+        else:
+            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00")).astimezone(UTC)
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return None
+
+
+async def fetch_monthly_usage_from_oauth(*, lang_zh: bool) -> ProviderUsage | None:
+    """Fetch the monthly membership quota via the Kimi Code CLI OAuth token.
+
+    Uses the same `/usages` endpoint as the API-key path but authenticated with
+    the logged-in CLI credential. Returns None when no token is available or the
+    response does not expose a `totalQuota` (e.g. the account has no membership
+    pool) so the caller can fall back to WebBridge.
+    """
+    token = load_kimi_cli_access_token()
+    if not token:
+        return None
+
+    headers = {"Authorization": f"Bearer {token}", "User-Agent": "KimiCLI/1.6"}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(_KIMI_OAUTH_USAGES_URL, headers=headers) as resp:
+                if resp.status != 200:
+                    return None
+                payload = await resp.json()
+    except (aiohttp.ClientError, TimeoutError):
+        return None
+
+    if not isinstance(payload, Mapping):
+        return None
+    total = payload.get("totalQuota")
+    if not isinstance(total, Mapping):
+        return None
+    used = _to_int(total.get("used"))
+    limit = _to_int(total.get("limit"))
+    if used is None or limit is None or limit <= 0:
+        return None
+
+    return ProviderUsage(
+        provider="kimi",
+        label="月度额度" if lang_zh else "Monthly Credits",
+        used=float(used),
+        limit=float(limit),
+        remaining=float(limit - used),
+        percent=used / limit * 100,
+        reset_at=_total_quota_reset_at(total),
+        unit="%",
+    )
 
 
 class MonthlyUsageUnavailableError(Exception):

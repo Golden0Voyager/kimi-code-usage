@@ -142,7 +142,7 @@ class ConfigResolver:
             if p in ("codex", "claude"):
                 enabled = p_data.get("enabled")
                 if enabled is None:
-                    env_enabled = os.getenv(f"{p.upper()}_ENABLED", "").lower()
+                    env_enabled: str | None = os.getenv(f"{p.upper()}_ENABLED", "").lower()
                     enabled = env_enabled in ("true", "1", "yes")
                 if enabled:
                     api_key = "enabled"  # Sentinel: passes enabled_providers check
