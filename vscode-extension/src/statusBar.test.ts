@@ -127,6 +127,7 @@ vi.mock('./api', () => ({
   formatResetTimeAbsolute: vi.fn(() => ({ absolute: 'Today 14:00', relative: '2h' })),
   detectWindowType: vi.fn(() => 'weekly'),
   isLinkIssue: vi.fn(() => false),
+  fetchMonthlyUsageViaOAuth: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('./i18n', () => ({ t: (msg: string) => msg }));
@@ -374,6 +375,43 @@ describe('refresh', () => {
     const item = getStatusBarItem()!;
     expect(item.text).toContain('50%');
     expect(item.text.length).toBeGreaterThan(5);
+  });
+
+  it('excludes non-quota items from compact text but keeps them in tooltip overview', async () => {
+    vi.mocked(parsePayload).mockReturnValueOnce([
+      {
+        label: 'Weekly',
+        used: 50,
+        limit: 100,
+        remaining: 50,
+        percent_left: 50,
+        reset_hint: null,
+        reset_seconds: 3600,
+        reset_at: null,
+      },
+      {
+        label: 'Parallel limit',
+        used: 0,
+        limit: 20,
+        remaining: 20,
+        percent_left: 100,
+        reset_hint: null,
+        reset_seconds: null,
+        reset_at: null,
+      },
+    ]);
+    const mockApi = await import('./api');
+    vi.mocked(mockApi.detectWindowType).mockImplementation((label: string) =>
+      label === 'Parallel limit' ? 'other' : 'weekly',
+    );
+    try {
+      await refresh();
+      const item = getStatusBarItem()!;
+      expect(item.text).not.toContain('Par');
+      expect(item.tooltip.value).toContain('Parallel limit');
+    } finally {
+      vi.mocked(mockApi.detectWindowType).mockReturnValue('weekly');
+    }
   });
 
   it('deduplicates concurrent refresh calls', async () => {
@@ -708,6 +746,29 @@ describe('refresh', () => {
       expect(item.backgroundColor).toBeDefined();
     } finally {
       vi.mocked(isLowRemaining).mockImplementation(() => false);
+    }
+  });
+
+  it('merges the OAuth monthly item into the displayed usage', async () => {
+    const monthlyItem = {
+      label: 'Monthly',
+      used: 500,
+      limit: 1000,
+      remaining: 500,
+      percent_left: 50,
+      reset_hint: null,
+      reset_seconds: 100,
+      reset_at: null,
+    };
+    const mockApi = await import('./api');
+    vi.mocked(mockApi.fetchMonthlyUsageViaOAuth).mockResolvedValueOnce(monthlyItem as any);
+    try {
+      await refresh();
+      const item = getStatusBarItem()!;
+      expect(item.tooltip.value).toContain('Monthly');
+      expect(item.text).toContain('50%');
+    } finally {
+      vi.mocked(mockApi.fetchMonthlyUsageViaOAuth).mockResolvedValue(null as any);
     }
   });
 });
