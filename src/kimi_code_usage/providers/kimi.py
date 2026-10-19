@@ -6,7 +6,10 @@ from typing import Any, cast
 import aiohttp
 
 from . import ProviderUsage
-from .kimi_membership import fetch_monthly_usage_from_webbridge
+from .kimi_membership import (
+    fetch_monthly_usage_from_oauth,
+    fetch_monthly_usage_from_webbridge,
+)
 
 
 def _to_int(v: Any) -> int | None:
@@ -126,6 +129,95 @@ def _parse_usage_payload(payload: Mapping[str, Any]) -> tuple[KimiRow | None, li
 
     return summary, limits
 
+def _price_in_yuan(data: Any) -> float | None:
+    if not isinstance(data, Mapping):
+        return None
+    cents = _to_int(data.get("priceInCents"))
+    return cents / 100 if cents is not None else None
+
+
+def _extra_usage_rows(payload: Mapping[str, Any], *, lang_zh: bool) -> list[ProviderUsage]:
+    """Rows for newer /usages fields: totalQuota, boosterWallet, parallel."""
+    rows: list[ProviderUsage] = []
+
+    total_quota = payload.get("totalQuota")
+    if isinstance(total_quota, Mapping):
+        row = _to_usage_row(total_quota, default_label="总额度" if lang_zh else "Total Quota")
+        if row is not None:
+            pct = (row.used / row.limit * 100) if row.limit > 0 else 0.0
+            rows.append(ProviderUsage(
+                provider="kimi",
+                label=row.label,
+                used=float(row.used),
+                limit=float(row.limit),
+                remaining=float(row.limit - row.used),
+                percent=pct,
+                reset_at=row.reset_at,
+                countdown=row.countdown,
+                unit="%",
+            ))
+
+    wallet = payload.get("boosterWallet")
+    if isinstance(wallet, Mapping) and wallet:
+        label = "加油包" if lang_zh else "Extra Usage"
+        if str(wallet.get("status") or "") == "STATUS_ENABLED":
+            used = _price_in_yuan(wallet.get("monthlyUsed")) or 0.0
+            limit = _price_in_yuan(wallet.get("monthlyChargeLimit"))
+            if limit:
+                rows.append(ProviderUsage(
+                    provider="kimi",
+                    label=label,
+                    used=used,
+                    limit=limit,
+                    remaining=max(limit - used, 0.0),
+                    percent=used / limit * 100,
+                    reset_at=None,
+                    unit="¥",
+                ))
+            else:
+                rows.append(ProviderUsage(
+                    provider="kimi",
+                    label=label,
+                    used=used,
+                    limit=None,
+                    remaining=None,
+                    percent=None,
+                    reset_at=None,
+                    unit="text",
+                    text_value=f"¥{used:.2f}",
+                ))
+        else:
+            rows.append(ProviderUsage(
+                provider="kimi",
+                label=label,
+                used=0.0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                text_value="未开启" if lang_zh else "Not enabled",
+            ))
+
+    parallel = payload.get("parallel")
+    if isinstance(parallel, Mapping):
+        limit = _to_int(parallel.get("limit"))
+        if limit is not None:
+            rows.append(ProviderUsage(
+                provider="kimi",
+                label="并发上限" if lang_zh else "Parallel Limit",
+                used=0.0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                text_value=str(limit),
+            ))
+
+    return rows
+
+
 _KIMI_USER_AGENT = "KimiCLI/1.6"
 
 def _kimi_headers(api_key: str) -> dict[str, str]:
@@ -138,6 +230,12 @@ _KIMI_LANG_IS_ZH = "zh" in os.getenv("LANG", "en").lower()
 
 
 async def _monthly_usage_row() -> ProviderUsage:
+    try:
+        oauth_row = await fetch_monthly_usage_from_oauth(lang_zh=_KIMI_LANG_IS_ZH)
+        if oauth_row is not None:
+            return oauth_row
+    except Exception:
+        pass
     try:
         return await fetch_monthly_usage_from_webbridge(lang_zh=_KIMI_LANG_IS_ZH)
     except Exception as exc:
@@ -232,4 +330,5 @@ async def fetch_kimi_usage(api_key: str, base_url: str, management_key: str | No
             countdown=r.countdown,
             unit="%"
         ))
+    res.extend(_extra_usage_rows(payload, lang_zh=_KIMI_LANG_IS_ZH))
     return [await _monthly_usage_row(), *res]
