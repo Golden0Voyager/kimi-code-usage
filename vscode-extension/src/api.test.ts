@@ -719,9 +719,7 @@ describe('fetchMonthlyUsageViaOAuth', () => {
   it('returns a Monthly UsageItem when totalQuota has data', async () => {
     const credPath = validCredPath();
     const resetTime = new Date(Date.now() + 60_000).toISOString();
-    const chunks = [
-      JSON.stringify({ totalQuota: { limit: '500', used: '125', resetTime } }),
-    ];
+    const chunks = [JSON.stringify({ totalQuota: { limit: '500', used: '125', resetTime } })];
     mockRes.on = vi.fn((event: string, cb: any) => {
       if (event === 'data') chunks.forEach((c) => cb(c));
       if (event === 'end') cb();
@@ -731,10 +729,7 @@ describe('fetchMonthlyUsageViaOAuth', () => {
       return mockReq;
     });
 
-    const result = await fetchMonthlyUsageViaOAuth(
-      'https://api.kimi.com/coding/v1',
-      credPath,
-    );
+    const result = await fetchMonthlyUsageViaOAuth('https://api.kimi.com/coding/v1', credPath);
     expect(result).not.toBeNull();
     expect(result!.label).toBe('Monthly');
     expect(result!.used).toBe(125);
@@ -756,10 +751,7 @@ describe('fetchMonthlyUsageViaOAuth', () => {
       return mockReq;
     });
 
-    const result = await fetchMonthlyUsageViaOAuth(
-      'https://api.kimi.com/coding/v1',
-      credPath,
-    );
+    const result = await fetchMonthlyUsageViaOAuth('https://api.kimi.com/coding/v1', credPath);
     expect(result).toBeNull();
     fs.unlinkSync(credPath);
   });
@@ -776,10 +768,7 @@ describe('fetchMonthlyUsageViaOAuth', () => {
       return mockReq;
     });
 
-    const result = await fetchMonthlyUsageViaOAuth(
-      'https://api.kimi.com/coding/v1',
-      credPath,
-    );
+    const result = await fetchMonthlyUsageViaOAuth('https://api.kimi.com/coding/v1', credPath);
     expect(result).toBeNull();
     fs.unlinkSync(credPath);
   });
@@ -801,10 +790,7 @@ describe('fetchMonthlyUsageViaOAuth', () => {
     });
     vi.mocked(https.get).mockReturnValue(mockReq);
 
-    const promise = fetchMonthlyUsageViaOAuth(
-      'https://api.kimi.com/coding/v1',
-      credPath,
-    );
+    const promise = fetchMonthlyUsageViaOAuth('https://api.kimi.com/coding/v1', credPath);
     errorHandlers.forEach((cb) => cb(new Error('ENOTFOUND')));
     await expect(promise).resolves.toBeNull();
     fs.unlinkSync(credPath);
