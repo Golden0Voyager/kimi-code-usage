@@ -22,11 +22,23 @@ jobs:
         with:
           node-version: '22'
 
-      # vscode-extension/package-lock.json is git-ignored, so `npm ci` cannot be
-      # used here. Commit the lock file (and drop the ignore rule) to switch this
-      # step to a reproducible `npm ci`.
+      # Node 22 bundles npm 10.9.x, whose dependency resolver crashes on a fresh
+      # (lock-less) install of this package with
+      #   npm error Cannot read properties of null (reading 'edgesOut')
+      # inside @npmcli/arborist's peer resolution (build-ideal-tree #nodeFromEdge).
+      # The same tree resolves cleanly under npm 11 and under `--legacy-peer-deps`.
+      #
+      # The durable fix is to commit vscode-extension/package-lock.json (it is
+      # currently git-ignored) and use `npm ci`, which never runs the resolver.
+      # Until then this job installs floating minor/patch versions.
+      - name: Install a working npm
+        run: npm install --global npm@11
+
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          node --version
+          npm --version
+          npm install --no-audit --no-fund
 
       - name: Typecheck
         run: npm run compile
