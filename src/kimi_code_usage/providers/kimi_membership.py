@@ -17,25 +17,40 @@ _KIMI_OAUTH_USAGES_URL = "https://api.kimi.com/coding/v1/usages"
 _OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS = 300
 
 
+def _load_token_state() -> tuple[str | None, str]:
+    """Read the Kimi Code CLI OAuth token, reporting why it is unusable.
+
+    Returns `(token, "")` on success, otherwise `(None, reason)` where `reason`
+    is a short human-readable explanation the caller can surface in the UI.
+    """
+    try:
+        with open(_KIMI_CLI_CREDENTIALS_PATH) as f:
+            data = json.load(f)
+    except OSError:
+        return None, "no Kimi CLI credential file"
+    except json.JSONDecodeError:
+        return None, "credential file is not readable JSON"
+    token = data.get("access_token")
+    if not isinstance(token, str) or not token:
+        return None, "credential file has no access_token"
+    expires_at = data.get("expires_at")
+    if isinstance(expires_at, (int, float)) and expires_at - _OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS <= time.time():
+        return None, f"access token expired at {datetime.fromtimestamp(expires_at):%Y-%m-%d %H:%M}"
+    return token, ""
+
+
 def load_kimi_cli_access_token() -> str | None:
     """Return a non-expired Kimi Code CLI OAuth access token, or None.
 
     The token is read from the credential file produced by `kimi login`. If the
     file is missing, unreadable, or the token is expired, returns None so the
     caller can fall back to another data source (e.g. WebBridge).
+
+    Kept as a thin wrapper over `_load_token_state()` for backward
+    compatibility (and existing tests); production callers that need the
+    failure reason use `_load_token_state()` directly.
     """
-    try:
-        with open(_KIMI_CLI_CREDENTIALS_PATH) as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return None
-    token = data.get("access_token")
-    if not isinstance(token, str) or not token:
-        return None
-    expires_at = data.get("expires_at")
-    if isinstance(expires_at, (int, float)) and expires_at - _OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS <= time.time():
-        return None
-    return token
+    return _load_token_state()[0]
 
 
 def _to_int(v: Any) -> int | None:
@@ -59,37 +74,37 @@ def _total_quota_reset_at(total: Mapping[str, Any]) -> str | None:
         return None
 
 
-async def fetch_monthly_usage_from_oauth(*, lang_zh: bool) -> ProviderUsage | None:
+async def fetch_monthly_usage_from_oauth(*, lang_zh: bool) -> tuple[ProviderUsage | None, str]:
     """Fetch the monthly membership quota via the Kimi Code CLI OAuth token.
 
     Uses the same `/usages` endpoint as the API-key path but authenticated with
-    the logged-in CLI credential. Returns None when no token is available or the
-    response does not expose a `totalQuota` (e.g. the account has no membership
-    pool) so the caller can fall back to WebBridge.
+    the logged-in CLI credential. Returns `(None, reason)` when no token is
+    available or the response does not expose a `totalQuota`, so the caller can
+    explain why it fell back to WebBridge.
     """
-    token = load_kimi_cli_access_token()
+    token, reason = _load_token_state()
     if not token:
-        return None
+        return None, reason
 
     headers = {"Authorization": f"Bearer {token}", "User-Agent": "KimiCLI/1.6"}
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(_KIMI_OAUTH_USAGES_URL, headers=headers) as resp:
                 if resp.status != 200:
-                    return None
+                    return None, f"HTTP {resp.status}"
                 payload = await resp.json()
-    except (aiohttp.ClientError, TimeoutError):
-        return None
+    except (aiohttp.ClientError, TimeoutError) as exc:
+        return None, f"request failed: {exc}"
 
     if not isinstance(payload, Mapping):
-        return None
+        return None, "response has no totalQuota"
     total = payload.get("totalQuota")
     if not isinstance(total, Mapping):
-        return None
+        return None, "response has no totalQuota"
     used = _to_int(total.get("used"))
     limit = _to_int(total.get("limit"))
     if used is None or limit is None or limit <= 0:
-        return None
+        return None, "response has no totalQuota"
 
     return ProviderUsage(
         provider="kimi",
@@ -100,7 +115,7 @@ async def fetch_monthly_usage_from_oauth(*, lang_zh: bool) -> ProviderUsage | No
         percent=used / limit * 100,
         reset_at=_total_quota_reset_at(total),
         unit="%",
-    )
+    ), ""
 
 
 class MonthlyUsageUnavailableError(Exception):
@@ -242,6 +257,7 @@ async def fetch_monthly_usage_from_webbridge(*, lang_zh: bool) -> ProviderUsage:
                 data if isinstance(data, Mapping) else {}, lang_zh=lang_zh
             )
             if row is not None:
+                row.label = "月度额度（网页）" if lang_zh else "Monthly Credits (web)"
                 return row
             if attempt < _SNAPSHOT_ATTEMPTS - 1:
                 await asyncio.sleep(_SNAPSHOT_INTERVAL_SECONDS)
