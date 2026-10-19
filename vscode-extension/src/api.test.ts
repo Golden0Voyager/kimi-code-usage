@@ -275,7 +275,7 @@ describe('parsePayload', () => {
 });
 
 describe('parsePayload parallel / boosterWallet / totalQuota', () => {
-  it('parses the real 2026-08-28 API response shape', () => {
+  it('parses the legacy 2026-08-28 camelCase shape', () => {
     const payload = {
       usage: { limit: '100', used: '67', remaining: '33', resetTime: '2026-09-02T08:22:11.102028Z' },
       limits: [
@@ -438,9 +438,193 @@ describe('parsePayload parallel / boosterWallet / totalQuota', () => {
         limits: 'not-an-array',
         parallel: { limit: { nested: true } },
         boosterWallet: { status: 'STATUS_ENABLED', monthlyUsed: [], monthlyChargeLimit: null },
+        booster_wallet: 'not-an-object',
         totalQuota: [],
+        usages: { limit_5h: { used_ratio: {} }, limit_7d: [] },
       } as any),
     ).not.toThrow();
+  });
+});
+
+describe('parsePayload live 2026-10-19 shape (usages / booster_wallet)', () => {
+  const LIVE = {
+    usage: { limit: '100', used: '16', remaining: '84', resetTime: '2026-10-26T08:22:11.102028Z' },
+    limits: [
+      {
+        window: { duration: 300, timeUnit: 'TIME_UNIT_MINUTE' },
+        detail: {
+          limit: '100',
+          used: '0',
+          remaining: '100',
+          resetTime: '2026-10-19T09:22:11.102028Z',
+        },
+      },
+    ],
+    usages: { limit_5h: { used_ratio: 0 }, limit_7d: { used_ratio: 0.1631 } },
+    booster_wallet: {
+      status: 'STATUS_DISABLED',
+      allowTopup: true,
+      monthlyUsed: { currency: 'CNY', priceInCents: '0' },
+      monthlyChargeLimit: { currency: 'CNY', priceInCents: '10000' },
+    },
+  };
+
+  it('replays the live payload without duplicate windows', () => {
+    const items = parsePayload(LIVE);
+    expect(items).toHaveLength(2);
+    expect(items.filter((i) => detectWindowType(i.label) === 'weekly')).toHaveLength(1);
+    expect(items.filter((i) => detectWindowType(i.label) === 'fiveHours')).toHaveLength(1);
+    expect(items[0].label).toBe('Weekly limit');
+    expect(items[0].used).toBe(16); // from `usage`, never from usages.limit_7d
+  });
+
+  it('reads snake_case booster_wallet with string cents', () => {
+    const items = parsePayload({
+      booster_wallet: {
+        status: 'STATUS_ENABLED',
+        monthlyUsed: { currency: 'CNY', priceInCents: '1234' },
+        monthlyChargeLimit: { currency: 'CNY', priceInCents: '10000' },
+      },
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('Extra Usage');
+    expect(items[0].used).toBeCloseTo(12.34);
+    expect(items[0].limit).toBe(100);
+    expect(items[0].percent_left).toBeCloseTo(87.66);
+  });
+
+  it('prefers snake_case and falls back to camelCase', () => {
+    const snake = {
+      status: 'STATUS_ENABLED',
+      monthlyUsed: { priceInCents: '5000' },
+      monthlyChargeLimit: { priceInCents: '10000' },
+    };
+    const camel = {
+      status: 'STATUS_ENABLED',
+      monthlyUsed: { priceInCents: '1' },
+      monthlyChargeLimit: { priceInCents: '10000' },
+    };
+    expect(parsePayload({ booster_wallet: snake, boosterWallet: camel })[0].used).toBeCloseTo(50);
+    expect(parsePayload({ booster_wallet: {}, boosterWallet: camel })[0].used).toBeCloseTo(0.01);
+    expect(parsePayload({ boosterWallet: camel })[0].used).toBeCloseTo(0.01);
+  });
+
+  it('backfills the weekly row from usages.limit_7d when usage is absent', () => {
+    const items = parsePayload({ usages: { limit_7d: { used_ratio: 0.1631 } } });
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('Weekly limit');
+    expect(items[0].used).toBeCloseTo(16.31);
+    expect(items[0].limit).toBe(100);
+    expect(items[0].remaining).toBeCloseTo(83.69);
+    expect(items[0].percent_left).toBeCloseTo(83.69);
+    expect(detectWindowType(items[0].label)).toBe('weekly');
+  });
+
+  it('backfills the 5h row from usages.limit_5h when no 300-minute row exists', () => {
+    const items = parsePayload({ usages: { limit_5h: { used_ratio: 0.25 } } });
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('5 Hours');
+    expect(items[0].used).toBe(25);
+    expect(items[0].remaining).toBe(75);
+    expect(items[0].percent_left).toBe(75);
+    expect(detectWindowType(items[0].label)).toBe('fiveHours');
+  });
+
+  it('does not duplicate a 5h window that already produced a row', () => {
+    const items = parsePayload({
+      limits: [
+        {
+          window: { duration: 300, timeUnit: 'TIME_UNIT_MINUTE' },
+          detail: { limit: '100', used: '21' },
+        },
+      ],
+      usages: { limit_5h: { used_ratio: 0.9 } },
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].used).toBe(21);
+  });
+
+  it('counts rows emitted, not windows seen', () => {
+    const items = parsePayload({
+      limits: [{ window: { duration: 300, timeUnit: 'TIME_UNIT_MINUTE' }, detail: {} }],
+      usages: { limit_5h: { used_ratio: 0.5 } },
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].used).toBe(50);
+  });
+
+  it('does not depend on the limits label to detect the 5h window', () => {
+    const items = parsePayload({
+      limits: [
+        {
+          window: { duration: 5, timeUnit: 'TIME_UNIT_HOUR' },
+          detail: { name: '五小时限额', limit: '100', used: '21' },
+        },
+      ],
+      usages: { limit_5h: { used_ratio: 0.9 } },
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].used).toBe(21);
+  });
+
+  it('clamps out-of-range ratios and accepts numeric strings', () => {
+    expect(parsePayload({ usages: { limit_5h: { used_ratio: 2.5 } } })[0].used).toBe(100);
+    expect(parsePayload({ usages: { limit_5h: { used_ratio: -1 } } })[0].used).toBe(0);
+    expect(parsePayload({ usages: { limit_7d: { used_ratio: '0.1631' } } })[0].used).toBeCloseTo(16.31);
+  });
+
+  it('skips unusable usages entries', () => {
+    expect(parsePayload({ usages: 'nope' } as any)).toHaveLength(0);
+    expect(parsePayload({ usages: { limit_5h: 'x' } } as any)).toHaveLength(0);
+    expect(parsePayload({ usages: { limit_5h: null } } as any)).toHaveLength(0);
+    expect(parsePayload({ usages: { limit_5h: {} } })).toHaveLength(0);
+    expect(parsePayload({ usages: { limit_7d: { used_ratio: 'abc' } } })).toHaveLength(0);
+    expect(parsePayload({ usages: { limit_5h: { used_ratio: true } } } as any)).toHaveLength(0);
+    // A blank or non-decimal string must not fabricate a "0% used" row.
+    expect(parsePayload({ usages: { limit_5h: { used_ratio: '' } } })).toHaveLength(0);
+    expect(parsePayload({ usages: { limit_5h: { used_ratio: '   ' } } })).toHaveLength(0);
+    expect(parsePayload({ usages: { limit_5h: { used_ratio: '0x10' } } })).toHaveLength(0);
+  });
+
+  it('backfills 5h even when a different limit window was emitted', () => {
+    const items = parsePayload({
+      limits: [{ window: { duration: 7, timeUnit: 'TIME_UNIT_DAY' }, detail: { limit: '100', used: '40' } }],
+      usages: { limit_5h: { used_ratio: 0.25 } },
+    });
+    expect(items).toHaveLength(2);
+    expect(items[1].used).toBe(25);
+  });
+
+  it('ignores a name carried by the usages entry', () => {
+    const items = parsePayload({ usages: { limit_7d: { used_ratio: 0.5, name: '7d' } } });
+    expect(items[0].label).toBe('Weekly limit');
+    expect(detectWindowType(items[0].label)).toBe('weekly');
+  });
+
+  it('leads with the backfilled weekly row', () => {
+    const items = parsePayload({
+      limits: [
+        {
+          window: { duration: 300, timeUnit: 'TIME_UNIT_MINUTE' },
+          detail: { limit: '100', used: '21' },
+        },
+      ],
+      usages: { limit_7d: { used_ratio: 0.5 } },
+    });
+    expect(items.map((i) => i.label)).toEqual(['Weekly limit', '5h limit']);
+  });
+
+  it('falls through a non-object snake_case wallet', () => {
+    const items = parsePayload({
+      booster_wallet: 'junk',
+      boosterWallet: {
+        status: 'STATUS_ENABLED',
+        monthlyUsed: { priceInCents: '100' },
+        monthlyChargeLimit: { priceInCents: '10000' },
+      },
+    } as any);
+    expect(items).toHaveLength(1);
+    expect(items[0].used).toBe(1);
   });
 });
 
