@@ -4,6 +4,7 @@ import pytest
 
 from kimi_code_usage.providers.kimi_membership import (
     MonthlyUsageUnavailable,
+    _load_token_state,
     _webbridge_unavailable_message,
     fetch_monthly_usage_from_oauth,
     fetch_monthly_usage_from_webbridge,
@@ -236,7 +237,7 @@ async def test_fetch_monthly_usage_from_oauth_returns_total_quota(tmp_path, monk
     session.__aexit__ = AsyncMock(return_value=None)
 
     with patch("aiohttp.ClientSession", return_value=session):
-        row = await fetch_monthly_usage_from_oauth(lang_zh=False)
+        row, _reason = await fetch_monthly_usage_from_oauth(lang_zh=False)
 
     assert row is not None
     assert row.used == 62.0
@@ -260,4 +261,129 @@ async def test_fetch_monthly_usage_from_oauth_falls_back_when_no_total_quota():
         "kimi_code_usage.providers.kimi_membership._KIMI_CLI_CREDENTIALS_PATH",
         "/nonexistent/path/kimi-code.json",
     ), patch("aiohttp.ClientSession", return_value=session):
-        assert await fetch_monthly_usage_from_oauth(lang_zh=False) is None
+        row, _reason = await fetch_monthly_usage_from_oauth(lang_zh=False)
+
+    assert row is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_monthly_usage_from_oauth_reports_missing_total_quota(tmp_path, monkeypatch):
+    cm = AsyncMock()
+    cm.__aenter__ = AsyncMock(return_value=cm)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    cm.status = 200
+    # live 形状（E1）：coding API 永远没有 totalQuota
+    cm.json = AsyncMock(return_value={"usage": {"limit": "100", "remaining": "84"}})
+    session = AsyncMock()
+    session.get = lambda *a, **k: cm
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=None)
+
+    cred = tmp_path / "credentials" / "kimi-code.json"
+    cred.parent.mkdir(parents=True)
+    cred.write_text('{"access_token": "abc", "expires_at": 9999999999}')
+    monkeypatch.setattr(
+        "kimi_code_usage.providers.kimi_membership._KIMI_CLI_CREDENTIALS_PATH", str(cred)
+    )
+    with patch("aiohttp.ClientSession", return_value=session):
+        row, reason = await fetch_monthly_usage_from_oauth(lang_zh=False)
+
+    assert row is None
+    assert "totalQuota" in reason
+
+
+@pytest.mark.asyncio
+async def test_fetch_monthly_usage_from_oauth_reports_http_status(tmp_path, monkeypatch):
+    cm = AsyncMock()
+    cm.__aenter__ = AsyncMock(return_value=cm)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    cm.status = 401
+    cm.json = AsyncMock(return_value={})
+    session = AsyncMock()
+    session.get = lambda *a, **k: cm
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=None)
+
+    cred = tmp_path / "credentials" / "kimi-code.json"
+    cred.parent.mkdir(parents=True)
+    cred.write_text('{"access_token": "abc", "expires_at": 9999999999}')
+    monkeypatch.setattr(
+        "kimi_code_usage.providers.kimi_membership._KIMI_CLI_CREDENTIALS_PATH", str(cred)
+    )
+    with patch("aiohttp.ClientSession", return_value=session):
+        row, reason = await fetch_monthly_usage_from_oauth(lang_zh=False)
+
+    assert row is None
+    assert "401" in reason
+
+
+def test_load_token_state_reports_expired_token(tmp_path, monkeypatch):
+    cred = tmp_path / "credentials" / "kimi-code.json"
+    cred.parent.mkdir(parents=True)
+    cred.write_text('{"access_token": "abc", "expires_at": 1}')
+    monkeypatch.setattr(
+        "kimi_code_usage.providers.kimi_membership._KIMI_CLI_CREDENTIALS_PATH", str(cred)
+    )
+    token, reason = _load_token_state()
+    assert token is None
+    assert "expired" in reason
+
+
+def test_load_token_state_reports_missing_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "kimi_code_usage.providers.kimi_membership._KIMI_CLI_CREDENTIALS_PATH",
+        str(tmp_path / "nope.json"),
+    )
+    token, reason = _load_token_state()
+    assert token is None
+    assert "no Kimi CLI credential file" in reason
+
+
+def test_load_token_state_reports_unreadable_json(tmp_path, monkeypatch):
+    cred = tmp_path / "credentials" / "kimi-code.json"
+    cred.parent.mkdir(parents=True)
+    cred.write_text("{not json")
+    monkeypatch.setattr(
+        "kimi_code_usage.providers.kimi_membership._KIMI_CLI_CREDENTIALS_PATH", str(cred)
+    )
+    token, reason = _load_token_state()
+    assert token is None
+    assert "credential file is not readable JSON" in reason
+
+
+def test_load_token_state_reports_missing_access_token(tmp_path, monkeypatch):
+    cred = tmp_path / "credentials" / "kimi-code.json"
+    cred.parent.mkdir(parents=True)
+    cred.write_text("{}")
+    monkeypatch.setattr(
+        "kimi_code_usage.providers.kimi_membership._KIMI_CLI_CREDENTIALS_PATH", str(cred)
+    )
+    token, reason = _load_token_state()
+    assert token is None
+    assert "credential file has no access_token" in reason
+
+
+@pytest.mark.asyncio
+async def test_fetch_monthly_usage_marks_web_bridge_source():
+    responses = [
+        {"ok": True, "data": {"success": True}},
+        {"ok": True, "data": {"tree": [[{"role": "heading", "name": "Usage Progress"}, {"role": "StaticText", "name": "Total Usage"}, {"role": "StaticText", "name": "25%"}]]}},
+    ]
+    with patch("kimi_code_usage.providers.kimi_membership._bridge_command", new=AsyncMock(side_effect=responses)):
+        row = await fetch_monthly_usage_from_webbridge(lang_zh=False)
+
+    assert row.label == "Monthly Credits (web)"
+    assert row.used == 25.0
+
+
+@pytest.mark.asyncio
+async def test_fetch_monthly_usage_marks_web_bridge_source_zh():
+    responses = [
+        {"ok": True, "data": {"success": True}},
+        {"ok": True, "data": {"tree": [[{"role": "heading", "name": "用量进度"}, {"role": "StaticText", "name": "总使用量"}, {"role": "StaticText", "name": "25%"}]]}},
+    ]
+    with patch("kimi_code_usage.providers.kimi_membership._bridge_command", new=AsyncMock(side_effect=responses)):
+        row = await fetch_monthly_usage_from_webbridge(lang_zh=True)
+
+    assert row.label == "月度额度（网页）"
+    assert row.used == 25.0
