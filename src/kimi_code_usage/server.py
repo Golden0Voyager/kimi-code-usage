@@ -18,7 +18,7 @@ def _get_lan_ip() -> str:
         ifaces = socket.getaddrinfo(socket.gethostname(), 0, socket.AF_INET)
         seen = set()
         for addr in ifaces:
-            ip = addr[4][0]
+            ip = str(addr[4][0])
             if ip.startswith("192.168.") or ip.startswith("10.") or ip.startswith("172.16."):
                 return ip
             seen.add(ip)
