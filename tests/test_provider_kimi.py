@@ -347,3 +347,133 @@ def test_kimi_parse_payload_empty_items():
     summary, limits = _parse_usage_payload({"limits": [{"detail": {"used": None, "limit": None}}]})
     assert summary is None
     assert len(limits) == 0
+
+
+# -- _extra_usage_rows --
+def test_extra_usage_rows_full_payload():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    payload = {
+        "totalQuota": {"limit": "200", "used": "50"},
+        "boosterWallet": {
+            "status": "STATUS_ENABLED",
+            "monthlyUsed": {"currency": "CNY", "priceInCents": "1234"},
+            "monthlyChargeLimit": {"currency": "CNY", "priceInCents": "10000"},
+        },
+        "parallel": {"limit": "20"},
+    }
+    rows = _extra_usage_rows(payload, lang_zh=False)
+    assert [r.label for r in rows] == ["Total Quota", "Extra Usage", "Parallel Limit"]
+
+    quota, booster, parallel = rows
+    assert quota.used == 50.0 and quota.limit == 200.0 and quota.percent == 25.0
+    assert booster.used == 12.34 and booster.limit == 100.0 and booster.unit == "¥"
+    assert parallel.unit == "text" and parallel.text_value == "20"
+
+
+def test_extra_usage_rows_zh_labels():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    rows = _extra_usage_rows({"parallel": {"limit": 5}}, lang_zh=True)
+    assert rows[0].label == "并发上限"
+
+
+def test_extra_usage_rows_booster_disabled():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    rows = _extra_usage_rows({"boosterWallet": {"status": "STATUS_DISABLED"}}, lang_zh=False)
+    assert len(rows) == 1
+    assert rows[0].label == "Extra Usage"
+    assert rows[0].text_value == "Not enabled"
+
+
+def test_extra_usage_rows_booster_unlimited():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    rows = _extra_usage_rows(
+        {
+            "boosterWallet": {
+                "status": "STATUS_ENABLED",
+                "monthlyUsed": {"priceInCents": "2500"},
+                "monthlyChargeLimit": {"priceInCents": "0"},
+            }
+        },
+        lang_zh=False,
+    )
+    assert rows[0].text_value == "¥25.00"
+    assert rows[0].limit is None
+
+
+def test_extra_usage_rows_empty_or_malformed():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    assert _extra_usage_rows({}, lang_zh=False) == []
+    assert _extra_usage_rows({"totalQuota": {}}, lang_zh=False) == []
+    assert _extra_usage_rows(
+        {"parallel": {"limit": "abc"}, "boosterWallet": "nope"}, lang_zh=False
+    ) == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_kimi_usage_appends_extra_rows():
+    async def mock_json(*args, **kwargs):
+        return {
+            "usage": {"limit": "100", "used": "67"},
+            "parallel": {"limit": "20"},
+            "boosterWallet": {"status": "STATUS_DISABLED"},
+        }
+
+    cm = AsyncMock()
+    cm.__aenter__ = AsyncMock(return_value=cm)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    cm.status = 200
+    cm.json = mock_json
+    session = AsyncMock()
+    session.get = lambda *args, **kwargs: cm
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("aiohttp.ClientSession", return_value=session), patch(
+        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
+        new=AsyncMock(side_effect=Exception("bridge unavailable")),
+    ):
+        rows = await fetch_kimi_usage("test-key", "https://api.example.com/v1")
+
+    labels = [r.label for r in rows]
+    assert "Weekly Usage" in labels
+    assert "Extra Usage" in labels
+    assert "Parallel Limit" in labels
+
+
+@pytest.mark.asyncio
+async def test_monthly_usage_row_prefers_oauth_over_webbridge():
+    from kimi_code_usage.providers.kimi import _monthly_usage_row
+
+    oauth_row = ProviderUsage("kimi", "Monthly Credits", 1.0, 100.0, 99.0, 1.0, None, "%")
+    with patch(
+        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_oauth",
+        new=AsyncMock(return_value=oauth_row),
+    ), patch(
+        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
+        new=AsyncMock(side_effect=AssertionError("webbridge must not be called")),
+    ):
+        row = await _monthly_usage_row()
+
+    assert row is oauth_row
+
+
+@pytest.mark.asyncio
+async def test_monthly_usage_row_falls_back_to_webbridge_when_oauth_has_no_data():
+    from kimi_code_usage.providers.kimi import _monthly_usage_row
+
+    webbridge_row = ProviderUsage("kimi", "Monthly Credits", 7.0, 100.0, 93.0, 7.0, None, "%")
+    with patch(
+        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_oauth",
+        new=AsyncMock(return_value=None),
+    ), patch(
+        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
+        new=AsyncMock(return_value=webbridge_row),
+    ):
+        row = await _monthly_usage_row()
+
+    assert row is webbridge_row
