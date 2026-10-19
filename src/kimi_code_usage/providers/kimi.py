@@ -121,8 +121,10 @@ def _parse_usage_payload(payload: Mapping[str, Any]) -> tuple[KimiRow | None, li
             for idx, item in enumerate(raw_limits):
                 if not isinstance(item, Mapping):
                     continue
-                detail = item.get("detail") if isinstance(item.get("detail"), Mapping) else item
-                window = item.get("window") if isinstance(item.get("window"), Mapping) else {}
+                raw_detail = item.get("detail")
+                detail = raw_detail if isinstance(raw_detail, Mapping) else item
+                raw_window = item.get("window")
+                window = raw_window if isinstance(raw_window, Mapping) else {}
                 row = _to_usage_row(detail, default_label=_limit_label(window, idx))
                 if row:
                     limits.append(row)
