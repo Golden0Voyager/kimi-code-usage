@@ -23,7 +23,7 @@ CLI 通过本机 Kimi WebBridge 复用浏览器登录态：先定位或打开订
 3. 从“用量进度”中的“总使用量”卡片解析已用百分比和月度重置时间，再标准化为现有 `ProviderUsage`。
 4. 向 Kimi provider 返回该月度记录，或返回可读错误而不干扰 `/usages` 结果。
 
-Kimi provider 继续以 `/usages` 为主来源。membership reader 只附加一条 `Monthly Credits`（中文环境下为“月度额度”）记录；不改变其他 provider 的接口或渲染逻辑。
+Kimi provider 继续以 `/usages` 为主来源。membership reader 只附加一条月度记录：OAuth 路径为 `Monthly Credits`（中文环境下为“月度额度”），WebBridge 网页路径为 `Monthly Credits (web)`（中文为“月度额度（网页）”），两侧都失败时为同一标签的文本错误行；不改变其他 provider 的接口或渲染逻辑。
 
 ## 命令行为
 

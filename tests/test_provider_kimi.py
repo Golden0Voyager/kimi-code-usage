@@ -83,6 +83,38 @@ def test_limit_label_fallback():
     label = _limit_label({}, 2)
     assert "#3" in label
 
+# -- _window_minutes --
+@pytest.mark.parametrize(
+    "window,expected",
+    [
+        ({"duration": 300, "timeUnit": "TIME_UNIT_MINUTE"}, 300.0),
+        ({"duration": 2, "timeUnit": "TIME_UNIT_HOUR"}, 120.0),
+        ({"duration": 2, "timeUnit": "TIME_UNIT_DAY"}, 2880.0),
+        ({"duration": 1, "timeUnit": "TIME_UNIT_MONTH"}, 43200.0),
+        ({"duration": 300}, 5.0),  # 无单位 → 与 _limit_label 的"秒"约定一致
+        ({"duration": "bad", "timeUnit": "TIME_UNIT_MINUTE"}, None),
+        ("nope", None),
+        (None, None),
+    ],
+)
+def test_window_minutes(window, expected):
+    from kimi_code_usage.providers.kimi import _window_minutes
+
+    assert _window_minutes(window) == expected
+
+# -- _ratio_usage_row --
+@pytest.mark.parametrize("entry", ["nope", None, [1, 2]])
+def test_ratio_usage_row_returns_none_for_non_mapping_entry(entry):
+    from kimi_code_usage.providers.kimi import _ratio_usage_row
+
+    assert _ratio_usage_row(entry, "5h Limit") is None
+
+
+def test_ratio_usage_row_returns_none_without_numeric_ratio():
+    from kimi_code_usage.providers.kimi import _ratio_usage_row
+
+    assert _ratio_usage_row({"used_ratio": "half"}, "5h Limit") is None
+
 # -- _to_usage_row --
 def test_to_usage_row_full():
     row = _to_usage_row({"name": "test", "limit": 100, "used": 30}, default_label="Default")
@@ -139,6 +171,82 @@ def test_parse_usage_payload_bad_limit_items():
     summary, limits = _parse_usage_payload(payload)
     assert summary is None
     assert len(limits) == 1
+
+
+def test_parse_usage_payload_falls_back_to_usages_windows():
+    from kimi_code_usage.providers.kimi import _parse_usage_payload
+
+    payload = {
+        "usages": {
+            "limit_5h": {"used_ratio": 0, "reset_time": "2026-10-19T15:00:00Z"},
+            "limit_7d": {"used_ratio": 0.1631, "reset_time": "2026-10-26T00:00:00Z"},
+        }
+    }
+    summary, limits = _parse_usage_payload(payload)
+
+    assert summary is not None and summary.label == "Weekly Usage"
+    assert summary.used == 16 and summary.limit == 100          # 0.1631 → 16%
+    assert [r.label for r in limits] == ["5h Limit"]            # 周条已由 summary 覆盖，不重复
+    assert limits[0].used == 0 and limits[0].limit == 100
+
+
+def test_parse_usage_payload_ignores_usages_when_usage_and_limits_present():
+    from kimi_code_usage.providers.kimi import _parse_usage_payload
+
+    # live 形状（E1/E2）：两套来源同时存在 → 不得重复出行
+    payload = {
+        "usage": {"limit": "100", "remaining": "84", "resetTime": "2026-10-26T00:00:00Z"},
+        "limits": [
+            {
+                "window": {"duration": 300, "timeUnit": "TIME_UNIT_MINUTE"},
+                "detail": {"limit": "100", "remaining": "100", "resetTime": "2026-10-19T15:00:00Z"},
+            }
+        ],
+        "usages": {
+            "limit_5h": {"used_ratio": 0, "reset_time": "2026-10-19T15:00:00Z"},
+            "limit_7d": {"used_ratio": 0.1631, "reset_time": "2026-10-26T00:00:00Z"},
+        },
+    }
+    summary, limits = _parse_usage_payload(payload)
+
+    assert summary is not None and summary.label == "Weekly Usage"
+    assert summary.used == 16 and summary.limit == 100
+    assert [r.label for r in limits] == ["5h Limit"]            # 恰好一行，无重复
+    assert limits[0].used == 0
+
+
+def test_parse_usage_payload_usages_clamps_out_of_range_ratio():
+    from kimi_code_usage.providers.kimi import _parse_usage_payload
+
+    summary, limits = _parse_usage_payload({"usages": {"limit_7d": {"used_ratio": 3.5}}})
+
+    assert summary is not None
+    assert summary.used == 100 and summary.limit == 100
+
+
+def test_parse_usage_payload_skips_usages_without_ratio():
+    from kimi_code_usage.providers.kimi import _parse_usage_payload
+
+    summary, limits = _parse_usage_payload(
+        {"usages": {"limit_5h": {"reset_time": "2026-10-19T15:00:00Z"}, "limit_7d": "nope"}}
+    )
+
+    assert summary is None
+    assert limits == []
+
+
+def test_parse_usage_payload_usages_fallback_survives_rowless_limit_window():
+    from kimi_code_usage.providers.kimi import _parse_usage_payload
+
+    payload = {
+        "limits": [{"window": {"duration": 300, "timeUnit": "TIME_UNIT_MINUTE"}, "detail": {}}],
+        "usages": {"limit_5h": {"used_ratio": 0.5}},
+    }
+    summary, limits = _parse_usage_payload(payload)
+
+    assert summary is None
+    assert [(r.label, r.used, r.limit) for r in limits] == [("5h Limit", 50, 100)]
+
 
 # -- fetch_kimi_usage (async) --
 @pytest.mark.asyncio
@@ -414,6 +522,54 @@ def test_extra_usage_rows_empty_or_malformed():
     ) == []
 
 
+def test_extra_usage_rows_reads_snake_case_booster_wallet():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    # live 形状（E1/E3）：蛇形 key，priceInCents 是字符串
+    payload = {
+        "booster_wallet": {
+            "status": "STATUS_DISABLED",
+            "monthlyUsed": {"currency": "CNY", "priceInCents": "1234"},
+            "monthlyChargeLimit": {"currency": "CNY", "priceInCents": "10000"},
+        }
+    }
+    rows = _extra_usage_rows(payload, lang_zh=False)
+    assert [r.label for r in rows] == ["Extra Usage"]
+    assert rows[0].text_value == "Not enabled"
+
+
+def test_extra_usage_rows_reads_snake_case_booster_wallet_enabled():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    rows = _extra_usage_rows(
+        {
+            "booster_wallet": {
+                "status": "STATUS_ENABLED",
+                "monthlyUsed": {"currency": "CNY", "priceInCents": "1234"},
+                "monthlyChargeLimit": {"currency": "CNY", "priceInCents": "10000"},
+            }
+        },
+        lang_zh=False,
+    )
+    assert rows[0].label == "Extra Usage"
+    assert rows[0].used == 12.34
+    assert rows[0].limit == 100.0
+    assert rows[0].unit == "¥"
+
+
+def test_extra_usage_rows_snake_case_wins_over_camel_case():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    rows = _extra_usage_rows(
+        {
+            "booster_wallet": {"status": "STATUS_DISABLED"},
+            "boosterWallet": {"status": "STATUS_ENABLED"},
+        },
+        lang_zh=False,
+    )
+    assert rows[0].text_value == "Not enabled"
+
+
 @pytest.mark.asyncio
 async def test_fetch_kimi_usage_appends_extra_rows():
     async def mock_json(*args, **kwargs):
@@ -452,7 +608,7 @@ async def test_monthly_usage_row_prefers_oauth_over_webbridge():
     oauth_row = ProviderUsage("kimi", "Monthly Credits", 1.0, 100.0, 99.0, 1.0, None, "%")
     with patch(
         "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_oauth",
-        new=AsyncMock(return_value=oauth_row),
+        new=AsyncMock(return_value=(oauth_row, "")),
     ), patch(
         "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
         new=AsyncMock(side_effect=AssertionError("webbridge must not be called")),
@@ -469,7 +625,7 @@ async def test_monthly_usage_row_falls_back_to_webbridge_when_oauth_has_no_data(
     webbridge_row = ProviderUsage("kimi", "Monthly Credits", 7.0, 100.0, 93.0, 7.0, None, "%")
     with patch(
         "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_oauth",
-        new=AsyncMock(return_value=None),
+        new=AsyncMock(return_value=(None, "response has no totalQuota")),
     ), patch(
         "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
         new=AsyncMock(return_value=webbridge_row),
@@ -477,3 +633,21 @@ async def test_monthly_usage_row_falls_back_to_webbridge_when_oauth_has_no_data(
         row = await _monthly_usage_row()
 
     assert row is webbridge_row
+
+
+@pytest.mark.asyncio
+async def test_monthly_usage_row_reports_both_sources_when_unavailable():
+    from kimi_code_usage.providers.kimi import _monthly_usage_row
+
+    with patch(
+        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_oauth",
+        new=AsyncMock(return_value=(None, "access token expired at 2026-09-29 13:45")),
+    ), patch(
+        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
+        new=AsyncMock(side_effect=MonthlyUsageUnavailable("Kimi WebBridge daemon is not running.")),
+    ):
+        row = await _monthly_usage_row()
+
+    assert row.unit == "text"
+    assert "expired" in row.text_value
+    assert "daemon is not running" in row.text_value
