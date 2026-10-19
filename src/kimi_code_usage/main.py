@@ -815,9 +815,9 @@ def _render_daily_chart(
 
         text.append("│", style=theme.get("meta", "grey62"))
         for col in columns:
-            cidx = col[row]
-            if cidx is not None:
-                color = palette[cidx]
+            cell = col[row]
+            if cell is not None:
+                color = palette[cell]
                 text.append(filled_glyph, style=color)
             else:
                 text.append(empty_glyph)
@@ -840,7 +840,7 @@ def _render_daily_chart(
         # Always include the last day if not already present and it fits.
         if len(days) > 1 and (len(days) - 1) % slot_gap != 0:
             label_positions.add(len(days) - 1)
-        label_positions = sorted(label_positions)
+        ordered_label_positions = sorted(label_positions)
 
         max_line_chars = len(days) * col_width
         skip = 0
@@ -848,7 +848,7 @@ def _render_daily_chart(
             if skip > 0:
                 skip -= 1
                 continue
-            if i in label_positions:
+            if i in ordered_label_positions:
                 lbl = short_date(day.date)
                 date_line.append(lbl, style=theme.get("meta", "grey62"))
                 consumed_cols = max(1, (len(lbl) + col_width - 1) // col_width)
@@ -868,8 +868,8 @@ def _render_daily_chart(
     if top_models:
         text.append("\n")
         text.append("     ", style=theme.get("meta", "grey62"))
-        for i, model in enumerate(top_models[:8]):
-            name = truncate(_model_short_name(model), 14)
+        for i, model_name in enumerate(top_models[:8]):
+            name = truncate(_model_short_name(model_name), 14)
             color = palette[i]
             text.append("█", style=color)
             text.append(f" {name}  ", style=theme.get("meta", "grey62"))
@@ -1208,8 +1208,8 @@ def _format_aggregated_results(
 
     # Second pass: construct final result with simple divider titles
     for p in order:
-        body_text = provider_bodies.get(p)
-        err_msg = error_msgs.get(p)
+        provider_body = provider_bodies.get(p)
+        provider_error = error_msgs.get(p)
 
         # Dynamic title for codex: use plan_type from API response
         if p == "codex":
@@ -1230,18 +1230,18 @@ def _format_aggregated_results(
         title_str = _PROVIDER_TITLES.get(p, p.capitalize())
         divider_line = f"───────── {title_str} ─────────"
 
-        if body_text:
+        if provider_body:
             result.append(f"{divider_line}\n", style=theme["title"])
             result.append("\n")  # Empty line between divider and text
-            result.append(body_text)
+            result.append(provider_body)
 
-        if err_msg:
-            if not body_text:
+        if provider_error:
+            if not provider_body:
                 result.append(f"{divider_line}\n", style=theme["danger"])
                 result.append("\n")  # Empty line between divider and error
             else:
                 result.append("\n\n")  # Empty line between body and error
-            result.append(f"{err_msg}", style=theme["danger"])
+            result.append(f"{provider_error}", style=theme["danger"])
 
         result.append("\n\n")  # Empty line below provider section
 
@@ -1299,17 +1299,19 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
     errors: dict[str, str] = {}
 
     # Determine initial visible providers and language
+    visible_providers: set
     if config.visible_providers is not None:
-        visible_providers: set = {p for p in config.visible_providers if p in config.provider_order}
+        visible_providers = {p for p in config.visible_providers if p in config.provider_order}
     else:
-        visible_providers: set = set(config.provider_order)
+        visible_providers = set(config.provider_order)
 
+    lang_zh: bool
     if config.language == "zh":
-        lang_zh: bool = True
+        lang_zh = True
     elif config.language == "en":
-        lang_zh: bool = False
+        lang_zh = False
     else:
-        lang_zh: bool = IS_ZH
+        lang_zh = IS_ZH
 
     or_metric: str = _parse_or_metric(config.or_metric)
     days_window: int = _parse_days_window(config.days_window)
