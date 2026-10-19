@@ -1,4 +1,7 @@
 import * as https from 'https';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { URL } from 'url';
 import {
   WEEKLY_WINDOW_SECONDS,
@@ -93,7 +96,70 @@ export function parsePayload(payload: unknown): UsageItem[] {
     }
   }
 
+  const parallelRow = parseParallel(data.parallel);
+  if (parallelRow) items.push(parallelRow);
+
+  const boosterRow = parseBoosterWallet(data.boosterWallet);
+  if (boosterRow) items.push(boosterRow);
+
+  const totalQuota = data.totalQuota;
+  if (totalQuota && typeof totalQuota === 'object') {
+    const row = toRow(totalQuota as Record<string, unknown>, t('Total quota'));
+    if (row) items.push(row);
+  }
+
   return items;
+}
+
+function parseParallel(parallel: unknown): UsageItem | null {
+  if (!parallel || typeof parallel !== 'object') return null;
+  const limit = toInt((parallel as Record<string, unknown>).limit);
+  if (limit == null) return null;
+  const l = Math.max(0, limit);
+  return {
+    label: t('Parallel limit'),
+    used: 0,
+    limit: l,
+    remaining: l,
+    percent_left: 100,
+    reset_hint: null,
+    reset_seconds: null,
+    reset_at: null,
+  };
+}
+
+function parseBoosterWallet(wallet: unknown): UsageItem | null {
+  if (!wallet || typeof wallet !== 'object') return null;
+  const data = wallet as Record<string, unknown>;
+  if (data.status !== 'STATUS_ENABLED') return null;
+
+  const monthlyUsed =
+    data.monthlyUsed && typeof data.monthlyUsed === 'object'
+      ? (data.monthlyUsed as Record<string, unknown>)
+      : {};
+  const monthlyLimit =
+    data.monthlyChargeLimit && typeof data.monthlyChargeLimit === 'object'
+      ? (data.monthlyChargeLimit as Record<string, unknown>)
+      : {};
+
+  const usedCents = toInt(monthlyUsed.priceInCents);
+  const limitCents = toInt(monthlyLimit.priceInCents);
+  if (usedCents == null && limitCents == null) return null;
+
+  const u = Math.max(0, (usedCents ?? 0) / 100);
+  const l = Math.max(0, (limitCents ?? 0) / 100);
+  const remaining = l > 0 ? clamp(l - u, 0, l) : 0;
+
+  return {
+    label: t('Extra Usage'),
+    used: u,
+    limit: l,
+    remaining,
+    percent_left: l > 0 ? (remaining / l) * 100 : 100,
+    reset_hint: null,
+    reset_seconds: null,
+    reset_at: null,
+  };
 }
 
 function toRow(data: Record<string, unknown>, defaultLabel: string): UsageItem | null {
@@ -299,6 +365,108 @@ export function isLinkIssue(err: unknown): boolean {
     raw.includes('network') ||
     raw.includes('socket')
   );
+}
+
+const KIMI_CLI_CREDENTIALS_PATH = path.join(
+  os.homedir(),
+  '.kimi-code',
+  'credentials',
+  'kimi-code.json',
+);
+const OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS = 300;
+
+/**
+ * Read the OAuth access token written by `kimi login`.
+ *
+ * Returns null when the credential file is missing/unreadable, the token is an
+ * invalid type, or the token is expired (within a 300s buffer). The extension
+ * has no WebBridge fallback, so callers should treat null as "no monthly row".
+ *
+ * `credentialPath` is optional and only used for testing (inject a temp file).
+ */
+export function readKimiCliAccessToken(credentialPath?: string): string | null {
+  const filePath = credentialPath ?? KIMI_CLI_CREDENTIALS_PATH;
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const data = JSON.parse(raw) as Record<string, unknown>;
+    const token = data.access_token;
+    if (typeof token !== 'string' || token.length === 0) return null;
+    const expiresAt = data.expires_at;
+    if (
+      typeof expiresAt === 'number' &&
+      expiresAt - OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS <= Date.now() / 1000
+    ) {
+      return null;
+    }
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch the monthly membership quota authenticated with the Kimi Code CLI
+ * OAuth token (the same `/usages` endpoint as the API-key path).
+ *
+ * Returns a UsageItem built from the top-level `totalQuota` field, or null when
+ * there is no token, the field is absent/empty, the request fails, or the JSON
+ * is unusable. Never throws — monthly is best-effort in the extension.
+ */
+export function fetchMonthlyUsageViaOAuth(
+  baseUrl: string,
+  credentialPath?: string,
+): Promise<UsageItem | null> {
+  return new Promise<UsageItem | null>((resolve) => {
+    try {
+      const token = readKimiCliAccessToken(credentialPath);
+      if (!token) {
+        resolve(null);
+        return;
+      }
+
+      const cleanBase = baseUrl.replace(/\/+$/, '');
+      const url = new URL(`${cleanBase}/usages`);
+      const req = https.get(
+        url,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'User-Agent': `kimi-usage-vscode/${userAgentVersion}`,
+          },
+          timeout: 10000,
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (chunk) => (body += chunk));
+          res.on('end', () => {
+            try {
+              if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+                resolve(null);
+                return;
+              }
+              const payload = JSON.parse(body) as Record<string, unknown>;
+              const totalQuota = payload.totalQuota;
+              if (!totalQuota || typeof totalQuota !== 'object') {
+                resolve(null);
+                return;
+              }
+              resolve(toRow(totalQuota as Record<string, unknown>, t('Monthly')));
+            } catch {
+              resolve(null);
+            }
+          });
+        },
+      );
+
+      req.on('error', () => resolve(null));
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
 }
 
 export function fetchUsage(baseUrl: string, apiKey: string): Promise<unknown> {
