@@ -237,6 +237,34 @@ async def test_fetch_openrouter_usage_credits_raises_exception(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_fetch_openrouter_usage_credits_raises_base_exception(monkeypatch):
+    """A BaseException from the credits fetch (e.g. CancelledError) must not crash.
+
+    ``asyncio.gather(return_exceptions=True)`` can surface ``BaseException``
+    instances, which a plain ``isinstance(..., Exception)`` guard would miss.
+    """
+
+    class _BaseExceptionOnly(BaseException):
+        pass
+
+    def get_handler(url, cm, kwargs):
+        if "credits" in url:
+            raise _BaseExceptionOnly("task cancelled")
+        cm.status = 200
+        async def mock_key_json():
+            return {"data": {"label": "my-key", "usage": 2.5, "limit": 5.0}}
+        cm.json = mock_key_json
+
+    res = await _run_fetch(monkeypatch, get_handler)
+    assert len(res) == 3
+    assert res[0].label == "Credits"
+    assert res[0].used == 2.5
+    assert res[0].limit == 5.0
+    assert res[1].label == "Key Name"
+    assert res[1].text_value == "my-key"
+
+
+@pytest.mark.asyncio
 async def test_fetch_openrouter_usage_edge_cases(monkeypatch):
     def get_handler(url, cm, kwargs):
         cm.status = 200
