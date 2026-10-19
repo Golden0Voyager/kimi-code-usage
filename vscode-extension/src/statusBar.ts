@@ -6,6 +6,7 @@ import {
   type Snapshot,
   type SnapshotItem,
   type UsageItem,
+  type WindowType,
   MIN_REFRESH_MINUTES,
 } from './types';
 import { t } from './i18n';
@@ -19,6 +20,7 @@ import {
   getWindowSeconds,
   formatResetTimeAbsolute,
   detectWindowType,
+  fetchMonthlyUsageViaOAuth,
 } from './api';
 import { fetchUsageCached } from './apiCache';
 import { resolveApiKey, readPaceThresholds, readThresholdSettings } from './config';
@@ -190,6 +192,13 @@ async function refreshOnce(): Promise<void> {
       return;
     }
 
+    try {
+      const monthly = await fetchMonthlyUsageViaOAuth(baseUrl);
+      if (monthly) items.push(monthly);
+    } catch {
+      // OAuth monthly is best-effort; never block the main display
+    }
+
     const weeklyItem = findWindowItem(items, 'weekly');
     const fiveHoursItem = findWindowItem(items, 'fiveHours');
 
@@ -219,7 +228,10 @@ async function refreshOnce(): Promise<void> {
 
     const suffix = showPace ? `> $(${pacePresentation.icon}) ${pacePresentation.label}` : '';
 
-    const parts = items.map((i) => `${shortLabel(i.label)}:${i.percent_left.toFixed(0)}%`);
+    const compactTypes: WindowType[] = ['weekly', 'fiveHours', 'monthly'];
+    const parts = items
+      .filter((i) => compactTypes.includes(detectWindowType(i.label)))
+      .map((i) => `${shortLabel(i.label)}:${i.percent_left.toFixed(0)}%`);
     const prefix = paceBarStr
       ? `${moonEmoji}  ${paceBarStr}  ${parts.join(' ')}`.trim()
       : `${moonEmoji}  ${parts.join(' ')}`.trim();
@@ -272,6 +284,7 @@ async function refreshOnce(): Promise<void> {
     const paceEntries: string[] = [];
     if (showPace) {
       for (const i of items) {
+        if (detectWindowType(i.label) === 'other') continue;
         const itemPace = computePace(i, getWindowSeconds(i.label), paceThresholds);
         if (!itemPace) continue;
         const itemPacePresentation = getPacePresentation(cfg, itemPace.state);
