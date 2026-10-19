@@ -1,0 +1,50 @@
+name: VS Code Extension CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  extension:
+    name: Extension typecheck, lint, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Node 22 bundles npm 10.9.x, whose dependency resolver crashes on a fresh
+      # (lock-less) install of this package with
+      #   npm error Cannot read properties of null (reading 'edgesOut')
+      # inside @npmcli/arborist's peer resolution (build-ideal-tree #nodeFromEdge).
+      # The same tree resolves cleanly under npm 11 and under `--legacy-peer-deps`.
+      #
+      # The durable fix is to commit vscode-extension/package-lock.json (it is
+      # currently git-ignored) and use `npm ci`, which never runs the resolver.
+      # Until then this job installs floating minor/patch versions.
+      - name: Install a working npm
+        run: npm install --global npm@11
+
+      - name: Install dependencies
+        run: |
+          node --version
+          npm --version
+          npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run compile
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test

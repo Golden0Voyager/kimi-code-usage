@@ -69,11 +69,11 @@ export function parsePayload(payload: unknown): UsageItem[] {
   const items: UsageItem[] = [];
 
   const usage = data.usage;
-  if (usage && typeof usage === 'object') {
-    const row = toRow(usage as Record<string, unknown>, t('Weekly limit'));
-    if (row) items.push(row);
-  }
+  const usageRow =
+    usage && typeof usage === 'object' ? toRow(usage as Record<string, unknown>, t('Weekly limit')) : null;
+  if (usageRow) items.push(usageRow);
 
+  const limitWindows: number[] = [];
   const limits = data.limits;
   if (Array.isArray(limits)) {
     for (let i = 0; i < limits.length; i++) {
@@ -92,6 +92,25 @@ export function parsePayload(payload: unknown): UsageItem[] {
         i,
       );
       const row = toRow(detail, label);
+      if (row) {
+        items.push(row);
+        const minutes = windowMinutes(itemObj.window);
+        if (minutes != null) limitWindows.push(minutes);
+      }
+    }
+  }
+
+  const usages = data.usages;
+  if (usages && typeof usages === 'object') {
+    const windows = usages as Record<string, unknown>;
+    const sevenDays = windows.limit_7d;
+    if (!usageRow && sevenDays && typeof sevenDays === 'object') {
+      const row = ratioRow(sevenDays as Record<string, unknown>, t('Weekly limit'));
+      if (row) items.unshift(row); // the weekly row leads, as it does on the primary path
+    }
+    const fiveHours = windows.limit_5h;
+    if (!limitWindows.includes(300) && fiveHours && typeof fiveHours === 'object') {
+      const row = ratioRow(fiveHours as Record<string, unknown>, t('5 Hours'));
       if (row) items.push(row);
     }
   }
@@ -99,7 +118,7 @@ export function parsePayload(payload: unknown): UsageItem[] {
   const parallelRow = parseParallel(data.parallel);
   if (parallelRow) items.push(parallelRow);
 
-  const boosterRow = parseBoosterWallet(data.boosterWallet);
+  const boosterRow = parseBoosterWallet(pickBoosterWallet(data));
   if (boosterRow) items.push(boosterRow);
 
   const totalQuota = data.totalQuota;
@@ -126,6 +145,29 @@ function parseParallel(parallel: unknown): UsageItem | null {
     reset_seconds: null,
     reset_at: null,
   };
+}
+
+/** Live `/usages` uses snake_case `booster_wallet`; older payloads used camelCase. */
+function pickBoosterWallet(data: Record<string, unknown>): unknown {
+  for (const key of ['booster_wallet', 'boosterWallet']) {
+    const value = data[key];
+    if (value && typeof value === 'object' && Object.keys(value).length > 0) return value;
+  }
+  return undefined;
+}
+
+/** Minutes covered by a `limits[].window`, used to recognise a window we already emitted. */
+function windowMinutes(window: unknown): number | null {
+  if (!window || typeof window !== 'object') return null;
+  const data = window as Record<string, unknown>;
+  const duration = toInt(data.duration);
+  if (duration == null) return null;
+  const timeUnit = String(data.timeUnit ?? data.time_unit ?? '').toUpperCase();
+  if (timeUnit.includes('MINUTE')) return duration;
+  if (timeUnit.includes('HOUR')) return duration * 60;
+  if (timeUnit.includes('DAY')) return duration * 1440;
+  if (timeUnit.includes('MONTH')) return duration * 43200;
+  return duration / 60;
 }
 
 function parseBoosterWallet(wallet: unknown): UsageItem | null {
@@ -217,6 +259,20 @@ function toRow(data: Record<string, unknown>, defaultLabel: string): UsageItem |
     reset_seconds,
     reset_at,
   };
+}
+
+/** A plain decimal literal, so a blank or non-decimal string cannot become a fabricated 0%. */
+const DECIMAL_RATIO_PATTERN = /^\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\s*$/;
+
+/** Row for a `usages.limit_5h` / `limit_7d` entry, whose `used_ratio` is a 0–1 fraction. */
+function ratioRow(entry: Record<string, unknown>, label: string): UsageItem | null {
+  const raw = entry.used_ratio;
+  if (typeof raw !== 'number' && typeof raw !== 'string') return null;
+  if (typeof raw === 'string' && !DECIMAL_RATIO_PATTERN.test(raw)) return null;
+  const ratio = Number(raw);
+  if (!Number.isFinite(ratio)) return null;
+  const used = clamp(ratio * 100, 0, 100);
+  return toRow({ ...entry, name: null, title: null, limit: 100, used }, label);
 }
 
 function clamp(value: number, min: number, max: number): number {
