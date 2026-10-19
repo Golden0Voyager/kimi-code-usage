@@ -19,6 +19,7 @@ import stat
 import tempfile
 from collections.abc import Mapping
 from contextlib import suppress
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -235,21 +236,19 @@ def _parse_usage_response(data: Mapping[str, Any]) -> list[ProviderUsage]:
             limits = raw_ul
 
     # Shape 5: RateLimitStatusPayload (Codex backend OpenAPI format)
+    #
+    # This is what the ChatGPT backend actually returns. ``primary_window`` is
+    # the 5-hour window (``limit_window_seconds`` 18000) and ``secondary_window``
+    # is the weekly window (604800), so *each* window's label has to be derived
+    # from its own ``limit_window_seconds`` rather than from its position.
     rate_limit = data.get("rate_limit")
     if isinstance(rate_limit, Mapping) and not limits:
-        primary = rate_limit.get("primary_window")
-        secondary = rate_limit.get("secondary_window")
-        if isinstance(primary, Mapping) and "used_percent" in primary:
-            # Determine window label from limit_window_seconds
-            window_seconds = primary.get("limit_window_seconds", 0)
-            if window_seconds >= 604800:  # 7+ days
-                limits.append({**primary, "window": "weekly"})
-            elif window_seconds >= 18000:  # 5+ hours
-                limits.append({**primary, "window": "5h"})
-            else:
-                limits.append({**primary, "window": str(window_seconds) + "s"})
-        if isinstance(secondary, Mapping) and "used_percent" in secondary:
-            limits.append({**secondary, "window": "5h"})
+        for window_key in ("primary_window", "secondary_window"):
+            window = rate_limit.get(window_key)
+            if isinstance(window, Mapping) and "used_percent" in window:
+                limits.append(
+                    {**window, "window": _window_label(window.get("limit_window_seconds"))}
+                )
 
     # Shape 6: spend_control.individual_limit
     spend_control = data.get("spend_control")
@@ -318,7 +317,7 @@ def _parse_usage_response(data: Mapping[str, Any]) -> list[ProviderUsage]:
                     limit=limit,
                     remaining=remaining,
                     percent=pct,
-                    reset_at=None,
+                    reset_at=_format_reset_at(limit_entry.get("reset_at")),
                     unit="%",
                 )
             )
@@ -351,6 +350,35 @@ def _to_float(val: Any) -> float | None:
     try:
         return float(val)
     except (TypeError, ValueError):
+        return None
+
+
+def _window_label(limit_window_seconds: Any) -> str:
+    """Derive a rate-limit window label from ``limit_window_seconds``.
+
+    Codex reports the 5-hour window as 18000s and the weekly window as 604800s.
+    Any other value yields an empty label so the caller falls back to a generic
+    one rather than emitting a raw ``"7200s"`` that the label matcher would
+    misread as the weekly window.
+    """
+    seconds = _to_float(limit_window_seconds)
+    if seconds is None:
+        return ""
+    if seconds >= 604800:
+        return "weekly"
+    if seconds >= 18000:
+        return "5h"
+    return ""
+
+
+def _format_reset_at(raw: Any) -> str | None:
+    """Render an epoch-seconds ``reset_at`` as local ``YYYY-MM-DD HH:MM``."""
+    epoch = _to_float(raw)
+    if epoch is None:
+        return None
+    try:
+        return datetime.fromtimestamp(epoch).strftime("%Y-%m-%d %H:%M")
+    except (OSError, OverflowError, ValueError):
         return None
 
 

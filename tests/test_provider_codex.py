@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import stat
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -221,7 +222,11 @@ async def test_refresh_access_token_missing_access_token():
 
 
 def test_parse_plan():
-    """Parse the actual /wham/usage response format."""
+    """Parse the actual /wham/usage response format.
+
+    ChatGPT Plus reports ``primary_window`` as the 5-hour window (18000s) and
+    ``secondary_window`` as the weekly window (604800s).
+    """
     data = {
         "plan_type": "plus",
         "rate_limit": {
@@ -229,11 +234,16 @@ def test_parse_plan():
             "limit_reached": False,
             "primary_window": {
                 "used_percent": 23,
-                "limit_window_seconds": 604800,
-                "reset_after_seconds": 525753,
+                "limit_window_seconds": 18000,
+                "reset_after_seconds": 3600,
                 "reset_at": 1785044789,
             },
-            "secondary_window": None,
+            "secondary_window": {
+                "used_percent": 41,
+                "limit_window_seconds": 604800,
+                "reset_after_seconds": 525753,
+                "reset_at": 1785456789,
+            },
         },
         "credits": {
             "has_credits": False,
@@ -245,11 +255,13 @@ def test_parse_plan():
     rows = _parse_usage_response(data)
     labels = [r.label for r in rows]
     assert "Plan" in labels
+    assert "5h Limit" in labels
     assert "Weekly Usage" in labels
     assert "Credit Balance" in labels
-    weekly = [r for r in rows if r.label == "Weekly Usage"][0]
-    assert weekly.used == 23.0
-    assert weekly.percent == 23.0
+    by_label = {r.label: r for r in rows}
+    assert by_label["5h Limit"].used == 23.0
+    assert by_label["5h Limit"].percent == 23.0
+    assert by_label["Weekly Usage"].used == 41.0
 
 
 def test_parse_plan_zh():
@@ -262,6 +274,12 @@ def test_parse_plan_zh():
                 "limit_reached": False,
                 "primary_window": {
                     "used_percent": 50,
+                    "limit_window_seconds": 18000,
+                    "reset_after_seconds": 100000,
+                    "reset_at": 1785044789,
+                },
+                "secondary_window": {
+                    "used_percent": 50,
                     "limit_window_seconds": 604800,
                     "reset_after_seconds": 100000,
                     "reset_at": 1785044789,
@@ -270,10 +288,12 @@ def test_parse_plan_zh():
         }
         rows = _parse_usage_response(data)
         labels = [r.label for r in rows]
+        assert "5小时限额" in labels
         assert "周用量" in labels
 
 
 def test_parse_with_secondary_window():
+    """``secondary_window`` is the weekly window, not a second 5h window."""
     data = {
         "plan_type": "plus",
         "rate_limit": {
@@ -281,22 +301,118 @@ def test_parse_with_secondary_window():
             "limit_reached": False,
             "primary_window": {
                 "used_percent": 20,
-                "limit_window_seconds": 604800,
-                "reset_after_seconds": 500000,
-                "reset_at": 1785044789,
-            },
-            "secondary_window": {
-                "used_percent": 5,
                 "limit_window_seconds": 18000,
                 "reset_after_seconds": 5000,
                 "reset_at": 1784458800,
             },
+            "secondary_window": {
+                "used_percent": 5,
+                "limit_window_seconds": 604800,
+                "reset_after_seconds": 500000,
+                "reset_at": 1785044789,
+            },
         },
     }
     rows = _parse_usage_response(data)
+    by_label = {r.label: r for r in rows}
+    assert by_label["5h Limit"].used == 20.0
+    assert by_label["Weekly Usage"].used == 5.0
+
+
+def test_parse_secondary_window_is_labelled_from_its_own_seconds():
+    """Regression: ``secondary_window`` used to be hardcoded to "5h"."""
+    data = {
+        "rate_limit": {
+            "primary_window": {"used_percent": 10, "limit_window_seconds": 18000},
+            "secondary_window": {"used_percent": 80, "limit_window_seconds": 604800},
+        }
+    }
+    rows = _parse_usage_response(data)
     labels = [r.label for r in rows]
+    assert labels.count("5h Limit") == 1
     assert "Weekly Usage" in labels
-    assert "5h Limit" in labels
+    by_label = {r.label: r for r in rows}
+    assert by_label["5h Limit"].used == 10.0
+    assert by_label["Weekly Usage"].used == 80.0
+
+
+def test_parse_window_labels_follow_seconds_not_position():
+    """Windows are labelled from ``limit_window_seconds``, not from their order."""
+    data = {
+        "rate_limit": {
+            "primary_window": {"used_percent": 30, "limit_window_seconds": 604800},
+            "secondary_window": {"used_percent": 60, "limit_window_seconds": 18000},
+        }
+    }
+    by_label = {r.label: r for r in _parse_usage_response(data)}
+    assert by_label["Weekly Usage"].used == 30.0
+    assert by_label["5h Limit"].used == 60.0
+
+
+def test_parse_rate_limit_reset_at_is_kept():
+    """Regression: the response carries reset_at, the parser used to drop it."""
+    data = {
+        "rate_limit": {
+            "primary_window": {
+                "used_percent": 10,
+                "limit_window_seconds": 18000,
+                "reset_at": 1785044789,
+            }
+        }
+    }
+    rows = _parse_usage_response(data)
+    assert rows[0].reset_at is not None
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", rows[0].reset_at)
+
+
+def test_parse_rate_limit_without_reset_at_stays_none():
+    data = {
+        "rate_limit": {"primary_window": {"used_percent": 10, "limit_window_seconds": 18000}}
+    }
+    assert _parse_usage_response(data)[0].reset_at is None
+
+
+def test_parse_rate_limit_without_window_seconds():
+    """A missing limit_window_seconds must not yield a bogus "0s" label."""
+    data = {"rate_limit": {"primary_window": {"used_percent": 10}}}
+    assert _parse_usage_response(data)[0].label == "Limit"
+
+
+def test_parse_rate_limit_short_window_is_not_mislabeled():
+    """Regression: "7200s" used to match the fuzzy `"7" in window` weekly check."""
+    data = {
+        "rate_limit": {"primary_window": {"used_percent": 10, "limit_window_seconds": 7200}}
+    }
+    assert _parse_usage_response(data)[0].label == "Limit"
+
+
+def test_parse_rate_limit_short_window_zh_generic_label():
+    data = {
+        "rate_limit": {"primary_window": {"used_percent": 10, "limit_window_seconds": 3600}}
+    }
+    with patch.dict(os.environ, {"LANG": "zh_CN.UTF-8"}, clear=False):
+        assert _parse_usage_response(data)[0].label == "限额"
+
+
+def test_parse_rate_limit_non_numeric_window_seconds():
+    """A non-numeric limit_window_seconds must not crash the parser."""
+    data = {
+        "rate_limit": {"primary_window": {"used_percent": 10, "limit_window_seconds": "unknown"}}
+    }
+    assert _parse_usage_response(data)[0].label == "Limit"
+
+
+def test_parse_reset_at_out_of_range_stays_none():
+    data = {
+        "rate_limit": {
+            "primary_window": {
+                "used_percent": 10,
+                "limit_window_seconds": 18000,
+                "reset_at": 1e18,
+            }
+        }
+    }
+    assert _parse_usage_response(data)[0].reset_at is None
 
 
 def test_parse_fallback_to_raw():

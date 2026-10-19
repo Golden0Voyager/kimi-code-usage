@@ -1,9 +1,9 @@
 """
-Claude (ChatGPT) subscription quota provider.
+Claude subscription quota provider.
 
-Reads OAuth tokens from the local Claude Code credentials file
-(``~/.claude/.credentials.json``) and calls the Anthropic OAuth usage
-endpoint to retrieve subscription usage limits.
+Reads the Claude Code OAuth token — from the macOS login keychain, or from
+``~/.claude/.credentials.json`` — and calls the Anthropic OAuth usage endpoint
+to retrieve subscription usage limits.
 
 The provider is **disabled by default** — enable it with
 ``CLAUDE_ENABLED=true`` or ``claude.enabled: true`` in
@@ -15,7 +15,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import subprocess
+import sys
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,42 +34,153 @@ CLAUDE_CREDENTIALS_PATH = Path.home() / ".claude" / ".credentials.json"
 CLAUDE_OAUTH_URL = "https://api.anthropic.com/api/oauth/usage"
 CLAUDE_BETA_HEADER = "oauth-2025-04-20"
 
+#: Keychain item Claude Code uses on macOS for its OAuth credentials.
+CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials"
+
 
 # ---------------------------------------------------------------------------
 # Credential helpers
 # ---------------------------------------------------------------------------
 
 
+def _is_macos() -> bool:
+    """True on macOS, where Claude Code keeps credentials in the login keychain."""
+    return sys.platform == "darwin"
+
+
+def _extract_access_token(creds: Any) -> str | None:
+    """Pull the OAuth access token out of a decoded credentials document.
+
+    Claude Code stores ``claudeAiOauth`` as an *object*::
+
+        {"claudeAiOauth": {"accessToken": ..., "refreshToken": ...,
+                           "expiresAt": ..., "scopes": [...]}}
+
+    Hand-written files sometimes store the bare token under ``claudeAiOauth``
+    instead, so both shapes are accepted, plus a top-level token as a last
+    resort.
+    """
+    if not isinstance(creds, Mapping):
+        return None
+
+    oauth = creds.get("claudeAiOauth")
+    if isinstance(oauth, Mapping):
+        for key in ("accessToken", "access_token"):
+            token = oauth.get(key)
+            if isinstance(token, str) and token:
+                return token
+    elif isinstance(oauth, str) and oauth:
+        return oauth
+
+    for key in ("accessToken", "access_token", "token"):
+        token = creds.get(key)
+        if isinstance(token, str) and token:
+            return token
+    return None
+
+
+def _read_keychain_token() -> str | None:
+    """Read the OAuth token from the macOS login keychain.
+
+    Claude Code stores its credentials as a generic password named
+    ``Claude Code-credentials`` whose secret is the same JSON blob that would
+    otherwise live in ``~/.claude/.credentials.json``. Every failure mode
+    (missing binary, denied access, timeout, non-zero exit, malformed output)
+    yields ``None`` so the caller can fall back to the file.
+    """
+    try:
+        proc = subprocess.run(
+            ["security", "find-generic-password", "-s", CLAUDE_KEYCHAIN_SERVICE, "-w"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+
+    try:
+        return _extract_access_token(json.loads(proc.stdout))
+    except json.JSONDecodeError:
+        return None
+
+
 def _read_oauth_token() -> str:
-    """Read the Claude OAuth token from the local credentials file.
+    """Read the Claude Code OAuth token.
 
     Tries, in order:
-    1. ``~/.claude/.credentials.json`` → ``claudeAiOauth`` key
-    2. ``CLAUDE_CODE_OAUTH_TOKEN`` environment variable
+    1. The macOS login keychain (``Claude Code-credentials``) — where Claude
+       Code actually stores credentials on macOS.
+    2. ``~/.claude/.credentials.json`` — the Linux / legacy location.
+    3. The ``CLAUDE_CODE_OAUTH_TOKEN`` or ``CLAUDE_USAGE_OAUTH_TOKEN`` env var.
     """
+    if _is_macos():
+        token = _read_keychain_token()
+        if token:
+            return token
+
     if CLAUDE_CREDENTIALS_PATH.exists():
         try:
             with open(CLAUDE_CREDENTIALS_PATH, encoding="utf-8") as f:
-                creds: dict[str, Any] = json.load(f)
-            token: str | None = creds.get("claudeAiOauth")
+                creds = json.load(f)
+            token = _extract_access_token(creds)
             if token:
                 return token
         except (json.JSONDecodeError, OSError):
             pass
 
-    env_token = os.getenv("CLAUDE_CODE_OAUTH_TOKEN")
-    if env_token:
-        return env_token
+    for env_var in ("CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_USAGE_OAUTH_TOKEN"):
+        env_token = os.getenv(env_var)
+        if env_token:
+            return env_token
 
     raise FileNotFoundError(
-        f"Claude OAuth token not found at {CLAUDE_CREDENTIALS_PATH} "
-        "or in CLAUDE_CODE_OAUTH_TOKEN env var. "
+        f"Claude OAuth token not found in the macOS keychain "
+        f"({CLAUDE_KEYCHAIN_SERVICE}), at {CLAUDE_CREDENTIALS_PATH}, "
+        "or in the CLAUDE_CODE_OAUTH_TOKEN env var. "
         "Make sure you have logged in with `claude` CLI first."
     )
 
 
 def _is_lang_zh() -> bool:
     return "zh" in os.getenv("LANG", "en").lower()
+
+
+def _normalize_utilization(raw: Any) -> float | None:
+    """Convert an OAuth ``utilization`` value into a 0-100 percentage.
+
+    The usage endpoint reports percentages (``15.0`` means 15%). A handful of
+    builds return strictly fractional values instead, so ``0 < v < 1`` is
+    treated as a fraction. Anything outside 0-100 is clamped.
+
+    Returns ``None`` when the value cannot be interpreted as a number.
+    """
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if 0.0 < value < 1.0:
+        value *= 100.0
+    return min(100.0, max(0.0, value))
+
+
+def _format_reset_at(raw: Any) -> str | None:
+    """Render an ISO-8601 ``resets_at`` timestamp as local ``YYYY-MM-DD HH:MM``.
+
+    Unparseable strings are passed through untouched; non-strings are dropped.
+    """
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        reset = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return raw
+    if reset.tzinfo is not None:
+        reset = reset.astimezone()
+    return reset.strftime("%Y-%m-%d %H:%M")
 
 
 # ---------------------------------------------------------------------------
@@ -91,25 +205,26 @@ def _parse_usage_response(data: Mapping[str, Any]) -> list[ProviderUsage]:
         window = data.get(json_key)
         if isinstance(window, Mapping):
             utilization = window.get("utilization")
-            if utilization is not None:
-                try:
-                    pct = float(utilization) * 100.0
-                except (TypeError, ValueError):
-                    continue
+            if utilization is None:
+                continue
 
-                label = label_zh if is_zh else label_en
-                results.append(
-                    ProviderUsage(
-                        provider="claude",
-                        label=label,
-                        used=pct,
-                        limit=100.0,
-                        remaining=max(0.0, 100.0 - pct),
-                        percent=pct,
-                        reset_at=None,
-                        unit="%",
-                    )
+            pct = _normalize_utilization(utilization)
+            if pct is None:
+                continue
+
+            label = label_zh if is_zh else label_en
+            results.append(
+                ProviderUsage(
+                    provider="claude",
+                    label=label,
+                    used=pct,
+                    limit=100.0,
+                    remaining=max(0.0, 100.0 - pct),
+                    percent=pct,
+                    reset_at=_format_reset_at(window.get("resets_at")),
+                    unit="%",
                 )
+            )
 
     # Fallback if no windows were parsed
     if not results:
