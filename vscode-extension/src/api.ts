@@ -151,7 +151,9 @@ function parseParallel(parallel: unknown): UsageItem | null {
 function pickBoosterWallet(data: Record<string, unknown>): unknown {
   for (const key of ['booster_wallet', 'boosterWallet']) {
     const value = data[key];
-    if (value && typeof value === 'object' && Object.keys(value).length > 0) return value;
+    if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0) {
+      return value;
+    }
   }
   return undefined;
 }
@@ -187,7 +189,7 @@ function textRow(label: string, text: string): UsageItem {
 /** A positive `balance.amount` in a BOOSTER wallet means the wallet is in use. */
 function boosterBalancePositive(data: Record<string, unknown>): boolean {
   const balance = data.balance;
-  if (balance == null || typeof balance !== 'object') return false;
+  if (balance == null || typeof balance !== 'object' || Array.isArray(balance)) return false;
   const raw = balance as Record<string, unknown>;
   if (String(raw.type ?? '').toUpperCase() !== 'BOOSTER') return false;
   const amount = toInt(raw.amount);
