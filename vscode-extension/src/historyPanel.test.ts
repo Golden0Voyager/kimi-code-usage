@@ -32,16 +32,14 @@ function snap(
 ): Snapshot {
   return {
     ts,
-    items: items.map(
-      (i): SnapshotItem => ({
-        label: i.wt === 'weekly' ? 'Weekly limit' : i.wt === 'fiveHours' ? '5h limit' : 'Monthly limit',
-        windowType: i.wt,
-        used: i.used,
-        limit: i.limit,
-        percent_left: ((i.limit - i.used) / i.limit) * 100,
-        paceRatio: null,
-      }),
-    ),
+    items: items.map((i): SnapshotItem => ({
+      label: i.wt === 'weekly' ? 'Weekly limit' : i.wt === 'fiveHours' ? '5h limit' : 'Monthly limit',
+      windowType: i.wt,
+      used: i.used,
+      limit: i.limit,
+      percent_left: ((i.limit - i.used) / i.limit) * 100,
+      paceRatio: null,
+    })),
   };
 }
 
