@@ -390,17 +390,26 @@ describe('parsePayload parallel / boosterWallet / totalQuota', () => {
   });
 
   it('counts monthlyChargeLimitEnabled as a positive signal', () => {
-    const items = parsePayload({
-      booster_wallet: {
-        status: 'STATUS_DISABLED',
-        monthlyChargeLimitEnabled: true,
-        monthlyUsed: { priceInCents: '500' },
-        monthlyChargeLimit: { priceInCents: '10000' },
-      },
-    });
-    expect(items).toHaveLength(1);
-    expect(items[0].used).toBe(5);
-    expect(items[0].text_value).toBeUndefined();
+    for (const flag of ['monthlyChargeLimitEnabled', 'monthly_charge_limit_enabled']) {
+      const items = parsePayload({
+        booster_wallet: {
+          status: 'STATUS_DISABLED',
+          [flag]: true,
+          monthlyUsed: { priceInCents: '500' },
+          monthlyChargeLimit: { priceInCents: '10000' },
+        },
+      });
+      expect(items).toHaveLength(1);
+      expect(items[0].used).toBe(5);
+      expect(items[0].text_value).toBeUndefined();
+    }
+  });
+
+  it('stays silent for an active wallet without any amount', () => {
+    expect(parsePayload({ booster_wallet: { balance: { type: 'BOOSTER', amount: 2500000 } } })).toHaveLength(
+      0,
+    );
+    expect(parsePayload({ booster_wallet: { monthlyChargeLimitEnabled: true } })).toHaveLength(0);
   });
 
   it('counts a positive BOOSTER balance as a positive signal', () => {
@@ -431,6 +440,7 @@ describe('parsePayload parallel / boosterWallet / totalQuota', () => {
   it('skips boosterWallet when missing, non-object, or both money fields missing', () => {
     expect(parsePayload({ boosterWallet: null })).toHaveLength(0);
     expect(parsePayload({ boosterWallet: 42 } as any)).toHaveLength(0);
+    expect(parsePayload({ boosterWallet: [1] } as any)).toHaveLength(0);
     expect(parsePayload({ boosterWallet: { status: 'STATUS_ENABLED' } })).toHaveLength(0);
     expect(
       parsePayload({
