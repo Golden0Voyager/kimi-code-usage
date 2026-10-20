@@ -89,10 +89,10 @@ and the suite stays at 400 passing. `package.json` ranges were not touched.
 
 ## Verification (measured, not inferred)
 
-- Python: `344 passed` (341 → 344), `ruff check src tests` clean.
+- Python: `346 passed` (341 → 346), `ruff check src tests` clean.
 - Extension: `compile` 0, `lint` 0 with **47/47** warnings (the ratchet bit at
   49 during development and forced two real fixes: `balance == null` and
-  `text_value != null`), `format:check` 0, `400 passed` (396 → 400).
+  `text_value != null`), `format:check` 0, `402 passed` (396 → 402).
 - `npm audit`: 9 findings (4 high, 4 moderate, 1 low) → **0**.
 - Live smoke against the real account (wallet `STATUS_DISABLED`), previously
   three rows:
@@ -115,3 +115,32 @@ and the suite stays at 400 passing. `package.json` ranges were not touched.
 - Two extra files appeared: the prettier 3.9 reflow (forced by the dependency
   refresh, otherwise `format:check` fails) and the 10 l10n bundles (the new
   label must be translated everywhere, as the repo keeps all bundles in sync).
+
+## Review follow-ups (fresh reviewer, whole branch)
+
+A reviewer with no prior context re-ran every gate and found two defects this
+branch introduced, plus three gaps in the new tests. All five are fixed:
+
+1. **Important — the details picker disagreed with the tooltip.**
+   `showDetails` (the command behind a status-bar click) still formatted every
+   row as `<percent>% left`, so the same row read "Not enabled" in the tooltip
+   and "100% left" in the picker. Fixed in `statusBar.ts`, pinned by a test.
+2. **Important — active wallet without amounts diverged from Python.**
+   The extension dropped the row; Python claimed `¥0.00`. Python now stays
+   silent (no data is not zero), so both surfaces agree.
+3. **Minor — the compact-bar assertion was vacuous.** `detectWindowType` was
+   mocked to `'weekly'` for every label, so the text row really did enter the
+   bar; only the word "Not enabled" was missing. The test now marks the row as
+   `'other'` and asserts the label itself never appears.
+4. **Minor — arrays passed as wallet objects.** `typeof [] === 'object'` let
+   `{"booster_wallet": [1]}` produce a bogus row (Python skips it). Both
+   `booster_wallet` and `balance` now reject arrays.
+5. **Minor — the snake_case flag was untested.** `monthly_charge_limit_enabled`
+   is now covered on both sides.
+
+The reviewer could not falsify the lock refresh (every changed entry is dev-only,
+`package.json` ranges untouched, `npm ci` works under npm 10), the 9 → 0 audit
+drop, the one-file-per-commit mapping, the bilingual messages, or the l10n key
+parity. Two pre-existing deviations were noted and left alone: `@types/vscode`
+already exceeded `engines.vscode` before this branch, and the repo has no
+packaging step.
