@@ -250,8 +250,10 @@ async function refreshOnce(): Promise<void> {
 
     item.backgroundColor = shouldRed ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
 
-    const overviewEntries = items.map(
-      (i) => `${localizedLimitName(i.label)}: ${i.percent_left.toFixed(0)}% ${t('left')}`,
+    const overviewEntries = items.map((i) =>
+      i.text_value != null
+        ? `${localizedLimitName(i.label)}: ${i.text_value}`
+        : `${localizedLimitName(i.label)}: ${i.percent_left.toFixed(0)}% ${t('left')}`,
     );
 
     if (snapshotStore) {
