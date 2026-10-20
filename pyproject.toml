@@ -71,3 +71,15 @@ show_missing = true
 
 [tool.bandit]
 skips = ["B101", "B311", "B404", "B603"]
+
+[tool.hatch.build.targets.sdist]
+# Explicit, because the default "whatever VCS says" rule breaks inside a git
+# worktree: `.git` is a file there, detection fails, and hatchling falls back to
+# shipping everything untracked — including vscode-extension/node_modules, which
+# turned the sdist from 0.4 MB into 50 MB.
+exclude = [
+  "/vscode-extension",
+  "/docs",
+  "/.github",
+  "/.scratch",
+]
