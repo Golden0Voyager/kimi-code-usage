@@ -495,6 +495,57 @@ def test_extra_usage_rows_booster_disabled():
     assert rows[0].text_value == "Not enabled"
 
 
+def test_extra_usage_rows_booster_flag_enables_wallet():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    rows = _extra_usage_rows(
+        {
+            "booster_wallet": {
+                "status": "STATUS_DISABLED",
+                "monthlyChargeLimitEnabled": True,
+                "monthlyUsed": {"priceInCents": "500"},
+                "monthlyChargeLimit": {"priceInCents": "10000"},
+            }
+        },
+        lang_zh=False,
+    )
+    assert rows[0].unit == "¥"
+    assert rows[0].used == 5.0
+    assert rows[0].limit == 100.0
+
+
+def test_extra_usage_rows_booster_balance_enables_wallet():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    rows = _extra_usage_rows(
+        {
+            "booster_wallet": {
+                "balance": {"type": "BOOSTER", "amount": 2500000},
+                "monthlyUsed": {"priceInCents": "500"},
+                "monthlyChargeLimit": {"priceInCents": "10000"},
+            }
+        },
+        lang_zh=False,
+    )
+    assert rows[0].unit == "¥"
+    assert rows[0].limit == 100.0
+
+
+def test_extra_usage_rows_booster_balance_without_amount_stays_disabled():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    for balance in (
+        {"type": "BOOSTER", "amount": 0},
+        {"type": "OTHER", "amount": 9},
+        {"type": "BOOSTER"},
+    ):
+        rows = _extra_usage_rows(
+            {"booster_wallet": {"balance": balance, "monthlyUsed": {"priceInCents": "500"}}},
+            lang_zh=False,
+        )
+        assert rows[0].text_value == "Not enabled"
+
+
 def test_extra_usage_rows_booster_unlimited():
     from kimi_code_usage.providers.kimi import _extra_usage_rows
 
