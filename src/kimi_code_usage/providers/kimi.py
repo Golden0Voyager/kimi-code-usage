@@ -239,9 +239,23 @@ def _extra_usage_rows(payload: Mapping[str, Any], *, lang_zh: bool) -> list[Prov
     wallet = payload.get("booster_wallet") or payload.get("boosterWallet")
     if isinstance(wallet, Mapping) and wallet:
         label = "加油包" if lang_zh else "Extra Usage"
-        if _booster_wallet_active(wallet):
-            used = _price_in_yuan(wallet.get("monthlyUsed")) or 0.0
-            limit = _price_in_yuan(wallet.get("monthlyChargeLimit"))
+        used_value = _price_in_yuan(wallet.get("monthlyUsed"))
+        limit = _price_in_yuan(wallet.get("monthlyChargeLimit"))
+        if not _booster_wallet_active(wallet):
+            rows.append(ProviderUsage(
+                provider="kimi",
+                label=label,
+                used=0.0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                text_value="未开启" if lang_zh else "Not enabled",
+            ))
+        elif used_value is not None or limit is not None:
+            # An active wallet without any amount has nothing to report.
+            used = used_value or 0.0
             if limit:
                 rows.append(ProviderUsage(
                     provider="kimi",
@@ -265,18 +279,6 @@ def _extra_usage_rows(payload: Mapping[str, Any], *, lang_zh: bool) -> list[Prov
                     unit="text",
                     text_value=f"¥{used:.2f}",
                 ))
-        else:
-            rows.append(ProviderUsage(
-                provider="kimi",
-                label=label,
-                used=0.0,
-                limit=None,
-                remaining=None,
-                percent=None,
-                reset_at=None,
-                unit="text",
-                text_value="未开启" if lang_zh else "Not enabled",
-            ))
 
     parallel = payload.get("parallel")
     if isinstance(parallel, Mapping):
