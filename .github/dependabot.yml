@@ -1,0 +1,44 @@
+version: 2
+
+# Keeps the two lockfiles and the workflow actions current so advisories are
+# fixed at the source instead of being swept up by hand months later.
+#
+# Minor and patch updates are grouped per ecosystem: they share a lockfile, so
+# grouping keeps a week's worth of drift in one reviewable PR. Majors stay
+# separate because they need their own smoke (the fastmcp/mcp pair in
+# particular).
+
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      python-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "npm"
+    directory: "/vscode-extension"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      extension-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "ci(deps)"
