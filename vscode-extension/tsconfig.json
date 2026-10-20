@@ -16,5 +16,5 @@
     "noUncheckedIndexedAccess": true,
     "types": ["node", "vscode"]
   },
-  "exclude": ["node_modules", ".vscode-test", "src/**/*.test.ts", "src/__mocks__/**", "scripts/**", "vitest.config.ts"]
+  "exclude": ["node_modules", ".vscode-test", "src/**/*.test.ts", "src/__mocks__/**", "scripts/**", "vitest.config.mts"]
 }
