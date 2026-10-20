@@ -546,6 +546,34 @@ def test_extra_usage_rows_booster_balance_without_amount_stays_disabled():
         assert rows[0].text_value == "Not enabled"
 
 
+def test_extra_usage_rows_booster_snake_case_flag_enables_wallet():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    rows = _extra_usage_rows(
+        {
+            "booster_wallet": {
+                "monthly_charge_limit_enabled": True,
+                "monthlyUsed": {"priceInCents": "500"},
+                "monthlyChargeLimit": {"priceInCents": "10000"},
+            }
+        },
+        lang_zh=False,
+    )
+    assert rows[0].unit == "¥"
+    assert rows[0].limit == 100.0
+
+
+def test_extra_usage_rows_booster_active_without_amounts_is_silent():
+    from kimi_code_usage.providers.kimi import _extra_usage_rows
+
+    # 没有金额可报时不产生行（也不应误报"未开启"）
+    assert _extra_usage_rows(
+        {"booster_wallet": {"balance": {"type": "BOOSTER", "amount": 2500000}}}, lang_zh=False
+    ) == []
+    assert _extra_usage_rows({"booster_wallet": {"monthlyChargeLimitEnabled": True}}, lang_zh=False) == []
+    assert _extra_usage_rows({"booster_wallet": {"status": "STATUS_ENABLED"}}, lang_zh=False) == []
+
+
 def test_extra_usage_rows_booster_unlimited():
     from kimi_code_usage.providers.kimi import _extra_usage_rows
 
