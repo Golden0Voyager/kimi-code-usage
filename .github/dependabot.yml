@@ -7,6 +7,10 @@ version: 2
 # grouping keeps a week's worth of drift in one reviewable PR. Majors stay
 # separate because they need their own smoke (the fastmcp/mcp pair in
 # particular).
+#
+# The one exception is vitest: `@vitest/ui` declares a peer dependency on the
+# exact `vitest` version, so a major cannot be reviewed one package at a time —
+# separate PRs fail `npm ci` with ERESOLVE and neither can ever merge.
 
 updates:
   - package-ecosystem: "uv"
@@ -34,6 +38,9 @@ updates:
       extension-minor-and-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+      extension-vitest-major:
+        patterns: ["vitest", "@vitest/*"]
+        update-types: ["major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
