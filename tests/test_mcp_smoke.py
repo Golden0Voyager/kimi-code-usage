@@ -14,7 +14,6 @@ import os
 import sys
 
 import pytest
-
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -36,7 +35,7 @@ async def test_stdio_server_lists_and_calls_tools(tmp_path):
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             init = await session.initialize()
-            assert init.serverInfo.name
+            assert init.server_info.name
 
             tools = await session.list_tools()
             names = {tool.name for tool in tools.tools}
