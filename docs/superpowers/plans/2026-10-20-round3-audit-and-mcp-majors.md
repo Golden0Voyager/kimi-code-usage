@@ -85,8 +85,26 @@ into `mcp-types`.
 
 - Bandit and mypy remain soft (`|| true`) — out of scope here; unlike the audit
   step they do run and do print findings.
-- No `vsce package` step exists, so `@types/vscode` staying ahead of
-  `engines.vscode` (pre-existing) has no runtime effect today.
-- The version mismatch between `pyproject.toml` (0.1.6) and the extension's
-  `package.json` (0.1.9) is untouched — it needs a release decision, not a
-  dependency change.
+- `@types/vscode` stays ahead of `engines.vscode` (pre-existing). Harmless: the
+  extension compiles against the typings and only calls APIs the engine range
+  covers.
+
+## Landed afterwards
+
+The three items this plan left open, plus the release that needed them:
+
+- **`#32`** — vitest and `@vitest/ui` grouped in `dependabot.yml`. A major bump
+  of one forces the other: `@vitest/ui` pins the exact `vitest` peer.
+- **`#34`** — version updates switched off (`open-pull-requests-limit: 0` on all
+  three ecosystems). Security updates were already disabled in `#23`, so the
+  alerts stay on as the drift signal and the audit gate stays as the blocker.
+- **`#35`** — vitest 5.0.5 / `@vitest/ui` 5.0.5 / `@types/node` 22. The peer
+  floor is 22, so that is the smallest step from 20. The config moved to
+  `vitest.config.mts`, which dragged `tsconfig.json` into the same commit: it
+  declares no `include`, so a file outside the project raises TS6059.
+- **`#36`** — release 0.2.0 for both artifacts, which resolves the version
+  mismatch recorded above. Packaging gained two fixes found while preparing it:
+  `vscode:prepublish`, because `out/` is gitignored and `vsce package` used to
+  ship whatever happened to be built on the machine; and an explicit sdist
+  `exclude`, because built from a worktree hatchling cannot detect VCS and ships
+  every untracked file — `node_modules` included, 0.4 MB → 49.7 MB.
