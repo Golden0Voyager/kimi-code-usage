@@ -7,6 +7,8 @@ export interface UsageItem {
   reset_hint: string | null;
   reset_seconds: number | null;
   reset_at: string | null;
+  /** Literal value to show instead of a percentage (e.g. "Not enabled"). */
+  text_value?: string | null;
 }
 
 export type PaceStateLabel = 'fast' | 'normal' | 'slow';

@@ -21,6 +21,7 @@
   "Weekly limit": "주간 한도",
   "Parallel limit": "병렬 한도",
   "Extra Usage": "추가 사용량",
+  "Not enabled": "활성화되지 않음",
   "Total quota": "총 할당량",
   "Resets in {0}": "{0} 후 초기화",
   "Resets at {0}": "{0}에 초기화",

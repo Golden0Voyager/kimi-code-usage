@@ -151,7 +151,9 @@ function parseParallel(parallel: unknown): UsageItem | null {
 function pickBoosterWallet(data: Record<string, unknown>): unknown {
   for (const key of ['booster_wallet', 'boosterWallet']) {
     const value = data[key];
-    if (value && typeof value === 'object' && Object.keys(value).length > 0) return value;
+    if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0) {
+      return value;
+    }
   }
   return undefined;
 }
@@ -170,10 +172,46 @@ function windowMinutes(window: unknown): number | null {
   return duration / 60;
 }
 
+function textRow(label: string, text: string): UsageItem {
+  return {
+    label,
+    used: 0,
+    limit: 0,
+    remaining: 0,
+    percent_left: 100,
+    reset_hint: null,
+    reset_seconds: null,
+    reset_at: null,
+    text_value: text,
+  };
+}
+
+/** A positive `balance.amount` in a BOOSTER wallet means the wallet is in use. */
+function boosterBalancePositive(data: Record<string, unknown>): boolean {
+  const balance = data.balance;
+  if (balance == null || typeof balance !== 'object' || Array.isArray(balance)) return false;
+  const raw = balance as Record<string, unknown>;
+  if (String(raw.type ?? '').toUpperCase() !== 'BOOSTER') return false;
+  const amount = toInt(raw.amount);
+  return amount != null && amount > 0;
+}
+
+/**
+ * Any positive signal counts; no signal vetoes another. Upstream keeps
+ * `monthlyChargeLimitEnabled` separate from `status`, and newer payloads carry a
+ * `balance` object instead of `status`, so checking only one field hides the wallet.
+ */
+function boosterWalletActive(data: Record<string, unknown>): boolean {
+  if (data.status === 'STATUS_ENABLED') return true;
+  if (data.monthlyChargeLimitEnabled === true || data.monthly_charge_limit_enabled === true) return true;
+  return boosterBalancePositive(data);
+}
+
 function parseBoosterWallet(wallet: unknown): UsageItem | null {
   if (!wallet || typeof wallet !== 'object') return null;
   const data = wallet as Record<string, unknown>;
-  if (data.status !== 'STATUS_ENABLED') return null;
+  const label = t('Extra Usage');
+  if (!boosterWalletActive(data)) return textRow(label, t('Not enabled'));
 
   const monthlyUsed =
     data.monthlyUsed && typeof data.monthlyUsed === 'object'
@@ -190,14 +228,16 @@ function parseBoosterWallet(wallet: unknown): UsageItem | null {
 
   const u = Math.max(0, (usedCents ?? 0) / 100);
   const l = Math.max(0, (limitCents ?? 0) / 100);
-  const remaining = l > 0 ? clamp(l - u, 0, l) : 0;
+  // No cap: report what was spent rather than claiming "100% left".
+  if (l <= 0) return textRow(label, `¥${u.toFixed(2)}`);
 
+  const remaining = clamp(l - u, 0, l);
   return {
-    label: t('Extra Usage'),
+    label,
     used: u,
     limit: l,
     remaining,
-    percent_left: l > 0 ? (remaining / l) * 100 : 100,
+    percent_left: (remaining / l) * 100,
     reset_hint: null,
     reset_seconds: null,
     reset_at: null,

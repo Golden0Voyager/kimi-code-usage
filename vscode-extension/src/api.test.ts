@@ -294,7 +294,7 @@ describe('parsePayload parallel / boosterWallet / totalQuota', () => {
       },
     };
     const items = parsePayload(payload);
-    expect(items).toHaveLength(3);
+    expect(items).toHaveLength(4);
     const parallel = items.find((i) => i.label === 'Parallel limit');
     expect(parallel).toBeDefined();
     expect(parallel!.used).toBe(0);
@@ -304,7 +304,8 @@ describe('parsePayload parallel / boosterWallet / totalQuota', () => {
     expect(parallel!.reset_hint).toBeNull();
     expect(parallel!.reset_seconds).toBeNull();
     expect(parallel!.reset_at).toBeNull();
-    expect(items.some((i) => i.label === 'Extra Usage')).toBe(false);
+    const extra = items.find((i) => i.label === 'Extra Usage');
+    expect(extra!.text_value).toBe('Not enabled');
     expect(items.some((i) => i.label === 'Total quota')).toBe(false);
   });
 
@@ -347,7 +348,7 @@ describe('parsePayload parallel / boosterWallet / totalQuota', () => {
     expect(items[0].reset_at).toBeNull();
   });
 
-  it('treats zero booster charge limit as unlimited', () => {
+  it('reports the spent amount when the booster charge limit is zero', () => {
     const payload = {
       boosterWallet: {
         status: 'STATUS_ENABLED',
@@ -358,8 +359,7 @@ describe('parsePayload parallel / boosterWallet / totalQuota', () => {
     const items = parsePayload(payload);
     expect(items).toHaveLength(1);
     expect(items[0].limit).toBe(0);
-    expect(items[0].remaining).toBe(0);
-    expect(items[0].percent_left).toBe(100);
+    expect(items[0].text_value).toBe('¥5.00');
   });
 
   it('clamps booster percent when used exceeds limit', () => {
@@ -375,7 +375,7 @@ describe('parsePayload parallel / boosterWallet / totalQuota', () => {
     expect(items[0].percent_left).toBe(0);
   });
 
-  it('skips boosterWallet when disabled', () => {
+  it('shows a text row when boosterWallet is disabled', () => {
     const payload = {
       boosterWallet: {
         status: 'STATUS_DISABLED',
@@ -383,12 +383,64 @@ describe('parsePayload parallel / boosterWallet / totalQuota', () => {
         monthlyChargeLimit: { priceInCents: '10000' },
       },
     };
-    expect(parsePayload(payload)).toHaveLength(0);
+    const items = parsePayload(payload);
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('Extra Usage');
+    expect(items[0].text_value).toBe('Not enabled');
+  });
+
+  it('counts monthlyChargeLimitEnabled as a positive signal', () => {
+    for (const flag of ['monthlyChargeLimitEnabled', 'monthly_charge_limit_enabled']) {
+      const items = parsePayload({
+        booster_wallet: {
+          status: 'STATUS_DISABLED',
+          [flag]: true,
+          monthlyUsed: { priceInCents: '500' },
+          monthlyChargeLimit: { priceInCents: '10000' },
+        },
+      });
+      expect(items).toHaveLength(1);
+      expect(items[0].used).toBe(5);
+      expect(items[0].text_value).toBeUndefined();
+    }
+  });
+
+  it('stays silent for an active wallet without any amount', () => {
+    expect(parsePayload({ booster_wallet: { balance: { type: 'BOOSTER', amount: 2500000 } } })).toHaveLength(
+      0,
+    );
+    expect(parsePayload({ booster_wallet: { monthlyChargeLimitEnabled: true } })).toHaveLength(0);
+  });
+
+  it('counts a positive BOOSTER balance as a positive signal', () => {
+    const items = parsePayload({
+      booster_wallet: {
+        balance: { type: 'BOOSTER', amount: 2500000 },
+        monthlyUsed: { priceInCents: '500' },
+        monthlyChargeLimit: { priceInCents: '10000' },
+      },
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].limit).toBe(100);
+    expect(items[0].text_value).toBeUndefined();
+  });
+
+  it('stays disabled when the balance is empty or not a booster', () => {
+    for (const balance of [
+      { type: 'BOOSTER', amount: 0 },
+      { type: 'OTHER', amount: 9 },
+      { type: 'BOOSTER' },
+    ]) {
+      const items = parsePayload({ booster_wallet: { balance, monthlyUsed: { priceInCents: '500' } } });
+      expect(items).toHaveLength(1);
+      expect(items[0].text_value).toBe('Not enabled');
+    }
   });
 
   it('skips boosterWallet when missing, non-object, or both money fields missing', () => {
     expect(parsePayload({ boosterWallet: null })).toHaveLength(0);
     expect(parsePayload({ boosterWallet: 42 } as any)).toHaveLength(0);
+    expect(parsePayload({ boosterWallet: [1] } as any)).toHaveLength(0);
     expect(parsePayload({ boosterWallet: { status: 'STATUS_ENABLED' } })).toHaveLength(0);
     expect(
       parsePayload({
@@ -471,11 +523,13 @@ describe('parsePayload live 2026-10-19 shape (usages / booster_wallet)', () => {
 
   it('replays the live payload without duplicate windows', () => {
     const items = parsePayload(LIVE);
-    expect(items).toHaveLength(2);
+    expect(items).toHaveLength(3);
     expect(items.filter((i) => detectWindowType(i.label) === 'weekly')).toHaveLength(1);
     expect(items.filter((i) => detectWindowType(i.label) === 'fiveHours')).toHaveLength(1);
     expect(items[0].label).toBe('Weekly limit');
     expect(items[0].used).toBe(16); // from `usage`, never from usages.limit_7d
+    const extra = items.find((i) => i.label === 'Extra Usage');
+    expect(extra!.text_value).toBe('Not enabled');
   });
 
   it('reads snake_case booster_wallet with string cents', () => {

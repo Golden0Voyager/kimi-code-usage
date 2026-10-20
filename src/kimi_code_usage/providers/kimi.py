@@ -189,6 +189,32 @@ def _price_in_yuan(data: Any) -> float | None:
     return cents / 100 if cents is not None else None
 
 
+def _booster_balance_positive(wallet: Mapping[str, Any]) -> bool:
+    balance = wallet.get("balance")
+    if not isinstance(balance, Mapping):
+        return False
+    if str(balance.get("type") or "").upper() != "BOOSTER":
+        return False
+    amount = _to_int(balance.get("amount"))
+    return amount is not None and amount > 0
+
+
+def _booster_wallet_active(wallet: Mapping[str, Any]) -> bool:
+    """Any positive signal counts; no signal vetoes another.
+
+    Upstream keeps ``monthlyChargeLimitEnabled`` separate from ``status`` and
+    newer payloads carry a ``balance`` object instead of ``status``, so checking
+    only one field hides the wallet.
+    """
+    if str(wallet.get("status") or "") == "STATUS_ENABLED":
+        return True
+    if wallet.get("monthlyChargeLimitEnabled") is True:
+        return True
+    if wallet.get("monthly_charge_limit_enabled") is True:
+        return True
+    return _booster_balance_positive(wallet)
+
+
 def _extra_usage_rows(payload: Mapping[str, Any], *, lang_zh: bool) -> list[ProviderUsage]:
     """Rows for newer /usages fields: totalQuota, boosterWallet, booster_wallet, parallel."""
     rows: list[ProviderUsage] = []
@@ -213,9 +239,23 @@ def _extra_usage_rows(payload: Mapping[str, Any], *, lang_zh: bool) -> list[Prov
     wallet = payload.get("booster_wallet") or payload.get("boosterWallet")
     if isinstance(wallet, Mapping) and wallet:
         label = "加油包" if lang_zh else "Extra Usage"
-        if str(wallet.get("status") or "") == "STATUS_ENABLED":
-            used = _price_in_yuan(wallet.get("monthlyUsed")) or 0.0
-            limit = _price_in_yuan(wallet.get("monthlyChargeLimit"))
+        used_value = _price_in_yuan(wallet.get("monthlyUsed"))
+        limit = _price_in_yuan(wallet.get("monthlyChargeLimit"))
+        if not _booster_wallet_active(wallet):
+            rows.append(ProviderUsage(
+                provider="kimi",
+                label=label,
+                used=0.0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                text_value="未开启" if lang_zh else "Not enabled",
+            ))
+        elif used_value is not None or limit is not None:
+            # An active wallet without any amount has nothing to report.
+            used = used_value or 0.0
             if limit:
                 rows.append(ProviderUsage(
                     provider="kimi",
@@ -239,18 +279,6 @@ def _extra_usage_rows(payload: Mapping[str, Any], *, lang_zh: bool) -> list[Prov
                     unit="text",
                     text_value=f"¥{used:.2f}",
                 ))
-        else:
-            rows.append(ProviderUsage(
-                provider="kimi",
-                label=label,
-                used=0.0,
-                limit=None,
-                remaining=None,
-                percent=None,
-                reset_at=None,
-                unit="text",
-                text_value="未开启" if lang_zh else "Not enabled",
-            ))
 
     parallel = payload.get("parallel")
     if isinstance(parallel, Mapping):

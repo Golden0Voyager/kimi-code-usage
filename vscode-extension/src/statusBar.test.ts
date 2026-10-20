@@ -414,6 +414,46 @@ describe('refresh', () => {
     }
   });
 
+  it('shows a literal value instead of a percentage for text rows', async () => {
+    vi.mocked(parsePayload).mockReturnValueOnce([
+      {
+        label: 'Weekly',
+        used: 50,
+        limit: 100,
+        remaining: 50,
+        percent_left: 50,
+        reset_hint: null,
+        reset_seconds: 3600,
+        reset_at: null,
+      },
+      {
+        label: 'Extra Usage',
+        used: 0,
+        limit: 0,
+        remaining: 0,
+        percent_left: 100,
+        reset_hint: null,
+        reset_seconds: null,
+        reset_at: null,
+        text_value: 'Not enabled',
+      },
+    ]);
+    const mockApi = await import('./api');
+    vi.mocked(mockApi.detectWindowType).mockImplementation((label: string) =>
+      label === 'Extra Usage' ? 'other' : 'weekly',
+    );
+    try {
+      await refresh();
+      const item = getStatusBarItem()!;
+      expect(item.tooltip.value).toContain('Extra Usage: Not enabled');
+      expect(item.tooltip.value).not.toContain('Extra Usage: 100%');
+      // the compact bar lists quota windows only, so the text row must not leak in
+      expect(item.text).not.toContain('Ext');
+    } finally {
+      vi.mocked(mockApi.detectWindowType).mockReturnValue('weekly');
+    }
+  });
+
   it('deduplicates concurrent refresh calls', async () => {
     const p1 = refresh();
     const p2 = refresh();
@@ -821,6 +861,37 @@ describe('showDetails', () => {
     vi.mocked(fetchUsageCached).mockRejectedValueOnce(new Error('Unknown error'));
     await showDetails();
     expect(vscode.window.showWarningMessage).toHaveBeenCalled();
+  });
+
+  it('shows literal rows in the details picker', async () => {
+    vi.mocked(parsePayload).mockReturnValueOnce([
+      {
+        label: 'Weekly',
+        used: 50,
+        limit: 100,
+        remaining: 50,
+        percent_left: 50,
+        reset_hint: null,
+        reset_seconds: 3600,
+        reset_at: null,
+      },
+      {
+        label: 'Extra Usage',
+        used: 0,
+        limit: 0,
+        remaining: 0,
+        percent_left: 100,
+        reset_hint: null,
+        reset_seconds: null,
+        reset_at: null,
+        text_value: 'Not enabled',
+      },
+    ]);
+    await showDetails();
+    const qp = vi.mocked(vscode.window.createQuickPick).mock.results[0]?.value as any;
+    const labels = qp.items.map((i: { label: string }) => i.label);
+    expect(labels).toContain('Extra Usage: Not enabled');
+    expect(labels.some((l: string) => l.startsWith('Extra Usage:') && l.includes('%'))).toBe(false);
   });
 
   it('hides QuickPick on item accept', async () => {
