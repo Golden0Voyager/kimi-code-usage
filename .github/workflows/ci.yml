@@ -32,7 +32,12 @@ jobs:
         run: uv tool run bandit -r src/ || true
 
       - name: Run dependency audit
-        run: uv audit || true
+        # `uv audit` does not exist (uv 0.9.17), so the old step audited nothing.
+        # pip-audit reads the same frozen lock, needs no virtualenv, and fails
+        # the job on a known advisory.
+        run: |
+          uv export --frozen --no-emit-project --format requirements-txt --no-hashes > "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit@2.10.1 --disable-pip --no-deps -r "$RUNNER_TEMP/requirements.txt" --progress-spinner off
 
 
       - name: Run tests with coverage
