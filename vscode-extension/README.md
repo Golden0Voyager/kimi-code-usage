@@ -187,45 +187,12 @@ In the vastness of the code universe, your creative flow shouldn't be pulled dow
 
 ### 📋 Changelog | 更新日志
 
-**v0.1.9** — *History, Predictions & Engineering Overhaul*
-- 📈 用量历史 Webview（`Kimi: Show Usage History`）：本地 JSONL 快照、Chart.js 折线图、默认保留 30 天
-- 🔮 耗尽预测：线性回归估算每日消耗速率 + 预计耗尽日期，按样本量给出置信度（low/medium/high）
-- 🔔 阈值/速度通知：余量跌破阈值或速度进入 fast 时弹信息提示，去重防骚扰
-- 💾 API 响应缓存：默认 5 分钟 TTL，可通过 `kimiCodeUsage.apiCacheTtlSeconds` 调整
-- 🛠️ 工程重构：`extension.ts` 从 987 行拆分为独立模块（`types` / `i18n` / `pace` / `api` / `config` / `statusBar` / `storage` / `predict` / `notifier` / `apiCache` / `historyPanel`），新增并提升至 **356** 个单元测试（Vitest 覆盖率达 **100.00%**）
-- 🤖 CI：GitHub Actions 跑 typecheck / lint / test
-- 🎨 引入 ESLint + Prettier
+完整历史见 [CHANGELOG.md](CHANGELOG.md) · Full history: [CHANGELOG.md](CHANGELOG.md)
 
-**v0.1.8** — *Support Link & Polish*
-- 添加 Ko-fi 支持链接 / Added Ko-fi support link
-
-**v0.1.7** — *Multilingual & UI Polish*
-- 🌍 多语言支持（10 种语言：English / 中文 / 日本語 / Français / Deutsch / Español / 한국어 / Русский / Português / Italiano）
-- 16 款速度指针主题预设（新增 F1 / Pink Floyd / Submarine / Airliner / Fighter / Firearms）
-- 速度进度条独立开关 `showPaceBar`
-- 状态栏位置控制 `statusBarAlignment`（Left / Right）
-- 红色告警触发条件 `redAlertCondition`（Weekly / 5 Hours / Either）
-- Settings 按钮移至 QuickPick 标题栏右侧
-- Running 主题慢速标签统一为 Walk/漫步
-
-**v0.1.6** — *Theme Engine & Threshold Control*
-- 10 款速度指针主题预设（Default / Animals / Racing / Fish / Birds / Rocket / Running / Star Wars / Star Trek / Back To The Future）
-- 4 档灵敏度联动阈值（Relaxed / Normal / Strict / Custom），档位切换自动同步阈值
-- 自定义 Fast / Slow 分界阈值
-- 状态栏用量边界 emoji（满额 🌕 / 耗尽 🌑）
-- QuickPick 增加设置入口
-
-**v0.1.5** — *Refined Telemetry*
-- 品牌统一：Tom → Kimi
-- 增强错误处理与状态栏提示
-
-**v0.1.4** — *Pace Indicator*
-- 实时消耗速率指针（Fast / Normal / Slow）
-- 燃料主题悬浮提示与三格进度条
-- 深空数据面板（QuickPick）
-
-**v0.1.0** — *Liftoff*
-- 状态栏余量监控与自动刷新
+**v0.2.0** — *Extra Usage & Provider Rows*（最新 / latest）
+- 🧾 加油包（`Extra Usage`）用量行：未启用时显示「未启用 / Not enabled」，启用但无金额时不虚构数字
+- 📊 并发数（`Parallel limit`）与总额度（`Total quota`）行
+- 🌍 新增文案覆盖全部 10 种语言；详情面板如实显示字面值行
 
 ---
 
