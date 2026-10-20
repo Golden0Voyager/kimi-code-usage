@@ -1,16 +1,24 @@
 version: 2
 
-# Keeps the two lockfiles and the workflow actions current so advisories are
-# fixed at the source instead of being swept up by hand months later.
+# Dependabot version updates are intentionally DISABLED.
 #
-# Minor and patch updates are grouped per ecosystem: they share a lockfile, so
-# grouping keeps a week's worth of drift in one reviewable PR. Majors stay
-# separate because they need their own smoke (the fastmcp/mcp pair in
-# particular).
+# `open-pull-requests-limit: 0` is the documented switch for turning scheduled
+# update PRs off without deleting the configuration. Security updates travel a
+# separate channel and are also turned off in this repository's settings, so no
+# dependency PR appears here unless someone asks for one.
 #
-# The one exception is vitest: `@vitest/ui` declares a peer dependency on the
-# exact `vitest` version, so a major cannot be reviewed one package at a time —
-# separate PRs fail `npm ci` with ERESOLVE and neither can ever merge.
+# Why: the first week of this file produced seven PRs at once — a full backlog
+# scan plus one PR per major (vitest, @vitest/ui, @types/node, checkout,
+# setup-uv, setup-node). Two of them could not pass alone at all. Dependency
+# work is applied deliberately instead, with the audit gate in ci.yml still
+# failing on any known advisory.
+#
+# To resume automatic updates, raise each limit below from 0 to 5. The grouping
+# rules are kept so the reasoning survives:
+#   - minors and patches group per ecosystem, because they share a lockfile;
+#   - majors stay separate, because they need their own smoke (fastmcp/mcp);
+#   - vitest majors group together, because `@vitest/ui` pins the exact
+#     `vitest` peer and a split proposal can never satisfy `npm ci`.
 
 updates:
   - package-ecosystem: "uv"
@@ -18,7 +26,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "chore(deps)"
     groups:
@@ -31,7 +39,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "chore(deps)"
     groups:
@@ -47,5 +55,6 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "ci(deps)"
