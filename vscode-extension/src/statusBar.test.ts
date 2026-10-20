@@ -414,6 +414,37 @@ describe('refresh', () => {
     }
   });
 
+  it('shows a literal value instead of a percentage for text rows', async () => {
+    vi.mocked(parsePayload).mockReturnValueOnce([
+      {
+        label: 'Weekly',
+        used: 50,
+        limit: 100,
+        remaining: 50,
+        percent_left: 50,
+        reset_hint: null,
+        reset_seconds: 3600,
+        reset_at: null,
+      },
+      {
+        label: 'Extra Usage',
+        used: 0,
+        limit: 0,
+        remaining: 0,
+        percent_left: 100,
+        reset_hint: null,
+        reset_seconds: null,
+        reset_at: null,
+        text_value: 'Not enabled',
+      },
+    ]);
+    await refresh();
+    const item = getStatusBarItem()!;
+    expect(item.tooltip.value).toContain('Extra Usage: Not enabled');
+    expect(item.tooltip.value).not.toContain('Extra Usage: 100%');
+    expect(item.text).not.toContain('Not enabled'); // the bar only lists quota windows
+  });
+
   it('deduplicates concurrent refresh calls', async () => {
     const p1 = refresh();
     const p2 = refresh();
