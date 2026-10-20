@@ -348,7 +348,10 @@ export async function showDetails(): Promise<void> {
 
     const picks: vscode.QuickPickItem[] = items.map((qi) => {
       const displayName = localizedLimitName(qi.label);
-      const label = `${displayName}: ${qi.percent_left.toFixed(0)}% ${t('left')}`;
+      const label =
+        qi.text_value != null
+          ? `${displayName}: ${qi.text_value}`
+          : `${displayName}: ${qi.percent_left.toFixed(0)}% ${t('left')}`;
       const segments: string[] = [];
       let detail = '';
 
