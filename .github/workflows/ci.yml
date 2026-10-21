@@ -32,9 +32,12 @@ jobs:
         run: uv tool run bandit -r src/ || true
 
       - name: Run dependency audit
-        # `uv audit` does not exist (uv 0.9.17), so the old step audited nothing.
-        # pip-audit reads the same frozen lock, needs no virtualenv, and fails
-        # the job on a known advisory.
+        # `uv audit` exists since uv 0.11 but is still experimental, and the old
+        # step ran it behind `|| true` — so it did report real advisories while
+        # every job stayed green. The `unrecognized subcommand` seen locally only
+        # means the local uv predates 0.11 (0.9.17), not that CI never ran it.
+        # pip-audit reads the same frozen lock, needs no virtualenv, is pinned,
+        # and fails the job on a known advisory.
         run: |
           uv export --frozen --no-emit-project --format requirements-txt --no-hashes > "$RUNNER_TEMP/requirements.txt"
           uvx pip-audit@2.10.1 --disable-pip --no-deps -r "$RUNNER_TEMP/requirements.txt" --progress-spinner off
