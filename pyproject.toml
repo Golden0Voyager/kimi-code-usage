@@ -44,6 +44,11 @@ dev = [
     "mypy>=1.10.0",
 ]
 
+[tool.uv]
+# Single source of truth for the uv version: `setup-uv` reads this file
+# automatically, and a local uv that disagrees refuses to run.
+required-version = "0.13.4"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
