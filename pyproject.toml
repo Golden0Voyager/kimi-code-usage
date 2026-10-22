@@ -44,10 +44,12 @@ dev = [
     "mypy>=1.10.0",
 ]
 
+# A floor, not an exact pin: 0.13.5 and any later version run
+# everywhere; older ones are still refused. Bumping uv is a one-line edit.
 [tool.uv]
 # Single source of truth for the uv version: `setup-uv` reads this file
 # automatically, and a local uv that disagrees refuses to run.
-required-version = "0.13.4"
+required-version = ">=0.13.5"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
