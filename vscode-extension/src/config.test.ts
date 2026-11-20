@@ -8,6 +8,12 @@ import {
   readHistoryRetentionDays,
   resolveApiKey,
   syncSensitivityToThresholds,
+  readProviderSettings,
+  readPrimaryProvider,
+  enabledProviders,
+  writeProviderApiKey,
+  writeProviderBaseUrl,
+  setProviderEnabled,
 } from './config';
 import { DEFAULT_HISTORY_RETENTION_DAYS, DEFAULT_LOW_THRESHOLD } from './types';
 
@@ -20,6 +26,7 @@ var mockEnvContent = '';
 var mockReadFileReject = false;
 
 vi.mock('vscode', () => ({
+  ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
   workspace: {
     getConfiguration: vi.fn(() => ({
       get: vi.fn((key: string, def?: unknown) => {
@@ -294,5 +301,132 @@ describe('syncSensitivityToThresholds', () => {
     const result = readPaceThresholds(cfg);
     expect(result.fast).toBeGreaterThan(0);
     expect(result.slow).toBeGreaterThan(0);
+  });
+});
+
+// ===================================================================
+// Multi-provider settings
+// ===================================================================
+
+describe('readProviderSettings', () => {
+  it('reads flat settings for a non-kimi provider', () => {
+    const cfg = mockCfg({
+      openrouterEnabled: true,
+      openrouterApiKey: 'sk-or',
+      openrouterBaseUrl: 'https://proxy.local',
+    });
+    expect(readProviderSettings(cfg, 'openrouter')).toEqual({
+      enabled: true,
+      apiKey: 'sk-or',
+      baseUrl: 'https://proxy.local',
+    });
+  });
+
+  it('falls back to the provider env var and default base URL', () => {
+    const savedKey = process.env.OPENROUTER_API_KEY;
+    const savedBase = process.env.OPENROUTER_BASE_URL;
+    process.env.OPENROUTER_API_KEY = 'sk-or-env';
+    delete process.env.OPENROUTER_BASE_URL;
+    try {
+      const cfg = mockCfg({});
+      expect(readProviderSettings(cfg, 'openrouter')).toEqual({
+        enabled: false,
+        apiKey: 'sk-or-env',
+        baseUrl: 'https://openrouter.ai/api',
+      });
+    } finally {
+      if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = savedKey;
+      if (savedBase === undefined) delete process.env.OPENROUTER_BASE_URL;
+      else process.env.OPENROUTER_BASE_URL = savedBase;
+    }
+  });
+
+  it('falls back to the base URL env var', () => {
+    process.env.OPENAI_BASE_URL = 'https://proxy.openai.local';
+    try {
+      const cfg = mockCfg({ openaiApiKey: 'sk-admin' });
+      expect(readProviderSettings(cfg, 'openai').baseUrl).toBe('https://proxy.openai.local');
+    } finally {
+      delete process.env.OPENAI_BASE_URL;
+    }
+  });
+
+  it('treats kimi as enabled by default', () => {
+    const cfg = mockCfg({ apiKey: 'sk-kimi' });
+    expect(readProviderSettings(cfg, 'kimi')).toEqual({
+      enabled: true,
+      apiKey: 'sk-kimi',
+      baseUrl: 'https://api.kimi.com/coding/v1',
+    });
+  });
+});
+
+describe('readPrimaryProvider', () => {
+  it('returns a valid configured provider', () => {
+    expect(readPrimaryProvider(mockCfg({ primaryProvider: 'anthropic' }))).toBe('anthropic');
+  });
+
+  it('falls back to kimi for unknown or missing values', () => {
+    expect(readPrimaryProvider(mockCfg({ primaryProvider: 'bogus' }))).toBe('kimi');
+    expect(readPrimaryProvider(mockCfg({}))).toBe('kimi');
+  });
+});
+
+describe('enabledProviders', () => {
+  it('puts the primary provider first and keeps kimi as default secondary', () => {
+    const cfg = mockCfg({ primaryProvider: 'openrouter', anthropicEnabled: true });
+    expect(enabledProviders(cfg)).toEqual(['openrouter', 'kimi', 'anthropic']);
+  });
+
+  it('defaults to kimi alone', () => {
+    expect(enabledProviders(mockCfg({}))).toEqual(['kimi']);
+  });
+
+  it('skips disabled providers', () => {
+    const cfg = mockCfg({
+      openrouterEnabled: true,
+      openrouterApiKey: 'sk-or',
+      openaiEnabled: false,
+    });
+    expect(enabledProviders(cfg)).toEqual(['kimi', 'openrouter']);
+  });
+});
+
+describe('provider settings writers', () => {
+  it('writeProviderApiKey writes to Global target', async () => {
+    const update = vi.fn();
+    vi.mocked(vscode.workspace.getConfiguration).mockReturnValueOnce({
+      get: vi.fn(),
+      update,
+      has: vi.fn(),
+      inspect: vi.fn(),
+    } as any);
+    await writeProviderApiKey('openrouter', 'sk-or');
+    expect(update).toHaveBeenCalledWith('openrouterApiKey', 'sk-or', 1);
+  });
+
+  it('writeProviderBaseUrl writes to Global target', async () => {
+    const update = vi.fn();
+    vi.mocked(vscode.workspace.getConfiguration).mockReturnValueOnce({
+      get: vi.fn(),
+      update,
+      has: vi.fn(),
+      inspect: vi.fn(),
+    } as any);
+    await writeProviderBaseUrl('anthropic', 'https://proxy.local');
+    expect(update).toHaveBeenCalledWith('anthropicBaseUrl', 'https://proxy.local', 1);
+  });
+
+  it('setProviderEnabled writes to Global target', async () => {
+    const update = vi.fn();
+    vi.mocked(vscode.workspace.getConfiguration).mockReturnValueOnce({
+      get: vi.fn(),
+      update,
+      has: vi.fn(),
+      inspect: vi.fn(),
+    } as any);
+    await setProviderEnabled('openai', true);
+    expect(update).toHaveBeenCalledWith('openaiEnabled', true, 1);
   });
 });
