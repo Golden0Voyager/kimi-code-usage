@@ -568,6 +568,73 @@ def test_preflight_reports_start_failure_without_blocking_tui():
     assert "cannot bind" in str(console.return_value.print.call_args.args[0])
 
 
+def test_render_setting_view_shows_enable_state_and_key_prompt():
+    from kimi_code_usage.config import AppConfig, ProviderConfig
+    from kimi_code_usage.main import _render_setting_view
+
+    cfg = AppConfig(
+        providers={
+            "anthropic": ProviderConfig(api_key=None, enabled=False),
+            "codex": ProviderConfig(api_key="enabled", enabled=True),
+        },
+        provider_order=["anthropic", "codex"],
+    )
+
+    flat = _render_setting_view(cfg, {"anthropic"}, settings_cursor=0, lang_zh=False).plain
+    assert "Anthropic" in flat
+    assert "off" in flat
+    assert "no key" in flat
+    assert "ChatGPT+" in flat
+    assert "[e]" in flat and "[k]" in flat
+
+    prompt = _render_setting_view(
+        cfg, {"anthropic"}, settings_cursor=0, lang_zh=False, key_edit="anthropic", key_buffer="abc"
+    ).plain
+    assert "Paste the Anthropic API key" in prompt
+    assert "•••" in prompt
+
+
+@pytest.mark.asyncio
+async def test_interactive_settings_paste_key_persists(monkeypatch, isolated_config_path):
+    _mock_terminal(monkeypatch)
+    # s → settings, k → key editor, then the pasted key, Enter, q → quit
+    mock_select, mock_read = _make_select_and_read(["s", "k", "s", "k", "-", "x", "\r", "q"])
+    import kimi_code_usage.main as main_mod
+
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    cfg = _make_interactive_config(monkeypatch)
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=({}, {}))):
+        with patch("kimi_code_usage.main.Live") as mock_live_cls:
+            mock_live_cls.return_value.__enter__.return_value = AsyncMock()
+            await _interactive_mode(cfg, "blue-dark")
+
+    saved = json.loads(isolated_config_path.read_text(encoding="utf-8"))
+    target = cfg.provider_order[0]
+    assert saved["providers"][target]["apiKey"] == "sk-x"
+    assert saved["providers"][target]["enabled"] is True
+    assert cfg.providers[target].api_key == "sk-x"
+    assert cfg.providers[target].enabled is True
+
+
+def test_save_provider_settings_preserves_other_keys(tmp_path):
+    from kimi_code_usage.config import save_provider_settings
+
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps({"general": {"theme": "mint-dark"}, "providers": {"kimi": {"apiKey": "k"}}}),
+        encoding="utf-8",
+    )
+
+    save_provider_settings("openai", enabled=True, api_key="sk-oai", config_path=path)
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["general"]["theme"] == "mint-dark"
+    assert data["providers"]["kimi"]["apiKey"] == "k"
+    assert data["providers"]["openai"] == {"enabled": True, "apiKey": "sk-oai"}
+
+
 def _mock_terminal(monkeypatch):
     """Suppress all real terminal calls (termios/tty/fileno)."""
     import termios as _termios
