@@ -45,6 +45,21 @@ def clean_env(monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def isolated_config_path(tmp_path, monkeypatch):
+    """Keep tests off the developer's real ``~/.kimi-usage/config.json``.
+
+    ``_make_interactive_config`` resolves through ``ConfigResolver()`` with no
+    path, so whatever the machine has saved leaks into assertions ——
+    ``test_interactive_mode_help_and_config_keys`` failed on any machine whose
+    config said ``language: zh``。
+    """
+    path = tmp_path / "config.json"
+    monkeypatch.setattr("kimi_code_usage.config.DEFAULT_CONFIG_PATH", path)
+    monkeypatch.setattr("kimi_code_usage.main.DEFAULT_CONFIG_PATH", path)
+    return path
+
+
 def test_get_visual_width():
     assert _get_visual_width("hello") == 5
     assert _get_visual_width("你好") == 4
