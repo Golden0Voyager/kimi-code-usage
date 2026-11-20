@@ -20,7 +20,6 @@ from kimi_code_usage.providers.webbridge import (
     get_webbridge_status,
     start_webbridge,
 )
-from kimi_code_usage.server import run_server
 
 # --- i18n ---
 LANG = os.getenv("LANG", "en")
@@ -64,6 +63,8 @@ L = L_ZH if IS_ZH else L_EN
 
 def _should_offer_webbridge_start(config: AppConfig) -> bool:
     kimi = config.providers.get("kimi")
+    if not config.kimi_monthly:
+        return False
     if not kimi or not kimi.enabled or not kimi.api_key:
         return False
     return config.visible_providers is None or "kimi" in config.visible_providers
@@ -1593,6 +1594,10 @@ async def main():
 
     # Serve mode: start web server
     if args.serve:
+        # 只有 --serve 才需要 aiohttp 的 web 栈（约 90ms 的 aiohttp 导入），
+        # 普通 CLI 路径不该为此付账。
+        from kimi_code_usage.server import run_server
+
         await run_server(port=args.port, lang_zh=IS_ZH)
         return
 
