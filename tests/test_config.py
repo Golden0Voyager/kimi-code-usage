@@ -1,9 +1,15 @@
 import json
+import runpy
 from unittest.mock import patch
 
 import pytest
 
-from kimi_code_usage.config import AppConfig, ConfigResolver
+from kimi_code_usage.config import (
+    AppConfig,
+    ConfigResolver,
+    local_login_present,
+    save_provider_settings,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -430,3 +436,51 @@ def test_save_theme_accepts_str_config_path(tmp_path):
     save_theme("mint-dark", config_path=str(path))
 
     assert json.loads(path.read_text(encoding="utf-8"))["general"]["theme"] == "mint-dark"
+
+
+def test_local_login_present_is_false_for_non_subscription_provider():
+    """Only codex/claude have a local credential file; anything else is never "logged in"."""
+    assert local_login_present("kimi") is False
+    assert local_login_present("openrouter") is False
+
+
+def test_config_resolver_subscription_enabled_env_overrides_autodetect(tmp_path, monkeypatch):
+    """CODEX_ENABLED / CLAUDE_ENABLED win over the local-login probe."""
+    from kimi_code_usage import config as cfg_mod
+
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({}), encoding="utf-8")
+
+    monkeypatch.setattr(cfg_mod, "local_login_present", lambda p: False)
+    monkeypatch.setenv("CODEX_ENABLED", "yes")
+    monkeypatch.setenv("CLAUDE_ENABLED", "0")
+
+    config = ConfigResolver(config_path=str(config_path)).resolve()
+
+    assert "codex" in config.enabled_providers
+    assert "claude" not in config.enabled_providers
+    # The subscription branch stores a sentinel so `enabled_providers` sees a key.
+    assert config.providers["codex"].api_key == "enabled"
+    assert config.providers["claude"].api_key is None
+
+
+def test_save_provider_settings_discards_unreadable_existing_file(tmp_path):
+    """A corrupt config must not block saving; it is replaced with a fresh document."""
+    path = tmp_path / "config.json"
+    path.write_text("{not json at all", encoding="utf-8")
+
+    save_provider_settings("openai", enabled=True, api_key="sk-oai", config_path=path)
+
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "providers": {"openai": {"enabled": True, "apiKey": "sk-oai"}}
+    }
+
+
+def test_module_entrypoint_calls_run_cli():
+    """`python -m kimi_code_usage` must reach run_cli exactly once."""
+    import kimi_code_usage.main as main_mod
+
+    with patch.object(main_mod, "run_cli") as run_cli:
+        runpy.run_module("kimi_code_usage.__main__", run_name="__main__")
+
+    run_cli.assert_called_once_with()

@@ -111,6 +111,17 @@ def test_read_auth_missing_fields(tmp_path):
             _read_auth()
 
 
+def test_read_auth_tokens_not_a_mapping(tmp_path):
+    """A non-mapping ``tokens`` field is rejected instead of being used."""
+    auth = dict(SAMPLE_AUTH, tokens=["not", "a", "mapping"])
+    auth_path = make_auth_file(tmp_path, auth)
+    with patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path):
+        with pytest.raises(
+            RuntimeError, match="Codex auth file has invalid 'tokens' field."
+        ):
+            _read_auth()
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # _write_auth
 # ──────────────────────────────────────────────────────────────────────────
@@ -167,6 +178,28 @@ def test_write_auth_replace_failure_preserves_original_file(tmp_path):
         with pytest.raises(RuntimeError, match="replace failed"):
             _write_auth({"access_token": "new"})
 
+    assert auth_path.read_text() == original
+
+
+
+def test_write_auth_existing_tokens_not_a_mapping(tmp_path):
+    """Writing over an auth file whose ``tokens`` is not an object is refused."""
+    auth = dict(SAMPLE_AUTH, tokens="corrupted")
+    auth_path = make_auth_file(tmp_path, auth)
+    original = auth_path.read_text()
+
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch(
+            "kimi_code_usage.providers.codex.os.replace", wraps=os.replace
+        ) as replace,
+    ):
+        with pytest.raises(
+            RuntimeError, match="Codex auth file has invalid 'tokens' field."
+        ):
+            _write_auth({"access_token": "new"})
+
+    replace.assert_not_called()
     assert auth_path.read_text() == original
 
 
@@ -423,6 +456,133 @@ def test_parse_fallback_to_raw():
     assert "unexpected" in (rows[0].text_value or "")
 
 
+def test_parse_status_row_en():
+    """A ``status`` field becomes a capitalized text row labelled "Status"."""
+    rows = _parse_usage_response({"status": "active"})
+    assert len(rows) == 1
+    assert rows[0].provider == "codex"
+    assert rows[0].label == "Status"
+    assert rows[0].unit == "text"
+    assert rows[0].text_value == "Active"
+
+
+def test_parse_status_row_zh():
+    """Same status row under a zh locale uses the Chinese label."""
+    with patch.dict(os.environ, {"LANG": "zh_CN.UTF-8"}, clear=False):
+        rows = _parse_usage_response({"status": "active"})
+    assert rows[0].label == "状态"
+    assert rows[0].unit == "text"
+    assert rows[0].text_value == "Active"
+
+
+def test_parse_top_level_limits_array():
+    """A top-level ``limits`` array is used verbatim as the limit list."""
+    data = {
+        "limits": [
+            {"window": "weekly", "used_percent": 50},
+            {"window": "daily", "used_percent": 20},
+        ]
+    }
+    rows = _parse_usage_response(data)
+    assert [r.label for r in rows] == ["Weekly Usage", "Daily Usage"]
+    assert [r.used for r in rows] == [50.0, 20.0]
+
+
+def test_parse_usage_window_names_backfilled_from_keys():
+    """``usage`` sub-keys become the ``window`` name when the entry lacks one."""
+    data = {
+        "usage": {
+            "weekly": {"used_percent": 12},
+            "five_hour": {"used_percent": 34},
+        }
+    }
+    rows = _parse_usage_response(data)
+    assert [r.label for r in rows] == ["Weekly Usage", "5h Limit"]
+    assert rows[0].used == 12.0
+    assert rows[1].used == 34.0
+
+
+def test_parse_usage_window_name_not_overwritten_when_present():
+    """An entry that already names its window keeps that name, not the dict key."""
+    data = {"usage": {"weekly": {"window": "daily", "used_percent": 12}}}
+    rows = _parse_usage_response(data)
+    assert [r.label for r in rows] == ["Daily Usage"]
+    assert rows[0].used == 12.0
+
+
+def test_parse_flat_weekly_limit_key():
+    """A flat ``weekly_limit`` key is collected into the limit list."""
+    data = {"weekly_limit": {"window": "weekly", "used_percent": 30}}
+    rows = _parse_usage_response(data)
+    assert len(rows) == 1
+    assert rows[0].label == "Weekly Usage"
+    assert rows[0].used == 30.0
+    assert rows[0].percent == 30.0
+
+
+@pytest.mark.parametrize(
+    ("key", "window", "expected_label"),
+    [
+        ("usage_limits", "weekly", "Weekly Usage"),
+        ("usageLimits", "daily", "Daily Usage"),
+    ],
+)
+def test_parse_usage_limits_array(key, window, expected_label):
+    """Both ``usage_limits`` and ``usageLimits`` spellings are accepted."""
+    rows = _parse_usage_response({key: [{"window": window, "used_percent": 44}]})
+    assert [r.label for r in rows] == [expected_label]
+    assert rows[0].used == 44.0
+
+
+def test_parse_spend_control_individual_limit():
+    """``spend_control.individual_limit`` is labelled as a spend limit row."""
+    rows = _parse_usage_response(
+        {"spend_control": {"individual_limit": {"used_percent": 42}}}
+    )
+    assert [r.label for r in rows] == ["Spend Limit"]
+    assert rows[0].used == 42.0
+    assert rows[0].limit == 100.0
+    assert rows[0].percent == 42.0
+
+
+def test_parse_limits_array_skips_non_mapping_entries():
+    """A non-mapping entry in ``limits`` is skipped, the rest still parsed."""
+    data = {"limits": ["oops", {"window": "weekly", "used_percent": 50}]}
+    rows = _parse_usage_response(data)
+    assert [r.label for r in rows] == ["Weekly Usage"]
+    assert rows[0].used == 50.0
+
+
+@pytest.mark.parametrize(
+    ("window", "expected_label"),
+    [
+        ("daily", "Daily Usage"),
+        ("monthly", "Monthly Usage"),
+        ("spend", "Spend Limit"),
+    ],
+)
+def test_parse_window_label_for_daily_monthly_spend(window, expected_label):
+    rows = _parse_usage_response({"limits": [{"window": window, "used_percent": 5}]})
+    assert [r.label for r in rows] == [expected_label]
+    assert rows[0].used == 5.0
+
+
+@pytest.mark.parametrize(
+    ("window", "expected_label"),
+    [
+        ("daily", "日用量"),
+        ("monthly", "月用量"),
+        ("spend", "支出限额"),
+    ],
+)
+def test_parse_window_label_for_daily_monthly_spend_zh(window, expected_label):
+    with patch.dict(os.environ, {"LANG": "zh_CN.UTF-8"}, clear=False):
+        rows = _parse_usage_response(
+            {"limits": [{"window": window, "used_percent": 5}]}
+        )
+    assert [r.label for r in rows] == [expected_label]
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # fetch_codex_usage — integration (mocked)
 # ──────────────────────────────────────────────────────────────────────────
@@ -627,6 +787,114 @@ async def test_fetch_auth_file_not_found(tmp_path):
     with patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path):
         with pytest.raises(FileNotFoundError, match="Codex auth file not found"):
             await fetch_codex_usage("enabled", "https://chatgpt.com/backend-api")
+
+
+
+@pytest.mark.asyncio
+async def test_fetch_api_runtime_error_is_propagated_unchanged(tmp_path):
+    """A RuntimeError from the HTTP layer surfaces with its own message."""
+    auth_path = make_auth_file(tmp_path)
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch(
+            "kimi_code_usage.providers.codex._fetch_usage_response",
+            side_effect=RuntimeError("proxy refused connection"),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="proxy refused connection"):
+            await fetch_codex_usage("enabled", "https://chatgpt.com/backend-api")
+
+
+@pytest.mark.asyncio
+async def test_fetch_api_unexpected_error_is_wrapped(tmp_path):
+    """Any other exception from the HTTP layer is wrapped in a RuntimeError."""
+    auth_path = make_auth_file(tmp_path)
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch(
+            "kimi_code_usage.providers.codex._fetch_usage_response",
+            side_effect=OSError("socket closed"),
+        ),
+    ):
+        with pytest.raises(
+            RuntimeError, match="Codex API request failed: socket closed"
+        ):
+            await fetch_codex_usage("enabled", "https://chatgpt.com/backend-api")
+
+
+@pytest.mark.asyncio
+async def test_fetch_retry_runtime_error_is_propagated_unchanged(tmp_path):
+    """After a 401 refresh, a RuntimeError on the retry keeps its own message."""
+    auth_path = make_auth_file(tmp_path)
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch(
+            "kimi_code_usage.providers.codex._fetch_usage_response",
+            side_effect=[(401, "Unauthorized", None), RuntimeError("upstream reset")],
+        ),
+        patch(
+            "kimi_code_usage.providers.codex._refresh_access_token",
+            new=AsyncMock(
+                return_value={
+                    "access_token": "fresh-access",
+                    "refresh_token": "fresh-refresh",
+                }
+            ),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="upstream reset"):
+            await fetch_codex_usage("enabled", "https://chatgpt.com/backend-api")
+
+    saved = json.loads(auth_path.read_text())
+    assert saved["tokens"]["access_token"] == "fresh-access"
+    assert saved["tokens"]["refresh_token"] == "fresh-refresh"
+
+
+@pytest.mark.asyncio
+async def test_fetch_retry_unexpected_error_is_wrapped(tmp_path):
+    """After a 401 refresh, any other exception on the retry gets wrapped."""
+    auth_path = make_auth_file(tmp_path)
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch(
+            "kimi_code_usage.providers.codex._fetch_usage_response",
+            side_effect=[(401, "Unauthorized", None), ValueError("bad payload")],
+        ),
+        patch(
+            "kimi_code_usage.providers.codex._refresh_access_token",
+            new=AsyncMock(
+                return_value={
+                    "access_token": "fresh-access",
+                    "refresh_token": "fresh-refresh",
+                }
+            ),
+        ),
+    ):
+        with pytest.raises(
+            RuntimeError, match="Codex API request failed: bad payload"
+        ):
+            await fetch_codex_usage("enabled", "https://chatgpt.com/backend-api")
+
+
+@pytest.mark.asyncio
+async def test_fetch_200_with_null_json_body_raises(tmp_path):
+    """HTTP 200 whose JSON body is ``null`` carries no usage data."""
+    auth_path = make_auth_file(tmp_path)
+    response = MagicMock(status_code=200, text="")
+    response.json.return_value = None
+    scraper = MagicMock()
+    scraper.get.return_value = response
+
+    with (
+        patch("kimi_code_usage.providers.codex.CODEX_AUTH_PATH", auth_path),
+        patch("cloudscraper.create_scraper", return_value=scraper),
+    ):
+        with pytest.raises(
+            RuntimeError, match="Codex API response did not contain usage data."
+        ):
+            await fetch_codex_usage("enabled", "https://chatgpt.com/backend-api")
+
+    assert scraper.get.call_count == 1
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ on:
 
 jobs:
   extension:
-    name: Extension typecheck, lint, format, test
+    name: Extension typecheck, lint, format, test + coverage
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -44,6 +44,8 @@ jobs:
 
       - name: Format check
         run: npm run format:check
-
-      - name: Test
-        run: npm test
+      # `npm run test:coverage` enforces 100% statements/branches/functions/lines
+      # via vitest.config.mts. Plain `npm test` stays the fast inner-loop command;
+      # this step is the gate, so a coverage regression fails the job.
+      - name: Test with coverage
+        run: npm run test:coverage

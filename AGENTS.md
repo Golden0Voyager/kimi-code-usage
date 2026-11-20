@@ -87,6 +87,15 @@ unzip -p <vsix> extension/package.json | node -e "let s='';process.stdin.on('dat
 
 ## 测试
 
+Python 侧：
+
 - 全部：`uv run pytest`
 - 覆盖率：`uv run pytest --cov --cov-report=term-missing tests/`，再跑 `uv run coverage report`
-- 阈值唯一来源是 `pyproject.toml` 的 `fail_under`（当前 85），实测约 95%
+- 阈值唯一来源是 `pyproject.toml` 的 `fail_under`（当前 85），实测 100%
+
+扩展侧（`vscode-extension/`）：
+
+- 全部：`npm test`
+- 覆盖率门禁：`npm run test:coverage`
+- 阈值唯一来源是 `vitest.config.mts` 的 `coverage.thresholds`（四项均为 100），实测 100%
+- CI 跑的是 `npm run test:coverage` 而不是 `npm test`；覆盖率掉一行就会红

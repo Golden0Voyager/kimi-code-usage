@@ -884,6 +884,202 @@ describe('toInt', () => {
   });
 });
 
+describe('windowMinutes edge cases', () => {
+  const limitsWith = (window: Record<string, unknown>) => [{ detail: { used: 5, limit: 100 }, window }];
+
+  it('does not dedupe the 5h row when the window carries no duration', () => {
+    // windowMinutes() returns null, so nothing lands in the dedupe list and the
+    // `usages.limit_5h` row survives alongside the `limits` entry.
+    const items = parsePayload({
+      limits: limitsWith({ timeUnit: 'MINUTE' }),
+      usages: { limit_5h: { used_ratio: '0.5' } },
+    });
+    expect(items.map((i) => i.label)).toEqual(['Limit #1', '5 Hours']);
+  });
+
+  it('converts a MONTH window to minutes, so it cannot collide with the 5h window', () => {
+    // 5 MONTH = 216000 minutes. A `duration * 60` regression would yield 300 and
+    // silently swallow the 5-hour row.
+    const items = parsePayload({
+      limits: limitsWith({ timeUnit: 'MONTH', duration: 5 }),
+      usages: { limit_5h: { used_ratio: '0.5' } },
+    });
+    expect(items.map((i) => i.label)).toEqual(['5s limit', '5 Hours']);
+  });
+
+  it('dedupes the 5h row when the window is exactly 300 minutes', () => {
+    const items = parsePayload({
+      limits: limitsWith({ timeUnit: 'MINUTE', duration: 300 }),
+      usages: { limit_5h: { used_ratio: '0.5' } },
+    });
+    expect(items.map((i) => i.label)).toEqual(['5h limit']);
+  });
+
+  it('reads the snake_case time_unit field when timeUnit is absent', () => {
+    // limitLabel only knows `timeUnit` (hence "5s limit"), while windowMinutes
+    // also accepts `time_unit` and therefore still dedupes the 5h row.
+    const items = parsePayload({
+      limits: limitsWith({ time_unit: 'HOUR', duration: 5 }),
+      usages: { limit_5h: { used_ratio: '0.5' } },
+    });
+    expect(items.map((i) => i.label)).toEqual(['5s limit']);
+  });
+
+  it('treats a window with neither timeUnit nor time_unit as seconds', () => {
+    // Both fields absent means the duration is seconds: 300s = 5 minutes, which
+    // is not the 300-minute 5h window, so the usages row survives.
+    const items = parsePayload({
+      limits: limitsWith({ duration: 300 }),
+      usages: { limit_5h: { used_ratio: '0.5' } },
+    });
+    expect(items.map((i) => i.label)).toEqual(['300s limit', '5 Hours']);
+  });
+});
+
+describe('boosterBalancePositive type guard', () => {
+  it('ignores a balance without a type field', () => {
+    const items = parsePayload({
+      booster_wallet: {
+        balance: { amount: 9_999_999 },
+        monthlyUsed: { priceInCents: '500' },
+        monthlyChargeLimit: { priceInCents: '10000' },
+      },
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].text_value).toBe('Not enabled');
+  });
+});
+
+describe('booster wallet without a charge limit', () => {
+  it('reports what was spent when only monthlyUsed is present', () => {
+    const items = parsePayload({
+      booster_wallet: {
+        status: 'STATUS_ENABLED',
+        monthlyUsed: { priceInCents: '1234' },
+      },
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].text_value).toBe('¥12.34');
+    expect(items[0].limit).toBe(0);
+  });
+});
+
+describe('ratioRow rejects a non-finite ratio', () => {
+  it('drops a ratio that overflows to Infinity', () => {
+    // "1e999" matches the decimal-literal pattern but Number() yields Infinity.
+    const items = parsePayload({ usages: { limit_7d: { used_ratio: '1e999' } } });
+    expect(items).toHaveLength(0);
+  });
+});
+
+describe('readKimiCliAccessToken default path', () => {
+  it('reads the credential file under the module-level home path when no argument is given', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'kimi-home-'));
+    const credDir = path.join(home, '.kimi-code', 'credentials');
+    fs.mkdirSync(credDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(credDir, 'kimi-code.json'),
+      JSON.stringify({
+        access_token: 'default-path-token',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+      }),
+    );
+    vi.stubEnv('HOME', home);
+    // The path is resolved once at import time, so re-import with the stubbed home.
+    vi.resetModules();
+    const reloaded = await import('./api');
+    try {
+      expect(reloaded.readKimiCliAccessToken()).toBe('default-path-token');
+    } finally {
+      vi.unstubAllEnvs();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('fetchMonthlyUsageViaOAuth rejection paths', () => {
+  let mockReq: { on: any; destroy: any };
+  let mockRes: { on: any; statusCode: number };
+
+  const writeCred = (): string => {
+    const tmp = path.join(os.tmpdir(), `kimi-oauth-cred-${Date.now()}-${Math.random()}.json`);
+    fs.writeFileSync(
+      tmp,
+      JSON.stringify({
+        access_token: 'oauth-token',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+      }),
+    );
+    return tmp;
+  };
+
+  const respondWith = (body: string) => {
+    mockRes.on = vi.fn((event: string, cb: any) => {
+      if (event === 'data') cb(body);
+      if (event === 'end') cb();
+    });
+    vi.mocked(https.get).mockImplementation((_url: any, _opts: any, cb: any) => {
+      cb(mockRes);
+      return mockReq;
+    });
+  };
+
+  beforeEach(() => {
+    vi.mocked(https.get).mockReset();
+    mockReq = { on: vi.fn(), destroy: vi.fn() };
+    mockRes = { on: vi.fn(), statusCode: 200 };
+  });
+
+  it('returns null when the payload has no totalQuota field', async () => {
+    const credPath = writeCred();
+    respondWith(JSON.stringify({ usage: { limit: 100, used: 10 } }));
+
+    const result = await fetchMonthlyUsageViaOAuth('https://api.kimi.com/coding/v1', credPath);
+
+    expect(result).toBeNull();
+    fs.unlinkSync(credPath);
+  });
+
+  it('returns null when the body is not valid JSON', async () => {
+    const credPath = writeCred();
+    respondWith('not-json{');
+
+    const result = await fetchMonthlyUsageViaOAuth('https://api.kimi.com/coding/v1', credPath);
+
+    expect(result).toBeNull();
+    fs.unlinkSync(credPath);
+  });
+
+  it('destroys the request and resolves null on timeout', async () => {
+    const credPath = writeCred();
+    const handlers: Record<string, any> = {};
+    mockReq.on = vi.fn((event: string, cb: any) => {
+      handlers[event] = cb;
+      return mockReq;
+    });
+    vi.mocked(https.get).mockReturnValue(mockReq);
+
+    const promise = fetchMonthlyUsageViaOAuth('https://api.kimi.com/coding/v1', credPath);
+    handlers.timeout();
+
+    await expect(promise).resolves.toBeNull();
+    expect(mockReq.destroy).toHaveBeenCalledTimes(1);
+    fs.unlinkSync(credPath);
+  });
+
+  it('returns null when https.get throws synchronously', async () => {
+    const credPath = writeCred();
+    vi.mocked(https.get).mockImplementation(() => {
+      throw new Error('bad url');
+    });
+
+    const result = await fetchMonthlyUsageViaOAuth('https://api.kimi.com/coding/v1', credPath);
+
+    expect(result).toBeNull();
+    fs.unlinkSync(credPath);
+  });
+});
+
 describe('formatDuration', () => {
   it('formats days/hours/minutes', () => {
     expect(formatDuration(2 * 86400 + 3 * 3600 + 5 * 60)).toBe('2day-short 3hour-short 5minute-short');

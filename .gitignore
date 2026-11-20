@@ -60,3 +60,9 @@ htmlcov/
 
 # Oh My OpenAgent local session artifacts
 .omo/
+
+# Oh My OpenAgent per-project rules: the directory is local state, but RULES.md
+# is the shared contract. Same pattern as package-lock.json above — exclude the
+# contents (not the directory) so the negation can still re-include the file.
+.omp/*
+!.omp/RULES.md
