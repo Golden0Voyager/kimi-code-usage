@@ -33,7 +33,9 @@ async def test_dispatch_all_success():
 
         results, errors = await dispatch_all(config)
 
-        mock_kimi.assert_called_once_with("kimi-key", "https://api.kimi.com/coding/v1", management_key=None)
+        mock_kimi.assert_called_once_with(
+            "kimi-key", "https://api.kimi.com/coding/v1", management_key=None, include_monthly=False
+        )
         mock_openai.assert_called_once_with("openai-key", "https://api.openai.com", management_key=None)
         mock_anthropic.assert_not_called()
         mock_openrouter.assert_not_called()
