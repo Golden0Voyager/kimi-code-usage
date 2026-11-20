@@ -1,10 +1,18 @@
+import asyncio
+import json
+import time
 from unittest.mock import AsyncMock, patch
 
+import aiohttp
 import pytest
 
 from kimi_code_usage.providers.kimi_membership import (
     MonthlyUsageUnavailable,
+    _bridge_command,
+    _flatten_names,
     _load_token_state,
+    _to_int,
+    _total_quota_reset_at,
     _webbridge_unavailable_message,
     fetch_monthly_usage_from_oauth,
     fetch_monthly_usage_from_webbridge,
@@ -12,6 +20,44 @@ from kimi_code_usage.providers.kimi_membership import (
     parse_monthly_usage_snapshot,
 )
 from kimi_code_usage.providers.webbridge import WebBridgeStatus
+
+
+def _mock_aiohttp_session(*, get=None, post=None):
+    """Build an aiohttp.ClientSession stand-in whose ``get``/``post`` return async CMs."""
+    session = AsyncMock()
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=None)
+    if get is not None:
+        session.get = get
+    if post is not None:
+        session.post = post
+    return session
+
+
+def _response_cm(status, *, json_data=None):
+    cm = AsyncMock()
+    cm.__aenter__ = AsyncMock(return_value=cm)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    cm.status = status
+    cm.json = AsyncMock(return_value=json_data)
+    return cm
+
+
+def _recording_post(calls, response_cm):
+    """``post`` that records its kwargs and hands back the given async context manager."""
+
+    def post(*args, **kwargs):
+        calls.append(kwargs)
+        return response_cm
+
+    return post
+
+
+def _raising_post(exc):
+    def post(*args, **kwargs):
+        raise exc
+
+    return post
 
 
 def test_parse_monthly_usage_snapshot_reads_first_total_card_in_usage_progress():
@@ -387,3 +433,243 @@ async def test_fetch_monthly_usage_marks_web_bridge_source_zh():
 
     assert row.label == "月度额度（网页）"
     assert row.used == 25.0
+
+
+# -- small helpers -----------------------------------------------------------
+
+
+def test_to_int_returns_none_for_non_integer_input():
+    assert _to_int("abc") is None
+    assert _to_int(None) is None
+    assert _to_int("") is None
+    assert _to_int("1.5") is None
+
+
+def test_flatten_names_ignores_non_mapping_leaves():
+    assert _flatten_names(["plain string", 42, None]) == []
+
+
+def test_total_quota_reset_at_formats_known_shapes():
+    assert _total_quota_reset_at({}) is None
+    assert _total_quota_reset_at({"resetTime": None}) is None
+    assert _total_quota_reset_at({"resetTime": 1_788_000_000}) == "2026-08-29 10:40"
+    assert _total_quota_reset_at({"reset_at": "2026-08-29T12:00:00Z"}) == "2026-08-29 12:00"
+    assert _total_quota_reset_at({"reset_time": "not-a-date"}) is None
+
+
+def test_webbridge_unavailable_message_prefers_status_detail():
+    with (
+        patch(
+            "kimi_code_usage.providers.kimi_membership.get_webbridge_status",
+            return_value=WebBridgeStatus(True, False, False, "socket refused"),
+        ),
+        patch(
+            "kimi_code_usage.providers.kimi_membership.last_webbridge_start_error",
+            return_value=None,
+        ),
+    ):
+        assert _webbridge_unavailable_message() == "Kimi WebBridge status check failed: socket refused"
+
+
+def test_webbridge_unavailable_message_when_bridge_is_up_without_detail():
+    status = WebBridgeStatus(True, True, True, None)
+    with (
+        patch("kimi_code_usage.providers.kimi_membership.get_webbridge_status", return_value=status),
+        patch(
+            "kimi_code_usage.providers.kimi_membership.last_webbridge_start_error",
+            return_value=None,
+        ),
+    ):
+        assert _webbridge_unavailable_message() == "Kimi WebBridge command failed."
+
+
+def test_webbridge_unavailable_message_when_bridge_is_up_with_detail():
+    status = WebBridgeStatus(True, True, True, "extension vanished")
+    with (
+        patch("kimi_code_usage.providers.kimi_membership.get_webbridge_status", return_value=status),
+        patch(
+            "kimi_code_usage.providers.kimi_membership.last_webbridge_start_error",
+            return_value=None,
+        ),
+    ):
+        assert _webbridge_unavailable_message() == "extension vanished"
+
+
+def test_parse_monthly_usage_snapshot_requires_total_usage_row():
+    snapshot = {"tree": [[{"name": "用量进度"}, {"name": "Kimi Code"}]]}
+    assert parse_monthly_usage_snapshot(snapshot, lang_zh=True) is None
+
+
+def test_parse_monthly_usage_snapshot_requires_percentage_row():
+    snapshot = {"tree": [[{"name": "用量进度"}, {"name": "总使用量"}, {"name": "暂无数据"}]]}
+    assert parse_monthly_usage_snapshot(snapshot, lang_zh=True) is None
+
+
+def _write_credentials(tmp_path, monkeypatch):
+    cred = tmp_path / "credentials" / "kimi-code.json"
+    cred.parent.mkdir(parents=True)
+    expires_at = int(time.time()) + 86_400
+    cred.write_text(json.dumps({"access_token": "abc", "expires_at": expires_at}))
+    monkeypatch.setattr(
+        "kimi_code_usage.providers.kimi_membership._KIMI_CLI_CREDENTIALS_PATH", str(cred)
+    )
+
+
+def _raising(exc):
+    """A ``get``/``post`` that fails synchronously, like aiohttp before any I/O."""
+
+    def call(*args, **kwargs):
+        raise exc
+
+    return call
+
+
+def test_oauth_reports_client_error_as_reason(tmp_path, monkeypatch):
+    _write_credentials(tmp_path, monkeypatch)
+    session = _mock_aiohttp_session(get=_raising(aiohttp.ClientError("socket gone")))
+
+    with patch("aiohttp.ClientSession", return_value=session):
+        row, reason = asyncio.run(fetch_monthly_usage_from_oauth(lang_zh=False))
+
+    assert row is None
+    assert reason == "request failed: socket gone"
+
+
+def test_oauth_reports_timeout_as_reason(tmp_path, monkeypatch):
+    _write_credentials(tmp_path, monkeypatch)
+    session = _mock_aiohttp_session(get=_raising(TimeoutError()))
+
+    with patch("aiohttp.ClientSession", return_value=session):
+        row, reason = asyncio.run(fetch_monthly_usage_from_oauth(lang_zh=False))
+
+    assert row is None
+    assert reason.startswith("request failed:")
+
+
+def test_oauth_rejects_non_mapping_payload(tmp_path, monkeypatch):
+    _write_credentials(tmp_path, monkeypatch)
+    session = _mock_aiohttp_session(get=lambda *a, **k: _response_cm(200, json_data=[1, 2, 3]))
+
+    with patch("aiohttp.ClientSession", return_value=session):
+        row, reason = asyncio.run(fetch_monthly_usage_from_oauth(lang_zh=False))
+
+    assert row is None
+    assert reason == "response has no totalQuota"
+
+
+def test_oauth_rejects_total_quota_without_used(tmp_path, monkeypatch):
+    _write_credentials(tmp_path, monkeypatch)
+    session = _mock_aiohttp_session(get=lambda *a, **k: _response_cm(200, json_data={"totalQuota": {}}))
+
+    with patch("aiohttp.ClientSession", return_value=session):
+        row, reason = asyncio.run(fetch_monthly_usage_from_oauth(lang_zh=False))
+
+    assert row is None
+    assert reason == "response has no totalQuota"
+
+
+def test_oauth_rejects_total_quota_without_limit(tmp_path, monkeypatch):
+    _write_credentials(tmp_path, monkeypatch)
+    payload = {"totalQuota": {"used": "62"}}
+    session = _mock_aiohttp_session(get=lambda *a, **k: _response_cm(200, json_data=payload))
+
+    with patch("aiohttp.ClientSession", return_value=session):
+        row, reason = asyncio.run(fetch_monthly_usage_from_oauth(lang_zh=False))
+
+    assert row is None
+    assert reason == "response has no totalQuota"
+
+
+def test_oauth_rejects_non_positive_total_quota_limit(tmp_path, monkeypatch):
+    _write_credentials(tmp_path, monkeypatch)
+    payload = {"totalQuota": {"used": "62", "limit": "0"}}
+    session = _mock_aiohttp_session(get=lambda *a, **k: _response_cm(200, json_data=payload))
+
+    with patch("aiohttp.ClientSession", return_value=session):
+        row, reason = asyncio.run(fetch_monthly_usage_from_oauth(lang_zh=False))
+
+    assert row is None
+    assert reason == "response has no totalQuota"
+
+
+def test_bridge_command_returns_parsed_payload():
+    calls = []
+    session = _mock_aiohttp_session(
+        post=_recording_post(calls, _response_cm(200, json_data={"ok": True, "data": {"tree": []}}))
+    )
+
+    with patch("aiohttp.ClientSession", return_value=session):
+        data = asyncio.run(_bridge_command("snapshot", {"tab": 1}))
+
+    assert data == {"ok": True, "data": {"tree": []}}
+    assert calls == [{"json": {"action": "snapshot", "args": {"tab": 1}, "session": "kimi-usage"}}]
+
+
+def test_bridge_command_rejects_unsuccessful_payload():
+    session = _mock_aiohttp_session(post=lambda *a, **k: _response_cm(200, json_data={"ok": False}))
+
+    with (
+        patch("aiohttp.ClientSession", return_value=session),
+        patch(
+            "kimi_code_usage.providers.kimi_membership._webbridge_unavailable_message",
+            return_value="bridge says no",
+        ),
+    ):
+        with pytest.raises(MonthlyUsageUnavailable, match="bridge says no"):
+            asyncio.run(_bridge_command("snapshot", {}))
+
+
+def test_bridge_command_rejects_non_mapping_payload():
+    session = _mock_aiohttp_session(post=lambda *a, **k: _response_cm(200, json_data=["nope"]))
+
+    with (
+        patch("aiohttp.ClientSession", return_value=session),
+        patch(
+            "kimi_code_usage.providers.kimi_membership._webbridge_unavailable_message",
+            return_value="bridge says no",
+        ),
+    ):
+        with pytest.raises(MonthlyUsageUnavailable, match="bridge says no"):
+            asyncio.run(_bridge_command("snapshot", {}))
+
+
+def test_bridge_command_reports_http_failure():
+    session = _mock_aiohttp_session(post=lambda *a, **k: _response_cm(500, json_data={}))
+
+    with (
+        patch("aiohttp.ClientSession", return_value=session),
+        patch(
+            "kimi_code_usage.providers.kimi_membership._webbridge_unavailable_message",
+            return_value="bridge says no",
+        ),
+    ):
+        with pytest.raises(MonthlyUsageUnavailable, match="bridge says no"):
+            asyncio.run(_bridge_command("snapshot", {}))
+
+
+def test_bridge_command_wraps_client_error():
+    session = _mock_aiohttp_session(post=_raising(aiohttp.ClientError("socket gone")))
+
+    with (
+        patch("aiohttp.ClientSession", return_value=session),
+        patch(
+            "kimi_code_usage.providers.kimi_membership._webbridge_unavailable_message",
+            return_value="bridge says no",
+        ),
+    ):
+        with pytest.raises(MonthlyUsageUnavailable, match="bridge says no"):
+            asyncio.run(_bridge_command("snapshot", {}))
+
+
+def test_bridge_command_wraps_timeout():
+    session = _mock_aiohttp_session(post=_raising(TimeoutError()))
+
+    with (
+        patch("aiohttp.ClientSession", return_value=session),
+        patch(
+            "kimi_code_usage.providers.kimi_membership._webbridge_unavailable_message",
+            return_value="bridge says no",
+        ),
+    ):
+        with pytest.raises(MonthlyUsageUnavailable, match="bridge says no"):
+            asyncio.run(_bridge_command("snapshot", {}))
