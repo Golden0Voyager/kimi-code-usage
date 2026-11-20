@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import contextlib
 import json
 import os
 import select as _select_module
@@ -1694,7 +1695,10 @@ async def main():
 
 
 def run_cli():
-    asyncio.run(main())
+    # Ctrl+C 时 asyncio.run 会把取消过程中冒出的 CancelledError 串成一条
+    # traceback；交互模式下这是正常退出路径，不该把栈打在终端上。
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(main())
 
 
 if __name__ == "__main__":
