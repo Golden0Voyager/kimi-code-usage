@@ -6,6 +6,20 @@ extension has its own changelog: [`vscode-extension/CHANGELOG.md`](vscode-extens
 This file starts at 0.2.0; earlier releases are recorded by the `v0.1.0`–`v0.1.6`
 git tags.
 
+## [0.2.1] — 2026-11-20
+
+No user-visible behaviour change. This release exists so the coverage work ships
+as its own version instead of being buried in the next feature drop.
+
+### Changed
+
+- Test suite raised to **100% line coverage** (from 94.15%), with the previously
+  untested `_bridge_command` transport layer now exercised for HTTP failures,
+  `ok: false` payloads and transport exceptions.
+- The VS Code extension now measures coverage too, with 100% thresholds enforced
+  in CI; previously `vitest --coverage` could not run at all because the coverage
+  provider was not a declared dependency.
+
 ## [0.2.0] — 2026-10-20
 
 ### Added
