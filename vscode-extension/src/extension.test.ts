@@ -88,6 +88,10 @@ vi.mock('./apiCache', () => ({
   clearCache: vi.fn(),
 }));
 
+vi.mock('./providerSettingsUi', () => ({
+  configureProviders: vi.fn(),
+}));
+
 vi.mock('./api', () => ({
   setUserAgentVersion: vi.fn(),
   fetchUsage: vi.fn(),
@@ -175,11 +179,11 @@ describe('Extension activation and deactivation', () => {
     expect(HistoryPanel).toHaveBeenCalled();
   });
 
-  it('activate() registers three commands', async () => {
+  it('activate() registers four commands', async () => {
     const { activate } = await import('./extension');
     activate(mockContext);
 
-    expect(vscode.commands.registerCommand).toHaveBeenCalledTimes(3);
+    expect(vscode.commands.registerCommand).toHaveBeenCalledTimes(4);
     expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
       'kimiCodeUsage.refresh',
       expect.any(Function),
@@ -190,6 +194,10 @@ describe('Extension activation and deactivation', () => {
     );
     expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
       'kimiCodeUsage.showHistory',
+      expect.any(Function),
+    );
+    expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
+      'kimiCodeUsage.configureProviders',
       expect.any(Function),
     );
   });
@@ -210,8 +218,8 @@ describe('Extension activation and deactivation', () => {
   it('activate() pushes disposables to subscriptions', async () => {
     const { activate } = await import('./extension');
     activate(mockContext);
-    // refresh, details, history, configChange, stopInterval = 5 disposables
-    expect(mockContext.subscriptions.length).toBe(5);
+    // refresh, details, history, configure, configChange, stopInterval = 6 disposables
+    expect(mockContext.subscriptions.length).toBe(6);
   });
 
   it('activate() subscriptions can be disposed', async () => {
@@ -298,6 +306,22 @@ describe('Extension activation and deactivation', () => {
 
     const { refresh } = await import('./statusBar');
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it('configureProviders command calls configureProviders', async () => {
+    const { activate } = await import('./extension');
+    activate(mockContext);
+
+    const configureCall = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.find(([name]) => name === 'kimiCodeUsage.configureProviders');
+    expect(configureCall).toBeDefined();
+    const [, handler] = configureCall!;
+
+    await (handler as () => Promise<void>)();
+
+    const { configureProviders } = await import('./providerSettingsUi');
+    expect(configureProviders).toHaveBeenCalled();
   });
 
   it('showDetails command calls showDetails', async () => {
