@@ -21,6 +21,11 @@ view. All new UI strings are translated into the extension's 10 languages.
   `kimiCodeUsage.primaryProvider` setting, provider-prefixed API cache keys,
   and unified `HTTP <status>` error strings so 401/429/5xx map to the right
   status-bar presentation.
+- OpenRouter provider now reports the **free-model daily quota**
+  (`free_model_daily_requests` from `/api/v1/auth/key`) as a `Free Models` /
+  `免费模型` text row, e.g. `679/1000 free requests left today (resets at
+  UTC 0)`. Quotas are account-wide, reset at UTC midnight, and the row is
+  omitted when the endpoint does not report usable numbers.
 
 ### Changed
 
