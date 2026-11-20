@@ -7,7 +7,6 @@ import aiohttp
 
 from . import ProviderUsage
 from .kimi_membership import (
-    NO_MONTHLY_QUOTA,
     fetch_monthly_usage_from_oauth,
     fetch_monthly_usage_from_webbridge,
 )
@@ -318,30 +317,20 @@ async def _monthly_usage_row() -> ProviderUsage:
         oauth_row, oauth_reason = None, f"request failed: {exc}"
     if oauth_row is not None:
         return oauth_row
-    if oauth_reason == NO_MONTHLY_QUOTA:
-        # 认证成功、响应合法，但账号本身没有月度额度（managed 套餐只有 5h/7d）。
-        # 再跑 WebBridge 只会白等约 8 秒（navigate + 8 次 snapshot），结果一样读不到。
-        detail = (
-            "账号无月度额度（API 未返回 totalQuota）"
-            if _KIMI_LANG_IS_ZH
-            else "No monthly credits on this account (API returned no totalQuota)"
+    try:
+        return await fetch_monthly_usage_from_webbridge(lang_zh=_KIMI_LANG_IS_ZH)
+    except Exception as exc:
+        return ProviderUsage(
+            provider="kimi",
+            label="月度额度" if _KIMI_LANG_IS_ZH else "Monthly Credits",
+            used=0.0,
+            limit=None,
+            remaining=None,
+            percent=None,
+            reset_at=None,
+            unit="text",
+            text_value=f"OAuth: {oauth_reason} | WebBridge: {exc}",
         )
-    else:
-        try:
-            return await fetch_monthly_usage_from_webbridge(lang_zh=_KIMI_LANG_IS_ZH)
-        except Exception as exc:
-            detail = f"OAuth: {oauth_reason} | WebBridge: {exc}"
-    return ProviderUsage(
-        provider="kimi",
-        label="月度额度" if _KIMI_LANG_IS_ZH else "Monthly Credits",
-        used=0.0,
-        limit=None,
-        remaining=None,
-        percent=None,
-        reset_at=None,
-        unit="text",
-        text_value=detail,
-    )
 
 def _kimi_error_hint(status: int, zh: bool | None = None) -> str:
     if zh is None:
