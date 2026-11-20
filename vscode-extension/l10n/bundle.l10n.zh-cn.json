@@ -177,5 +177,7 @@
   "{0} configured.": "已配置 {0}。",
   "Set the API key via \"Kimi Code Usage: Configure Providers\".": "请通过「Kimi Code Usage: Configure Providers」命令设置 API 密钥。",
   "This key cannot read Anthropic usage: /api/oauth/usage only accepts a Claude Code OAuth token. Use the claude provider for subscription quotas.": "此密钥无法读取 Anthropic 用量：/api/oauth/usage 仅接受 Claude Code OAuth 令牌。订阅配额请使用 claude provider。",
-  "OpenAI organization usage API returned 401/403. This endpoint requires an Org Admin API key (platform.openai.com → Settings → API Keys, role: Org Admin) — a regular sk-... project key is not enough. ChatGPT Plus/Pro subscriptions have no usage API at all; disable this provider with openaiEnabled=false.": "OpenAI 组织用量 API 返回 401/403。此接口需要组织管理员 API 密钥（platform.openai.com → 设置 → API 密钥，角色：组织管理员）——普通的 sk-... 项目密钥无效。ChatGPT Plus/Pro 订阅完全没有用量 API；请通过 openaiEnabled=false 停用此 provider。"
+  "OpenAI organization usage API returned 401/403. This endpoint requires an Org Admin API key (platform.openai.com → Settings → API Keys, role: Org Admin) — a regular sk-... project key is not enough. ChatGPT Plus/Pro subscriptions have no usage API at all; disable this provider with openaiEnabled=false.": "OpenAI 组织用量 API 返回 401/403。此接口需要组织管理员 API 密钥（platform.openai.com → 设置 → API 密钥，角色：组织管理员）——普通的 sk-... 项目密钥无效。ChatGPT Plus/Pro 订阅完全没有用量 API；请通过 openaiEnabled=false 停用此 provider。",
+  "Free Models": "免费模型",
+  "{0}/{1} free requests left today (resets at UTC 0)": "今日剩余 {0}/{1} 次免费请求（UTC 0 点重置）"
 }
