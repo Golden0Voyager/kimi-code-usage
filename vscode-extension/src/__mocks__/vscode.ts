@@ -75,6 +75,8 @@ export const window = {
   showWarningMessage: vi.fn(),
   showInformationMessage: vi.fn(),
   showErrorMessage: vi.fn(),
+  showInputBox: vi.fn(),
+  showQuickPick: vi.fn(),
   activeColorTheme: { kind: 1 },
 };
 
