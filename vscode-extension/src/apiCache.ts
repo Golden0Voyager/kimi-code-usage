@@ -1,5 +1,6 @@
 import { fetchUsage } from './api';
 import { DEFAULT_API_CACHE_TTL_SECONDS } from './types';
+import type { ProviderId } from './providers/types';
 
 interface CacheEntry {
   expiresAt: number;
@@ -27,15 +28,17 @@ export function cacheStats(): { hasEntry: boolean; ageMs: number | null; ttlMs: 
   return { hasEntry: true, ageMs: Date.now() - (first.expiresAt - ttlMs), ttlMs };
 }
 
-function keyFor(baseUrl: string, apiKey: string): string {
-  return `${baseUrl}::${apiKey.slice(0, 6)}::${apiKey.length}`;
+/** Cache key is provider-prefixed so two providers never share an entry. */
+function keyFor(providerId: ProviderId, baseUrl: string, apiKey: string): string {
+  return `${providerId}::${baseUrl}::${apiKey.slice(0, 6)}::${apiKey.length}`;
 }
 
 export async function fetchUsageCached(
+  providerId: ProviderId,
   baseUrl: string,
   apiKey: string,
 ): Promise<{ payload: unknown; fromCache: boolean }> {
-  const key = keyFor(baseUrl, apiKey);
+  const key = keyFor(providerId, baseUrl, apiKey);
   const entry = cache.get(key);
   if (entry && entry.expiresAt > Date.now()) {
     return { payload: entry.payload, fromCache: true };
