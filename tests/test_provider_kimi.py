@@ -269,7 +269,7 @@ async def test_fetch_kimi_usage_success():
         "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
         new=AsyncMock(side_effect=Exception("bridge unavailable")),
     ):
-        res = await fetch_kimi_usage("test-key", "https://api.example.com/v1")
+        res = await fetch_kimi_usage("test-key", "https://api.example.com/v1", include_monthly=True)
         assert len(res) == 2
         r = res[1]
         assert r.provider == "kimi"
@@ -301,9 +301,37 @@ async def test_fetch_kimi_usage_prepends_monthly_usage_and_preserves_api_rows():
         "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
         new=AsyncMock(return_value=monthly),
     ):
-        rows = await fetch_kimi_usage("test-key", "https://api.example.com/v1")
+        rows = await fetch_kimi_usage("test-key", "https://api.example.com/v1", include_monthly=True)
 
     assert [row.label for row in rows] == ["Monthly Credits", "all"]
+
+
+def test_fetch_kimi_usage_skips_monthly_by_default():
+    import asyncio
+
+    async def mock_json(*args, **kwargs):
+        return {"usage": {"limit": "100", "used": "14"}}
+
+    cm = AsyncMock()
+    cm.__aenter__ = AsyncMock(return_value=cm)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    cm.status = 200
+    cm.json = mock_json
+    session = AsyncMock()
+    session.get = lambda *args, **kwargs: cm
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=None)
+
+    async def _run():
+        with patch("aiohttp.ClientSession", return_value=session), patch(
+            "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
+            new=AsyncMock(side_effect=AssertionError("webbridge must not be called")),
+        ):
+            return await fetch_kimi_usage("test-key", "https://api.example.com/v1")
+
+    rows = asyncio.run(_run())
+
+    assert [row.label for row in rows] == ["Weekly Usage"]
 
 
 @pytest.mark.asyncio
@@ -324,7 +352,7 @@ async def test_fetch_kimi_usage_keeps_api_rows_when_monthly_reader_is_unavailabl
         "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
         new=AsyncMock(side_effect=MonthlyUsageUnavailable("Kimi WebBridge is unavailable")),
     ):
-        rows = await fetch_kimi_usage("test-key", "https://api.example.com/v1")
+        rows = await fetch_kimi_usage("test-key", "https://api.example.com/v1", include_monthly=True)
 
     assert rows[0].label == "Monthly Credits"
     assert rows[0].unit == "text"
@@ -360,7 +388,7 @@ async def test_fetch_kimi_usage_fallback():
         "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
         new=AsyncMock(side_effect=Exception("bridge unavailable")),
     ):
-        res = await fetch_kimi_usage("test-key", "https://api.example.com/v1")
+        res = await fetch_kimi_usage("test-key", "https://api.example.com/v1", include_monthly=True)
         assert len(res) == 2
         assert res[1].used == 200.0
 
