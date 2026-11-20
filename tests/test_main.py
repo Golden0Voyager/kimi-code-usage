@@ -2019,3 +2019,303 @@ async def test_interactive_settings_save_honours_config_path(monkeypatch, tmp_pa
 
     saved = json.loads(custom.read_text(encoding="utf-8"))
     assert saved["general"]["theme"] == "mint-dark"
+
+
+# ── Chinese render paths ────────────────────────────────────────────────────
+
+
+def test_render_setting_view_chinese_labels_login_state_and_footer():
+    from kimi_code_usage.main import _render_setting_view
+
+    cfg = AppConfig(
+        providers={"codex": ProviderConfig(api_key="enabled", enabled=True)},
+        provider_order=["codex"],
+    )
+    with patch("kimi_code_usage.main.local_login_present", return_value=False):
+        flat = _render_setting_view(cfg, {"codex"}, settings_cursor=0, lang_zh=True).plain
+
+    assert "面板设置" in flat
+    assert "未登录" in flat
+    assert "[1-1] 开关面板" in flat
+    assert "移动光标" in flat
+    assert "启用/停用选中服务" in flat
+    assert "粘贴选中服务的 API key" in flat
+    assert "返回用量视图" in flat
+    assert "Enter 保存设置" in flat
+
+
+def test_render_setting_view_chinese_key_editor_prompt():
+    from kimi_code_usage.main import _render_setting_view
+
+    cfg = AppConfig(
+        providers={"openai": ProviderConfig(api_key=None, enabled=True)},
+        provider_order=["openai"],
+    )
+    flat = _render_setting_view(
+        cfg, {"openai"}, settings_cursor=0, lang_zh=True, key_edit="openai", key_buffer="sk-1"
+    ).plain
+
+    # _PROMPT_NAME strips the " API" suffix so the hint never reads "OpenAI API API key".
+    assert "粘贴 OpenAI 的 API key" in flat
+    assert "> ••••" in flat
+
+
+def test_render_interactive_help_chinese_rows_and_footer():
+    from kimi_code_usage.main import _render_interactive_help
+
+    flat = _render_interactive_help(lang_zh=True).plain
+
+    assert "交互帮助" in flat
+    assert "退出" in flat
+    assert "刷新用量" in flat
+    assert "保存主题、语言、可见面板和 OpenRouter 显示偏好" in flat
+    assert "再次按 h/? 或 c 可回到用量视图。" in flat
+
+
+def test_render_config_guide_chinese_status_and_management_key():
+    from kimi_code_usage.main import _render_config_guide
+
+    cfg = AppConfig(
+        providers={
+            "kimi": ProviderConfig(api_key="sk-kimi-123456", base_url=None),
+            "anthropic": ProviderConfig(api_key=None, enabled=False),
+            "openrouter": ProviderConfig(api_key="sk-or-123456", management_key="or-mgmt-123456"),
+        },
+        provider_order=["kimi", "anthropic", "openrouter"],
+    )
+
+    flat = _render_config_guide(cfg, lang_zh=True, config_path="/tmp/cfg.json").plain
+
+    assert "配置文件: /tmp/cfg.json" in flat
+    assert "读取优先级: config.json > 环境变量 / 当前目录 .env > 默认 base URL" in flat
+    assert "状态: 已启用" in flat
+    assert "状态: 已禁用" in flat
+    # _mask_secret keeps 7 leading and 4 trailing characters.
+    assert "管理 Key: or-mgmt...3456" in flat
+    assert "建议把长期配置写入 ~/.kimi-usage/config.json" in flat
+
+
+def test_render_config_guide_skips_providers_without_setup_help():
+    from kimi_code_usage.main import _render_config_guide
+
+    cfg = AppConfig(providers={}, provider_order=["mystery"])
+
+    flat = _render_config_guide(cfg, lang_zh=False, config_path="/tmp/cfg.json").plain
+
+    assert "Mystery" not in flat
+    # The known providers are still appended after the configured order.
+    assert "Kimi Code" in flat
+
+
+# ── _preflight_webbridge opt-out ────────────────────────────────────────────
+
+
+def test_preflight_skips_when_monthly_usage_is_not_enabled():
+    cfg = _enabled_visible_kimi_config()
+    cfg.kimi_monthly = False
+
+    with patch("kimi_code_usage.main.get_webbridge_status") as status:
+        _preflight_webbridge(cfg, lang_zh=False)
+
+    status.assert_not_called()
+
+
+# ── pure helpers ────────────────────────────────────────────────────────────
+
+
+def test_window_top_models_skips_unparsable_activity_dates():
+    from kimi_code_usage.main import _window_top_models
+
+    daily = [
+        DailyUsage(date="0000-00-00", models=[ModelUsage(model="ghost", requests=99)]),
+        DailyUsage(date="2026-01-02", models=[ModelUsage(model="kept", requests=3)]),
+    ]
+
+    ranked = _window_top_models(daily, 7, "requests")
+
+    assert [m.model for m in ranked] == ["kept"]
+    assert ranked[0].requests == 3
+
+
+def test_fit_scroll_body_clamps_non_positive_budget_to_one_line():
+    from kimi_code_usage.main import _fit_scroll_body
+
+    body = Text("first\nsecond\nthird")
+    fitted, offset = _fit_scroll_body(body, 0, 0, lang_zh=False)
+    lines = str(fitted).split("\n")
+
+    assert offset == 0
+    assert lines[0] == "first"
+    assert "1–1/3" in lines[1]
+    assert "scroll" in lines[1]
+
+
+# ── interactive settings keys ───────────────────────────────────────────────
+
+
+def _run_settings_keys(monkeypatch, keys, cfg):
+    """Drive _interactive_mode in settings view and return every save_provider_settings call."""
+    import asyncio
+
+    _mock_terminal(monkeypatch)
+    mock_select, mock_read = _make_select_and_read(keys)
+    import kimi_code_usage.main as main_mod
+
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    saved = []
+
+    def fake_save(provider, *, enabled=None, api_key=None, config_path=None):
+        saved.append((provider, enabled, api_key))
+
+    with (
+        patch("kimi_code_usage.main.save_provider_settings", fake_save),
+        patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=({}, {}))),
+        patch("kimi_code_usage.main.Live"),
+    ):
+        asyncio.run(_interactive_mode(cfg, "blue-dark"))
+    return saved
+
+
+def _multi_provider_config(monkeypatch):
+    cfg = _make_interactive_config(monkeypatch)
+    cfg.provider_order = ["kimi", "openai", "anthropic"]
+    cfg.visible_providers = ["kimi", "openai", "anthropic"]
+    return cfg
+
+
+def test_interactive_settings_e_key_toggles_selected_provider(monkeypatch):
+    cfg = _multi_provider_config(monkeypatch)
+
+    saved = _run_settings_keys(monkeypatch, ["s", "e", "q"], cfg)
+
+    assert saved == [("kimi", False, None)]
+    assert cfg.providers["kimi"].enabled is False
+
+
+def test_interactive_settings_arrow_up_and_down_move_the_cursor(monkeypatch):
+    cfg = _multi_provider_config(monkeypatch)
+    # ↓ twice then ↑ once: the cursor must land on the middle provider, so the
+    # [e] that follows toggles openai rather than kimi. openai is opt-in and
+    # starts disabled, so the toggle turns it on.
+    saved = _run_settings_keys(monkeypatch, ["s", "\x1b[B", "\x1b[B", "\x1b[A", "e", "q"], cfg)
+
+    assert saved == [("openai", True, None)]
+    assert cfg.providers["openai"].enabled is True
+    assert cfg.providers["kimi"].enabled is True
+
+
+def test_interactive_settings_right_arrow_moves_provider_down(monkeypatch):
+    cfg = _multi_provider_config(monkeypatch)
+
+    _run_settings_keys(monkeypatch, ["s", "\x1b[C", "q"], cfg)
+
+    assert cfg.provider_order == ["openai", "kimi", "anthropic"]
+
+
+def test_interactive_settings_left_arrow_moves_provider_up(monkeypatch):
+    cfg = _multi_provider_config(monkeypatch)
+
+    _run_settings_keys(monkeypatch, ["s", "\x1b[B", "\x1b[D", "q"], cfg)
+
+    assert cfg.provider_order == ["openai", "kimi", "anthropic"]
+
+
+def test_interactive_settings_number_key_hides_visible_provider(monkeypatch):
+    cfg = _multi_provider_config(monkeypatch)
+    rendered = []
+
+    _mock_terminal(monkeypatch)
+    mock_select, mock_read = _make_select_and_read(["s", "2", "q"])
+    import kimi_code_usage.main as main_mod
+
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    with (
+        patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=({}, {}))),
+        patch("kimi_code_usage.main.Live") as mock_live_cls,
+    ):
+        mock_live = mock_live_cls.return_value.__enter__.return_value
+        import asyncio
+
+        asyncio.run(_interactive_mode(cfg, "blue-dark"))
+        rendered = [_panel_plain(call.args[0]) for call in mock_live.update.call_args_list]
+
+    flat = "\n".join(rendered)
+    assert "○ [2] OpenAI API" in flat
+    # The toggle lives in the local visible-providers set; the config list is untouched.
+    assert cfg.visible_providers == ["kimi", "openai", "anthropic"]
+
+
+def test_interactive_settings_escape_cancels_key_paste(monkeypatch):
+    cfg = _multi_provider_config(monkeypatch)
+
+    saved = _run_settings_keys(monkeypatch, ["s", "k", "s", "k", "-", "\x1b", "q"], cfg)
+
+    assert saved == []
+    assert cfg.providers["kimi"].api_key == "kimi-key"
+
+
+def test_interactive_settings_backspace_edits_the_key_buffer(monkeypatch):
+    cfg = _multi_provider_config(monkeypatch)
+
+    saved = _run_settings_keys(monkeypatch, ["s", "k", "a", "b", "\x7f", "\r", "q"], cfg)
+
+    assert saved == [("kimi", True, "a")]
+
+
+def test_interactive_settings_ignores_control_characters_while_pasting(monkeypatch):
+    cfg = _multi_provider_config(monkeypatch)
+
+    saved = _run_settings_keys(monkeypatch, ["s", "k", "\x01", "\x1b", "q"], cfg)
+
+    assert saved == []
+
+
+# ── CLI paths ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_main_serve_starts_web_server_on_requested_port(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["kimi-usage", "--serve", "--port", "9123"])
+    server = AsyncMock()
+
+    with patch("kimi_code_usage.server.run_server", server):
+        await main()
+
+    server.assert_awaited_once()
+    assert server.await_args.kwargs["port"] == 9123
+
+
+@pytest.mark.asyncio
+async def test_main_rich_output_honours_visible_providers(monkeypatch, capsys):
+    cfg = AppConfig(
+        providers={
+            "kimi": ProviderConfig(api_key="kimi-key", enabled=True),
+            "openai": ProviderConfig(api_key="openai-key", enabled=True),
+        },
+        provider_order=["kimi", "openai"],
+        visible_providers=["kimi"],
+    )
+    results = {
+        "kimi": [
+            ProviderUsage("kimi", "Weekly Usage", 10, 100, 90, 10, None, "%"),
+        ],
+        "openai": [
+            ProviderUsage("openai", "Cost", 1.5, 5.0, 3.5, 30, None, "$"),
+        ],
+    }
+    monkeypatch.setattr("sys.argv", ["kimi-usage"])
+
+    with (
+        patch("kimi_code_usage.main.ConfigResolver") as resolver,
+        patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=(results, {}))),
+    ):
+        resolver.return_value.resolve.return_value = cfg
+        await main()
+
+    out = capsys.readouterr().out
+    assert "Kimi" in out
+    assert "OpenAI" not in out
