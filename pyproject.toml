@@ -3,7 +3,7 @@ name = "kimi-code-usage"
 version = "0.2.0"
 description = "A curated Kimi Coding Plan usage monitor with aesthetic CLI and MCP server."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "Haining Yu", email = "hainingyu@gmail.com" }
 ]
@@ -13,7 +13,7 @@ dependencies = [
     "aiohttp>=3.14.3",
     "rich>=12.0.0",
     "python-dotenv>=1.0.0",
-    "fastmcp>=4.1.1",
+    "fastmcp>=4.1.2",
     "httpx[socks]>=0.20.0",
     "cloudscraper>=1.2.0",
 ]
