@@ -13,7 +13,7 @@ from kimi_code_usage.providers.kimi import (
     _to_usage_row,
     fetch_kimi_usage,
 )
-from kimi_code_usage.providers.kimi_membership import NO_MONTHLY_QUOTA, MonthlyUsageUnavailable
+from kimi_code_usage.providers.kimi_membership import MonthlyUsageUnavailable
 
 
 # -- _to_int --
@@ -698,13 +698,13 @@ async def test_monthly_usage_row_prefers_oauth_over_webbridge():
 
 
 @pytest.mark.asyncio
-async def test_monthly_usage_row_falls_back_to_webbridge_when_oauth_fails_transiently():
+async def test_monthly_usage_row_falls_back_to_webbridge_when_oauth_has_no_data():
     from kimi_code_usage.providers.kimi import _monthly_usage_row
 
     webbridge_row = ProviderUsage("kimi", "Monthly Credits", 7.0, 100.0, 93.0, 7.0, None, "%")
     with patch(
         "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_oauth",
-        new=AsyncMock(return_value=(None, "access token expired at 2026-09-29 13:45")),
+        new=AsyncMock(return_value=(None, "response has no totalQuota")),
     ), patch(
         "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
         new=AsyncMock(return_value=webbridge_row),
@@ -712,24 +712,6 @@ async def test_monthly_usage_row_falls_back_to_webbridge_when_oauth_fails_transi
         row = await _monthly_usage_row()
 
     assert row is webbridge_row
-
-
-@pytest.mark.asyncio
-async def test_monthly_usage_row_skips_webbridge_when_account_has_no_monthly_quota():
-    from kimi_code_usage.providers.kimi import _monthly_usage_row
-
-    with patch(
-        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_oauth",
-        new=AsyncMock(return_value=(None, NO_MONTHLY_QUOTA)),
-    ), patch(
-        "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
-        new=AsyncMock(side_effect=AssertionError("webbridge must not be called")),
-    ):
-        row = await _monthly_usage_row()
-
-    assert row.unit == "text"
-    assert row.limit is None
-    assert "totalQuota" in row.text_value
 
 
 @pytest.mark.asyncio
