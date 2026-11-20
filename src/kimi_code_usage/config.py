@@ -273,14 +273,14 @@ def save_theme(
     or_metric: str | None = None,
     days_window: int | None = None,
     provider_order: list[str] | None = None,
-    config_path: Path | None = None,
+    config_path: str | Path | None = None,
 ) -> None:
     """Persist settings into ``general`` in the JSON config file.
 
     All other settings in the file are preserved.  The config directory is
     created automatically if it does not exist yet.
     """
-    path = config_path or DEFAULT_CONFIG_PATH
+    path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
 
     data: dict = {}

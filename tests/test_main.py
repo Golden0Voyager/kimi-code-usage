@@ -1998,3 +1998,24 @@ def test_cli_kimi_monthly_flag_overrides_config(monkeypatch):
         assert mock_interactive.call_args.args[0] is cfg
         # kimi_monthly 是 True 时 preflight 才会真的去查 webbridge
         mock_preflight.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_interactive_settings_save_honours_config_path(monkeypatch, tmp_path):
+    """--config 指向自定义文件时，TUI 里按 Enter 保存必须写到那个文件。"""
+    _mock_terminal(monkeypatch)
+    mock_select, mock_read = _make_select_and_read(["s", "\r", " ", "q"])
+    import kimi_code_usage.main as main_mod
+
+    monkeypatch.setattr(main_mod._select_module, "select", mock_select)
+    monkeypatch.setattr(sys.stdin, "read", mock_read)
+
+    cfg = _make_interactive_config(monkeypatch)
+    custom = tmp_path / "custom.json"
+    with patch("kimi_code_usage.main.dispatch_all", AsyncMock(return_value=({}, {}))):
+        with patch("kimi_code_usage.main.Live") as mock_live_cls:
+            mock_live_cls.return_value.__enter__.return_value = AsyncMock()
+            await _interactive_mode(cfg, "mint-dark", config_path=str(custom))
+
+    saved = json.loads(custom.read_text(encoding="utf-8"))
+    assert saved["general"]["theme"] == "mint-dark"
