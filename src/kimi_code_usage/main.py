@@ -13,7 +13,14 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.text import Text
 
-from kimi_code_usage.config import DEFAULT_CONFIG_PATH, AppConfig, ConfigResolver, save_theme
+from kimi_code_usage.config import (
+    API_OPT_IN_PROVIDERS,
+    DEFAULT_CONFIG_PATH,
+    AppConfig,
+    ConfigResolver,
+    save_provider_settings,
+    save_theme,
+)
 from kimi_code_usage.providers import DailyUsage, ModelUsage, ProviderUsage, dispatch_all
 from kimi_code_usage.providers.webbridge import (
     WebBridgeLifecycleError,
@@ -270,8 +277,10 @@ def _render_setting_view(
     visible_providers: set,
     settings_cursor: int = 0,
     lang_zh: bool = False,
+    key_edit: str | None = None,
+    key_buffer: str = "",
 ) -> Text:
-    """Render the settings page for toggling and reordering providers."""
+    """Render the settings page: visibility, enable state, and key editing."""
     text = Text()
     title = "面板设置" if lang_zh else "Panel Settings"
     text.append(f"{title}\n\n", style="bold")
@@ -283,7 +292,15 @@ def _render_setting_view(
         icon = "●" if p in visible_providers else "○"
         num = i + 1
         cursor = "▸" if i == settings_cursor else " "
-        line = f"{cursor} {icon} [{num}] {short}"
+        conf = config.providers.get(p)
+        on = bool(conf and conf.enabled)
+        has_key = bool(conf and conf.api_key)
+        state = ("on" if on else "off") if not lang_zh else ("开" if on else "关")
+        if p in API_OPT_IN_PROVIDERS:
+            key_hint = "key ✓" if has_key else ("no key" if not lang_zh else "无 key")
+            line = f"{cursor} {icon} [{num}] {short:<11} {state:<3} {key_hint}"
+        else:
+            line = f"{cursor} {icon} [{num}] {short:<11} {state}"
         if i == settings_cursor:
             text.append(line, style="bold reverse")
         elif p in visible_providers:
@@ -293,16 +310,32 @@ def _render_setting_view(
         text.append("\n")
 
     text.append("\n", style="bold")
+    if key_edit is not None:
+        short = _SHORT.get(key_edit, key_edit[:4].title())
+        masked = "•" * len(key_buffer)
+        if lang_zh:
+            text.append(f"  粘贴 {short} 的 API key（Enter 保存，Esc 取消）\n", style="bold yellow")
+        else:
+            text.append(
+                f"  Paste the {short} API key (Enter saves, Esc cancels)\n", style="bold yellow"
+            )
+        text.append(f"  > {masked}\n", style="yellow")
+        return text
+
     if lang_zh:
         text.append(f"  [1-{max_keys}] 开关面板\n", style="grey62")
         text.append("  [↑/↓] 移动光标\n", style="grey62")
         text.append("  [←/→] 移动选中面板\n", style="grey62")
+        text.append("  [e]   启用/停用选中服务\n", style="grey62")
+        text.append("  [k]   粘贴选中服务的 API key\n", style="grey62")
         text.append("  [s]   返回用量视图\n", style="grey62")
         text.append("  Enter 保存设置\n", style="grey62")
     else:
         text.append(f"  [1-{max_keys}] toggle panels\n", style="grey62")
         text.append("  [↑/↓] move cursor\n", style="grey62")
         text.append("  [←/→] move selected panel\n", style="grey62")
+        text.append("  [e]   enable/disable selected provider\n", style="grey62")
+        text.append("  [k]   paste an API key for the selected provider\n", style="grey62")
         text.append("  [s]   back to usage\n", style="grey62")
         text.append("  Enter save settings\n", style="grey62")
 
@@ -1322,6 +1355,8 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
     saved_notice: list = [None]  # holds the saved theme name briefly, then None
     scroll: list = [0]  # in-panel vertical scroll offset (lines from top)
     settings_cursor: list = [0]  # cursor position in settings view
+    key_edit: list = [None]  # provider name while pasting a key, else None
+    key_buffer: list = []  # characters typed/pasted into the key editor
 
     def _visible_order() -> list[str]:
         return [p for p in config.provider_order if p in visible_providers]
@@ -1334,7 +1369,14 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
         elif current_view == "config":
             body = _render_config_guide(config, lang_zh=lang_zh, config_path=config_path)
         elif current_view == "settings":
-            body = _render_setting_view(config, visible_providers, settings_cursor=settings_cursor[0], lang_zh=lang_zh)
+            body = _render_setting_view(
+                config,
+                visible_providers,
+                settings_cursor=settings_cursor[0],
+                lang_zh=lang_zh,
+                key_edit=key_edit[0],
+                key_buffer="".join(key_buffer),
+            )
         else:
             body = _format_aggregated_results(
                 results,
@@ -1447,6 +1489,42 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                     if not ch:  # pragma: no cover
                         continue
 
+                    # ── Key-paste mode: everything goes into the buffer until Enter/Esc ──
+                    if key_edit[0] is not None:
+                        target = key_edit[0]
+                        if ch in ("\r", "\n"):
+                            pasted = "".join(key_buffer).strip()
+                            if pasted:
+                                save_provider_settings(
+                                    target,
+                                    enabled=True,
+                                    api_key=pasted,
+                                    config_path=config_path,
+                                )
+                                conf = config.providers.get(target)
+                                if conf is not None:
+                                    conf.api_key = pasted
+                                    conf.enabled = True
+                            key_edit[0] = None
+                            key_buffer.clear()
+                            live.update(_build_panel(), refresh=True)
+                            continue
+                        if ch == "\x1b":  # Esc cancels
+                            key_edit[0] = None
+                            key_buffer.clear()
+                            live.update(_build_panel(), refresh=True)
+                            continue
+                        if ch in ("\x7f", "\b"):
+                            if key_buffer:
+                                key_buffer.pop()
+                            live.update(_build_panel(), refresh=True)
+                            continue
+                        if ch.isprintable():
+                            key_buffer.append(ch)
+                            live.update(_build_panel(), refresh=True)
+                            continue
+                        continue
+
                     if ch == "\x1b":
                         r2, _, _ = _select_module.select([sys.stdin], [], [], 0.05)
                         if r2:
@@ -1478,6 +1556,25 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
                     if ch in ("s", "S"):
                         current_view = "usage" if current_view == "settings" else "settings"
                         scroll[0] = 0
+                        live.update(_build_panel(), refresh=True)
+                        continue
+                    if ch in ("e", "E") and current_view == "settings":
+                        order = config.provider_order
+                        if order:
+                            target_p = order[min(settings_cursor[0], len(order) - 1)]
+                            conf = config.providers.get(target_p)
+                            if conf is not None:
+                                conf.enabled = not conf.enabled
+                                save_provider_settings(
+                                    target_p, enabled=conf.enabled, config_path=config_path
+                                )
+                        live.update(_build_panel(), refresh=True)
+                        continue
+                    if ch in ("k", "K") and current_view == "settings":
+                        order = config.provider_order
+                        if order:
+                            key_edit[0] = order[min(settings_cursor[0], len(order) - 1)]
+                            key_buffer.clear()
                         live.update(_build_panel(), refresh=True)
                         continue
                     if ch in ("\r", "\n"):  # Enter → save settings to config file

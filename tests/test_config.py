@@ -67,13 +67,27 @@ def test_config_resolver_valid_json(tmp_path):
     assert config.refresh_interval_minutes == 10
     assert config.output_mode == "plain"
     assert "kimi" in config.enabled_providers
-    assert "openai" in config.enabled_providers
+    # openai 是 API 直连类：有 key 也不再自动开，须显式 enabled 或 OPENAI_ENABLED=1
+    assert "openai" not in config.enabled_providers
     assert "anthropic" not in config.enabled_providers
 
     assert config.providers["kimi"].api_key == "kimi-key"
     assert config.providers["kimi"].base_url == "https://custom.kimi"
     assert config.providers["openai"].api_key == "openai-key"
     assert config.providers["openai"].base_url == "https://api.openai.com"
+
+
+def test_config_resolver_openai_explicit_enabled(tmp_path):
+    config_path = tmp_path / "valid.json"
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({"providers": {"openai": {"apiKey": "sk-x", "enabled": True}}}, f)
+
+    config = ConfigResolver(config_path=str(config_path)).resolve()
+
+    assert "openai" in config.enabled_providers
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({"providers": {"openai": {"apiKey": "sk-x"}}}, f)
+    assert "openai" not in ConfigResolver(config_path=str(config_path)).resolve().enabled_providers
 
 
 def test_config_resolver_env_variables(tmp_path, monkeypatch):
@@ -100,17 +114,50 @@ def test_config_resolver_env_variables(tmp_path, monkeypatch):
 def test_config_resolver_anthropic_opt_in_via_env_and_json(tmp_path, monkeypatch):
     config_path = tmp_path / "config.json"
     monkeypatch.delenv("ANTHROPIC_ENABLED", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-    # 默认关
+    # 默认关：没 key 也没 enabled
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump({}, f)
     assert "anthropic" not in ConfigResolver(config_path=str(config_path)).resolve().enabled_providers
 
-    # env 显式开
+    # API 直连类：只有 enabled 还不够，仍然要有 key
     monkeypatch.setenv("ANTHROPIC_ENABLED", "1")
+    assert "anthropic" not in ConfigResolver(config_path=str(config_path)).resolve().enabled_providers
+
+    # 设置页粘贴 key 后会写成 apiKey + enabled
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({"providers": {"anthropic": {"apiKey": "sk-ant-pasted", "enabled": True}}}, f)
     resolved = ConfigResolver(config_path=str(config_path)).resolve()
-    assert resolved.providers["anthropic"].api_key == "enabled"
+    assert resolved.providers["anthropic"].api_key == "sk-ant-pasted"
     assert "anthropic" in resolved.enabled_providers
+
+
+def test_config_resolver_subscription_provider_autodetect(tmp_path, monkeypatch):
+    """codex/claude 检测到本机登录文件就默认开，不需要任何配置。"""
+    from kimi_code_usage import config as cfg_mod
+
+    config_path = tmp_path / "config.json"
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({}, f)
+    for key in ("CODEX_ENABLED", "CLAUDE_ENABLED"):
+        monkeypatch.delenv(key, raising=False)
+
+    monkeypatch.setattr(cfg_mod, "_local_login_present", lambda p: p == "codex")
+    resolved = ConfigResolver(config_path=str(config_path)).resolve()
+    assert "codex" in resolved.enabled_providers
+    assert "claude" not in resolved.enabled_providers
+
+    # 没登录文件 → 默认关
+    monkeypatch.setattr(cfg_mod, "_local_login_present", lambda p: False)
+    resolved = ConfigResolver(config_path=str(config_path)).resolve()
+    assert "codex" not in resolved.enabled_providers
+
+    # 用户手动关掉要能覆盖自动检测
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({"providers": {"codex": {"enabled": False}}}, f)
+    monkeypatch.setattr(cfg_mod, "_local_login_present", lambda p: True)
+    assert "codex" not in ConfigResolver(config_path=str(config_path)).resolve().enabled_providers
 
 
 def test_config_resolver_openrouter_admin_key(tmp_path, monkeypatch):
