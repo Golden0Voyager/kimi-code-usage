@@ -21,6 +21,7 @@ def clean_env(monkeypatch):
         "OPENAI_BASE_URL",
         "ANTHROPIC_BASE_URL",
         "OPENROUTER_BASE_URL",
+        "KIMI_MONTHLY_USAGE",
     ]:
         monkeypatch.delenv(key, raising=False)
     yield
@@ -328,3 +329,31 @@ def test_config_resolver_days_window(tmp_path):
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump({"general": {"daysWindow": 100}}, f)
     assert ConfigResolver(config_path=str(config_path)).resolve().days_window == 30
+
+
+def test_config_resolver_kimi_monthly_defaults_off(tmp_path):
+    config_path = tmp_path / "config.json"
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({"general": {"refreshIntervalMinutes": 5}}, f)
+
+    assert ConfigResolver(config_path=str(config_path)).resolve().kimi_monthly is False
+
+
+def test_config_resolver_kimi_monthly_from_json_and_env(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    monkeypatch.delenv("KIMI_MONTHLY_USAGE", raising=False)
+
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({"general": {"kimiMonthly": True}}, f)
+    assert ConfigResolver(config_path=str(config_path)).resolve().kimi_monthly is True
+
+    # 显式 false 不被 env 覆盖
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({"general": {"kimiMonthly": False}}, f)
+    monkeypatch.setenv("KIMI_MONTHLY_USAGE", "1")
+    assert ConfigResolver(config_path=str(config_path)).resolve().kimi_monthly is False
+
+    # 未写 kimiMonthly 时才回落到 env
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({"general": {}}, f)
+    assert ConfigResolver(config_path=str(config_path)).resolve().kimi_monthly is True
