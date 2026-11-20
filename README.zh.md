@@ -32,7 +32,7 @@
 
 **统一前提：** 在环境变量或 `.env` 文件中设置 `KIMI_API_KEY`（[Kimi Coding Plan](https://api.kimi.com/coding/v1) API Key，格式 `sk-kimi-xxx`）。
 
-> 月度会员额度为可选增强功能。在交互模式中，如果已安装的 Kimi WebBridge daemon 尚未运行，`kimi-usage` 每次启动都会询问是否启动它；拒绝只影响月度额度。浏览器扩展仍须保持连接且 Kimi 必须已登录；月度额度不可用时，周用量和 5 小时用量仍会正常显示。
+> **月度会员额度默认关闭。** 开启后每次运行会多花约 2.5 秒：`kimi-usage` 通过 WebBridge 驱动 Kimi 订阅页，从 DOM 里抓额度卡片。在 `~/.kimi-usage/config.json` 里设 `"kimiMonthly": true`，或设置 `KIMI_MONTHLY_USAGE=1` 开启。开启后若已安装的 WebBridge daemon 未运行，交互模式每次启动会询问是否启动；浏览器扩展须保持连接且 Kimi 必须已登录。周用量和 5 小时用量不受此开关影响。
 
 > ChatGPT Plus 用量读取本机 Codex 认证文件。接口返回 401 后会自动刷新 access token 并重试一次；认证仍失败时请运行 `codex login`。
 
