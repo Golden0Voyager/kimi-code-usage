@@ -44,13 +44,16 @@ L_EN = {
 }
 
 _SHORT = {
-    "anthropic": "Anthropic",
+    "anthropic": "Anthropic API",
     "openai": "OpenAI API",
     "openrouter": "Openrouter",
     "kimi": "Kimi",
     "codex": "ChatGPT+",
     "claude": "Claude",
 }
+
+#: 提示语里用的人类可读名 —— 去掉 " API" 后缀，避免 "Anthropic API API key"。
+_PROMPT_NAME = {p: name.replace(" API", "") for p, name in _SHORT.items()}
 
 
 L_ZH = {
@@ -298,9 +301,9 @@ def _render_setting_view(
         state = ("on" if on else "off") if not lang_zh else ("开" if on else "关")
         if p in API_OPT_IN_PROVIDERS:
             key_hint = "key ✓" if has_key else ("no key" if not lang_zh else "无 key")
-            line = f"{cursor} {icon} [{num}] {short:<11} {state:<3} {key_hint}"
+            line = f"{cursor} {icon} [{num}] {short:<13} {state:<3} {key_hint}"
         else:
-            line = f"{cursor} {icon} [{num}] {short:<11} {state}"
+            line = f"{cursor} {icon} [{num}] {short:<13} {state}"
         if i == settings_cursor:
             text.append(line, style="bold reverse")
         elif p in visible_providers:
@@ -311,7 +314,7 @@ def _render_setting_view(
 
     text.append("\n", style="bold")
     if key_edit is not None:
-        short = _SHORT.get(key_edit, key_edit[:4].title())
+        short = _PROMPT_NAME.get(key_edit, key_edit[:4].title())
         masked = "•" * len(key_buffer)
         if lang_zh:
             text.append(f"  粘贴 {short} 的 API key（Enter 保存，Esc 取消）\n", style="bold yellow")
