@@ -113,7 +113,8 @@ async def test_fetch_openai_usage_requires_org_admin():
     with patch("aiohttp.ClientSession", return_value=mock_session):
         with pytest.raises(Exception) as exc:
             await fetch_openai_usage("regular-key", "https://api.openai.com")
-        assert "Requires Org Admin Key" in str(exc.value)
+        assert "Org Admin API key" in str(exc.value)
+        assert "OPENAI_ENABLED=false" in str(exc.value)
 
 @pytest.mark.asyncio
 async def test_fetch_openai_usage_api_error():
