@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
+from typing import Any
 
 from kimi_code_usage.config import AppConfig
 
@@ -86,10 +87,14 @@ async def dispatch_all(config: AppConfig) -> tuple[dict[str, list[ProviderUsage]
         if not p_conf or not p_conf.api_key or not p_conf.base_url:
             return provider_name, None, "Not configured"
 
+        kwargs: dict[str, Any] = {"management_key": p_conf.management_key}
+        if provider_name == "kimi":
+            # 月度额度走 WebBridge（开标签页 + 等加载，约 2.5s），默认不查
+            kwargs["include_monthly"] = config.kimi_monthly
         try:
             # 10s timeout
             res = await asyncio.wait_for(
-                fetch_func(p_conf.api_key, p_conf.base_url, management_key=p_conf.management_key),
+                fetch_func(p_conf.api_key, p_conf.base_url, **kwargs),
                 timeout=10.0
             )
             return provider_name, res, None
