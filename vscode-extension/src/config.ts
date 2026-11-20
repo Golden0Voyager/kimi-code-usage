@@ -7,6 +7,8 @@ import {
   type ThresholdSettings,
 } from './types';
 import { SENSITIVITY_THRESHOLDS } from './pace';
+import type { ProviderId } from './providers/types';
+import { getProvider, isProviderId, PROVIDER_IDS } from './providers/registry';
 
 export function sanitizePercentThreshold(value: number | undefined, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
@@ -110,4 +112,78 @@ export async function resolveApiKey(): Promise<string> {
   if (process.env.KIMI_CODING_API_KEY) return process.env.KIMI_CODING_API_KEY;
   if (process.env.KIMI_API_KEY) return process.env.KIMI_API_KEY;
   return '';
+}
+
+export interface ProviderSettings {
+  enabled: boolean;
+  /** Empty string means unconfigured. */
+  apiKey: string;
+  baseUrl: string;
+}
+
+const KEY_FOR: Record<ProviderId, { apiKey: string; baseUrl: string; enabled: string }> = {
+  kimi: { apiKey: 'apiKey', baseUrl: 'baseUrl', enabled: 'kimiEnabled' },
+  openrouter: {
+    apiKey: 'openrouterApiKey',
+    baseUrl: 'openrouterBaseUrl',
+    enabled: 'openrouterEnabled',
+  },
+  anthropic: {
+    apiKey: 'anthropicApiKey',
+    baseUrl: 'anthropicBaseUrl',
+    enabled: 'anthropicEnabled',
+  },
+  openai: { apiKey: 'openaiApiKey', baseUrl: 'openaiBaseUrl', enabled: 'openaiEnabled' },
+};
+
+/**
+ * Read one provider's flat settings. `apiKey` falls back to the provider's env
+ * var; `baseUrl` falls back to the spec default. Kimi keeps its legacy
+ * `.env`-scanning behaviour in `resolveApiKey`, which callers still use.
+ */
+export function readProviderSettings(cfg: vscode.WorkspaceConfiguration, id: ProviderId): ProviderSettings {
+  const keys = KEY_FOR[id];
+  const spec = getProvider(id).spec;
+  const configuredKey = cfg.get<string>(keys.apiKey, '');
+  const apiKey = configuredKey !== '' ? configuredKey : (process.env[spec.keyEnv] ?? '');
+  const configuredBase = cfg.get<string>(keys.baseUrl, '');
+  const baseUrl =
+    configuredBase !== '' ? configuredBase : (process.env[spec.baseUrlEnv] ?? spec.defaultBaseUrl);
+  const enabled = cfg.get<boolean>(keys.enabled, id === 'kimi');
+  return { enabled, apiKey, baseUrl };
+}
+
+export function readPrimaryProvider(cfg: vscode.WorkspaceConfiguration): ProviderId {
+  const raw = cfg.get<string>('primaryProvider', 'kimi');
+  return isProviderId(raw) ? raw : 'kimi';
+}
+
+/** Enabled provider ids with the primary provider always first. */
+export function enabledProviders(cfg: vscode.WorkspaceConfiguration): ProviderId[] {
+  const primary = readPrimaryProvider(cfg);
+  const res: ProviderId[] = [primary];
+  for (const id of PROVIDER_IDS) {
+    if (id === primary) continue;
+    if (readProviderSettings(cfg, id).enabled) res.push(id);
+  }
+  return res;
+}
+
+/**
+ * Write an API key (or empty string to clear) to user settings. Global, not
+ * Workspace: keys are personal credentials and must not land in the repo.
+ */
+export async function writeProviderApiKey(id: ProviderId, key: string): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration('kimiCodeUsage');
+  await cfg.update(KEY_FOR[id].apiKey, key, vscode.ConfigurationTarget.Global);
+}
+
+export async function writeProviderBaseUrl(id: ProviderId, baseUrl: string): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration('kimiCodeUsage');
+  await cfg.update(KEY_FOR[id].baseUrl, baseUrl, vscode.ConfigurationTarget.Global);
+}
+
+export async function setProviderEnabled(id: ProviderId, on: boolean): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration('kimiCodeUsage');
+  await cfg.update(KEY_FOR[id].enabled, on, vscode.ConfigurationTarget.Global);
 }
