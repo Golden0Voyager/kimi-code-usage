@@ -16,6 +16,11 @@ _KIMI_CLI_CREDENTIALS_PATH = os.path.expanduser("~/.kimi-code/credentials/kimi-c
 _KIMI_OAUTH_USAGES_URL = "https://api.kimi.com/coding/v1/usages"
 _OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS = 300
 
+# 认证成功、响应合法，但账号本身没有月度额度（managed 套餐只有 5h/7d 两个窗口）。
+# 调用方看到这个原因就不该再退到 WebBridge——订阅页同样读不到不存在的东西，
+# 而那次尝试要白等约 8 秒（navigate + 8 次 snapshot）。
+NO_MONTHLY_QUOTA = "response has no totalQuota"
+
 
 def _load_token_state() -> tuple[str | None, str]:
     """Read the Kimi Code CLI OAuth token, reporting why it is unusable.
@@ -97,14 +102,14 @@ async def fetch_monthly_usage_from_oauth(*, lang_zh: bool) -> tuple[ProviderUsag
         return None, f"request failed: {exc}"
 
     if not isinstance(payload, Mapping):
-        return None, "response has no totalQuota"
+        return None, NO_MONTHLY_QUOTA
     total = payload.get("totalQuota")
     if not isinstance(total, Mapping):
-        return None, "response has no totalQuota"
+        return None, NO_MONTHLY_QUOTA
     used = _to_int(total.get("used"))
     limit = _to_int(total.get("limit"))
     if used is None or limit is None or limit <= 0:
-        return None, "response has no totalQuota"
+        return None, NO_MONTHLY_QUOTA
 
     return ProviderUsage(
         provider="kimi",
