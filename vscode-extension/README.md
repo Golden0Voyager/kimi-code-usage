@@ -193,6 +193,7 @@ In the vastness of the code universe, your creative flow shouldn't be pulled dow
 - 🔌 **多 Provider 支持**：除 Kimi 外新增 OpenRouter / Anthropic / OpenAI，通过命令面板
   `Kimi Code Usage: Configure Providers` 交互式粘贴密钥即可启用；状态栏由
   `kimiCodeUsage.primaryProvider` 决定主显示，其余 provider 聚合在详情面板
+- 🆓 OpenRouter 免费模型日限额行（`Free Models`，按 UTC 日重置），与 CLI 同款
 - 🧪 覆盖率门禁：CI 强制执行 100% 语句 / 分支 / 函数 / 行覆盖率，回归会直接失败
 
 <details>
