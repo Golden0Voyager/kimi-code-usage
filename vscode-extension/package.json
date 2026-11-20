@@ -255,6 +255,7 @@
     "build": "npm run compile && npm run assets",
     "vscode:prepublish": "npm run build",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "lint": "eslint src --max-warnings 47",
     "format": "prettier --write src",
