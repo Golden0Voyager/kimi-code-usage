@@ -25,6 +25,9 @@ class AppConfig:
     visible_providers: list[str] | None = None
     or_metric: str = "requests"
     days_window: int = 30
+    # Kimi 月度额度走浏览器 WebBridge 路径：要开标签页 + 等加载，实测约 2.5s，
+    # 而且需要浏览器已登录 kimi.com。默认关，只查周用量 / 5 小时用量。
+    kimi_monthly: bool = False
 
     @property
     def enabled_providers(self) -> list[str]:
@@ -79,6 +82,14 @@ class ConfigResolver:
         if days_window not in (7, 14, 30, 60, 90):
             days_window = 30
         self.config.days_window = days_window
+
+        # Kimi 月度额度默认关：它比 API 路径贵一个数量级（开标签页 ~1.6s + 轮询）
+        # 且依赖浏览器登录态。需要时用 general.kimiMonthly 或 KIMI_MONTHLY_USAGE=1 打开。
+        kimi_monthly = general_data.get("kimiMonthly")
+        if kimi_monthly is None:
+            env_monthly = os.getenv("KIMI_MONTHLY_USAGE")
+            kimi_monthly = env_monthly is not None and env_monthly.lower() in ("1", "true", "yes")
+        self.config.kimi_monthly = bool(kimi_monthly)
 
         # 2. Setup providers
         all_providers = ["kimi", "openai", "anthropic", "openrouter", "codex", "claude"]
