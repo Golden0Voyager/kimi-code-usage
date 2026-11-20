@@ -469,6 +469,7 @@ def _enabled_visible_kimi_config():
         providers={"kimi": ProviderConfig(api_key="kimi-key", enabled=True)},
         provider_order=["kimi"],
         visible_providers=["kimi"],
+        kimi_monthly=True,
     )
 
 
@@ -490,6 +491,12 @@ def test_should_offer_webbridge_start_requires_enabled_visible_kimi():
     cfg.providers["kimi"].api_key = "kimi-key"
     cfg.visible_providers = None
     assert _should_offer_webbridge_start(cfg) is True
+
+
+def test_should_offer_webbridge_start_requires_opt_in():
+    cfg = _enabled_visible_kimi_config()
+    cfg.kimi_monthly = False
+    assert _should_offer_webbridge_start(cfg) is False
 
 
 @pytest.mark.parametrize("answer", [True, False])
