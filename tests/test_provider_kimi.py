@@ -758,3 +758,67 @@ async def test_monthly_usage_row_reports_both_sources_when_unavailable():
     assert row.unit == "text"
     assert "expired" in row.text_value
     assert "daemon is not running" in row.text_value
+
+
+def test_kimi_error_hint_chinese_messages():
+    assert "Kimi Code API 认证失败（401）" in _kimi_error_hint(401, zh=True)
+    # 未列举的状态码走兜底文案，而不是英文表。
+    assert _kimi_error_hint(500, zh=True) == "Kimi Code API 返回错误 500"
+
+
+@pytest.mark.asyncio
+async def test_fetch_kimi_usage_fallback_rejects_second_failure():
+    """404 → /usage 回退本身也失败时，报的是回退响应的状态码与响应体。"""
+    calls = []
+
+    def make_cm(status, body):
+        cm = AsyncMock()
+        cm.__aenter__ = AsyncMock(return_value=cm)
+        cm.__aexit__ = AsyncMock(return_value=None)
+        cm.status = status
+        cm.text = AsyncMock(return_value=body)
+        return cm
+
+    def mock_get(url, *a, **kw):
+        calls.append(url)
+        if len(calls) == 1:
+            return make_cm(404, "not found")
+        return make_cm(403, "nope")
+
+    mock_session = AsyncMock()
+    mock_session.get = mock_get
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("aiohttp.ClientSession", return_value=mock_session):
+        with pytest.raises(Exception) as exc:
+            await fetch_kimi_usage("test-key", "https://api.example.com/v1")
+
+    assert calls == [
+        "https://api.example.com/v1/usages",
+        "https://api.example.com/v1/usage",
+    ]
+    assert "403" in str(exc.value)
+    assert "nope" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_monthly_usage_row_records_oauth_failure_reason():
+    """OAuth 抛异常不能中断月度额度：原因要落进降级行，WebBridge 仍会被尝试。"""
+    from kimi_code_usage.providers.kimi import _monthly_usage_row
+
+    with (
+        patch(
+            "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_oauth",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ),
+        patch(
+            "kimi_code_usage.providers.kimi.fetch_monthly_usage_from_webbridge",
+            new=AsyncMock(side_effect=MonthlyUsageUnavailable("bridge down")),
+        ),
+    ):
+        row = await _monthly_usage_row()
+
+    assert row.unit == "text"
+    assert "OAuth: request failed: boom" in row.text_value
+    assert "bridge down" in row.text_value
