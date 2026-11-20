@@ -149,8 +149,10 @@ class ConfigResolver:
                     or os.getenv("OPENROUTER_ADMIN_KEY")
                 )
 
-            # Codex & Claude: default-off, read local auth files directly
-            if p in ("codex", "claude"):
+            # Codex, Claude & Anthropic: default-off, read local auth files directly.
+            # anthropic fetches the same Claude Code OAuth token as claude —
+            # it is a subscription-usage provider, not an sk-ant- API-key one.
+            if p in ("codex", "claude", "anthropic"):
                 enabled = p_data.get("enabled")
                 if enabled is None:
                     env_enabled: str | None = os.getenv(f"{p.upper()}_ENABLED", "").lower()
