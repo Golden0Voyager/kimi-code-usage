@@ -340,6 +340,15 @@ def test_run_cli(monkeypatch):
         run_cli()
 
 
+def test_run_cli_swallows_keyboard_interrupt(monkeypatch):
+    # Ctrl+C 必须静默退出：不捕获的话 asyncio.run 会把取消里的 CancelledError
+    # 串成 traceback 打到终端（用户实测路径）。
+    monkeypatch.setattr("sys.argv", ["prog"])
+
+    with patch("kimi_code_usage.main.asyncio.run", side_effect=KeyboardInterrupt):
+        run_cli()
+
+
 def test_main_guard_calls_run_cli():
     import asyncio
     import runpy
