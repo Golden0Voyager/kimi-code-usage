@@ -8,6 +8,9 @@
   **Anthropic**（`/api/oauth/usage`，5 小时 / 7 天窗口，仅接受 Claude Code OAuth 令牌）和
   **OpenAI**（组织用量 completions + costs，需要 Org Admin 密钥）三个适配器，
   忠实移植自 Python 版 `kimi-usage` CLI。
+- 🆓 **OpenRouter 免费模型日限额行**：读取 `/auth/key` 的 `free_model_daily_requests`，
+  显示 `Free Models  679/1000 free requests left today (resets at UTC 0)`
+  （限额按 UTC 日重置、失败请求也计配额，见上游 CLI 同款功能）。
 - 🗝️ **交互式密钥配置**：新命令 `Kimi Code Usage: Configure Providers`（`kimiCodeUsage.configureProviders`）
   — QuickPick 选择 provider，密码输入框粘贴密钥，可自定义 Base URL，写入用户设置后自动刷新。
 - 🎛️ **主 Provider 制状态栏**：新增 `kimiCodeUsage.primaryProvider`（默认 `kimi`），

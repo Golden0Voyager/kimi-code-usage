@@ -177,5 +177,7 @@
   "{0} configured.": "{0}이(가) 구성되었습니다.",
   "Set the API key via \"Kimi Code Usage: Configure Providers\".": "\"Kimi Code Usage: Configure Providers\" 명령으로 API 키를 설정하세요.",
   "This key cannot read Anthropic usage: /api/oauth/usage only accepts a Claude Code OAuth token. Use the claude provider for subscription quotas.": "이 키는 Anthropic 사용량을 읽을 수 없습니다: /api/oauth/usage는 Claude Code OAuth 토큰만 허용합니다. 구독 할당량은 claude 공급자를 사용하세요.",
-  "OpenAI organization usage API returned 401/403. This endpoint requires an Org Admin API key (platform.openai.com → Settings → API Keys, role: Org Admin) — a regular sk-... project key is not enough. ChatGPT Plus/Pro subscriptions have no usage API at all; disable this provider with openaiEnabled=false.": "OpenAI 조직 사용량 API가 401/403을 반환했습니다. 이 엔드포인트에는 조직 관리자 API 키가 필요합니다(platform.openai.com → Settings → API Keys, 역할: Org Admin). 일반 sk-... 프로젝트 키로는 부족합니다. ChatGPT Plus/Pro 구독에는 사용량 API가 없습니다. openaiEnabled=false로 이 공급자를 비활성화하세요."
+  "OpenAI organization usage API returned 401/403. This endpoint requires an Org Admin API key (platform.openai.com → Settings → API Keys, role: Org Admin) — a regular sk-... project key is not enough. ChatGPT Plus/Pro subscriptions have no usage API at all; disable this provider with openaiEnabled=false.": "OpenAI 조직 사용량 API가 401/403을 반환했습니다. 이 엔드포인트에는 조직 관리자 API 키가 필요합니다(platform.openai.com → Settings → API Keys, 역할: Org Admin). 일반 sk-... 프로젝트 키로는 부족합니다. ChatGPT Plus/Pro 구독에는 사용량 API가 없습니다. openaiEnabled=false로 이 공급자를 비활성화하세요.",
+  "Free Models": "무료 모델",
+  "{0}/{1} free requests left today (resets at UTC 0)": "오늘 무료 요청 {0}/{1} 남음 (UTC 0시 초기화)"
 }

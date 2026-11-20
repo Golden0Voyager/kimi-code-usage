@@ -3,6 +3,10 @@ import * as https from 'https';
 
 vi.mock('https', () => ({ get: vi.fn() }));
 
+vi.mock('../i18n', () => ({
+  t: (msg: string, ...args: unknown[]) => msg.replace(/\{(\d+)\}/g, (_, i) => String(args[Number(i)] ?? '')),
+}));
+
 import { baseUrlV1, moneyRow, openrouterProvider, rateLimitText, usageText } from './openrouter';
 
 const KEY = 'sk-or-test';
@@ -273,4 +277,46 @@ describe('openrouterProvider.fetch', () => {
     const rows = await openrouterProvider.fetch(KEY, BASE);
     expect(rows.map((r) => r.label)).toEqual(['Credits', 'Usage']);
   });
+});
+
+describe('free-model daily quota row', () => {
+  beforeEach(() => {
+    vi.mocked(https.get).mockReset();
+    routes = {};
+    installRoutes();
+  });
+
+  const keyBodyWithFree = (free: unknown) =>
+    JSON.stringify({
+      data: { usage: 0, limit: null, free_model_daily_requests: free },
+    });
+
+  it('renders remaining/limit with the UTC reset note', async () => {
+    routes[KEY_URL] = {
+      status: 200,
+      body: keyBodyWithFree({ used: 321, limit: 1000, remaining: 679 }),
+    };
+    const rows = await openrouterProvider.fetch(KEY, BASE);
+    const row = rows.find((r) => r.label === 'Free Models');
+    expect(row?.text_value).toBe('679/1000 free requests left today (resets at UTC 0)');
+  });
+
+  it('computes remaining when absent and clamps at zero', async () => {
+    routes[KEY_URL] = { status: 200, body: keyBodyWithFree({ used: 40, limit: 50 }) };
+    let rows = await openrouterProvider.fetch(KEY, BASE);
+    expect(rows.find((r) => r.label === 'Free Models')?.text_value).toContain('10/50');
+
+    routes[KEY_URL] = { status: 200, body: keyBodyWithFree({ used: 1008, limit: 1000 }) };
+    rows = await openrouterProvider.fetch(KEY, BASE);
+    expect(rows.find((r) => r.label === 'Free Models')?.text_value).toContain('0/1000');
+  });
+
+  it.each([null, '1000', [1, 2], { used: 10 }, { limit: 1000 }, { used: 'x', limit: 1000 }])(
+    'omits the row for unusable data: %j',
+    async (free) => {
+      routes[KEY_URL] = { status: 200, body: keyBodyWithFree(free) };
+      const rows = await openrouterProvider.fetch(KEY, BASE);
+      expect(rows.find((r) => r.label === 'Free Models')).toBeUndefined();
+    },
+  );
 });
