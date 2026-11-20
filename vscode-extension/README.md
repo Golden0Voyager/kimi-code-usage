@@ -189,9 +189,11 @@ In the vastness of the code universe, your creative flow shouldn't be pulled dow
 
 完整历史见 [CHANGELOG.md](CHANGELOG.md) · Full history: [CHANGELOG.md](CHANGELOG.md)
 
-**v0.2.1** — *Coverage Harness*（最新 / latest）
+**v0.2.1** — *Multi-Provider & Coverage Harness*（最新 / latest）
+- 🔌 **多 Provider 支持**：除 Kimi 外新增 OpenRouter / Anthropic / OpenAI，通过命令面板
+  `Kimi Code Usage: Configure Providers` 交互式粘贴密钥即可启用；状态栏由
+  `kimiCodeUsage.primaryProvider` 决定主显示，其余 provider 聚合在详情面板
 - 🧪 覆盖率门禁：CI 强制执行 100% 语句 / 分支 / 函数 / 行覆盖率，回归会直接失败
-- 本版本无用户可见的行为变化；此前覆盖率无法本地复现，现已补齐
 
 <details>
 <summary>v0.2.0 — <em>Extra Usage &amp; Provider Rows</em></summary>
