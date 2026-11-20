@@ -5,6 +5,25 @@ from pathlib import Path
 
 DEFAULT_CONFIG_PATH = Path.home() / ".kimi-usage" / "config.json"
 
+#: 订阅类 provider：凭据是本机登录文件，不是 API key。
+SUBSCRIPTION_PROVIDERS = ("codex", "claude")
+#: API 直连类 provider：需要用户自己提供 key，默认关，设置页显式开启。
+API_OPT_IN_PROVIDERS = ("openai", "anthropic")
+
+
+def _local_login_present(provider: str) -> bool:
+    """Cheap file-existence probe for a subscription login.
+
+    Must stay import-free: ``config`` is loaded on every run, so importing the
+    provider modules here (cloudscraper ≈100ms) would defeat the lazy imports.
+    """
+    home = Path.home()
+    if provider == "codex":
+        return (home / ".codex" / "auth.json").exists()
+    if provider == "claude":
+        return (home / ".claude" / ".credentials.json").exists()
+    return False
+
 
 @dataclass
 class ProviderConfig:
@@ -149,16 +168,25 @@ class ConfigResolver:
                     or os.getenv("OPENROUTER_ADMIN_KEY")
                 )
 
-            # Codex, Claude & Anthropic: default-off, read local auth files directly.
-            # anthropic fetches the same Claude Code OAuth token as claude —
-            # it is a subscription-usage provider, not an sk-ant- API-key one.
-            if p in ("codex", "claude", "anthropic"):
+            # 三类 provider 三种默认：
+            #   订阅类（codex/claude）—— 检测到本机登录就默认开，可手动关
+            #   API 直连（openai/anthropic）—— 默认关，设置页里显式开启并粘贴 key
+            #   kimi/openrouter —— 有 key 即开（零配置）
+            if p in SUBSCRIPTION_PROVIDERS:
                 enabled = p_data.get("enabled")
                 if enabled is None:
-                    env_enabled: str | None = os.getenv(f"{p.upper()}_ENABLED", "").lower()
-                    enabled = env_enabled in ("true", "1", "yes")
+                    env_enabled = os.getenv(f"{p.upper()}_ENABLED")
+                    if env_enabled is not None:
+                        enabled = env_enabled.lower() in ("true", "1", "yes")
+                    else:
+                        enabled = _local_login_present(p)
                 if enabled:
                     api_key = "enabled"  # Sentinel: passes enabled_providers check
+            elif p in API_OPT_IN_PROVIDERS:
+                enabled = p_data.get("enabled")
+                if enabled is None:
+                    env_enabled = os.getenv(f"{p.upper()}_ENABLED")
+                    enabled = env_enabled is not None and env_enabled.lower() in ("true", "1", "yes")
             else:
                 # Get Enabled status from JSON, else ENV, default True
                 enabled = p_data.get("enabled")
@@ -199,6 +227,43 @@ class ConfigResolver:
         self.config.provider_order = final_order
 
         return self.config
+
+
+def save_provider_settings(
+    provider: str,
+    *,
+    enabled: bool | None = None,
+    api_key: str | None = None,
+    config_path: str | Path | None = None,
+) -> None:
+    """Persist one provider's ``enabled`` / ``apiKey`` into the JSON config.
+
+    Used by the TUI settings page so advanced users can switch the opt-in API
+    providers on and paste a key without hand-editing the file. Everything else
+    in the file is preserved.
+    """
+    path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    data: dict = {}
+    if path.exists():
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except Exception:
+            data = {}
+
+    providers = data.get("providers", {})
+    entry = providers.get(provider, {})
+    if enabled is not None:
+        entry["enabled"] = enabled
+    if api_key is not None:
+        entry["apiKey"] = api_key
+    providers[provider] = entry
+    data["providers"] = providers
+
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
 
 
 def save_theme(
