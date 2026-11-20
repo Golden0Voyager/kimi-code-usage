@@ -373,7 +373,12 @@ def _kimi_error_hint(status: int, zh: bool | None = None) -> str:
     }
     return hints.get(status, f"Kimi Code API returned error {status}")
 
-async def fetch_kimi_usage(api_key: str, base_url: str, management_key: str | None = None) -> list[ProviderUsage]:
+async def fetch_kimi_usage(
+    api_key: str,
+    base_url: str,
+    management_key: str | None = None,
+    include_monthly: bool = False,
+) -> list[ProviderUsage]:
     url = base_url.rstrip("/") + "/usages"
     headers = _kimi_headers(api_key)
     async with aiohttp.ClientSession() as session:
@@ -412,4 +417,6 @@ async def fetch_kimi_usage(api_key: str, base_url: str, management_key: str | No
             unit="%"
         ))
     res.extend(_extra_usage_rows(payload, lang_zh=_KIMI_LANG_IS_ZH))
+    if not include_monthly:
+        return res
     return [await _monthly_usage_row(), *res]
