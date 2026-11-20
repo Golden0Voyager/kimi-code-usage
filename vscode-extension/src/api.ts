@@ -445,11 +445,8 @@ export function toInt(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-let userAgentVersion = '0.1.9';
-
-export function setUserAgentVersion(version: string): void {
-  userAgentVersion = version;
-}
+export { setUserAgentVersion } from './userAgent';
+import { getUserAgentVersion } from './userAgent';
 
 export function isLinkIssue(err: unknown): boolean {
   const raw = String(err ?? '').toLowerCase();
@@ -519,7 +516,7 @@ export function fetchMonthlyUsageViaOAuth(
         {
           headers: {
             Authorization: `Bearer ${token}`,
-            'User-Agent': `kimi-usage-vscode/${userAgentVersion}`,
+            'User-Agent': `kimi-usage-vscode/${getUserAgentVersion()}`,
           },
           timeout: 10000,
         },
@@ -565,7 +562,7 @@ export function fetchUsage(baseUrl: string, apiKey: string): Promise<unknown> {
       {
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          'User-Agent': `kimi-usage-vscode/${userAgentVersion}`,
+          'User-Agent': `kimi-usage-vscode/${getUserAgentVersion()}`,
         },
         timeout: 10000,
       },

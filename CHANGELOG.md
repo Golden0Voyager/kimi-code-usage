@@ -8,8 +8,19 @@ git tags.
 
 ## [0.2.1] — 2026-11-20
 
-No user-visible behaviour change. This release exists so the coverage work ships
-as its own version instead of being buried in the next feature drop.
+The headline change is the VS Code extension gaining **multi-provider support**:
+OpenRouter, Anthropic and OpenAI adapters (faithful ports of this package's
+provider modules), an interactive `Configure Providers` command for pasting API
+keys, and a primary-provider status bar with the rest aggregated in the details
+view. All new UI strings are translated into the extension's 10 languages.
+
+### Added
+
+- VS Code extension: OpenRouter / Anthropic / OpenAI providers with flat
+  per-provider settings (`openrouterApiKey`, `anthropicEnabled`, …), a
+  `kimiCodeUsage.primaryProvider` setting, provider-prefixed API cache keys,
+  and unified `HTTP <status>` error strings so 401/429/5xx map to the right
+  status-bar presentation.
 
 ### Changed
 

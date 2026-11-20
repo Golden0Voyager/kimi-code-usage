@@ -17,7 +17,7 @@ afterEach(() => {
 describe('fetchUsageCached', () => {
   it('returns fresh payload and fromCache=false on first call', async () => {
     const spy = vi.spyOn(api, 'fetchUsage').mockResolvedValue(fakePayload);
-    const result = await fetchUsageCached('https://api.example.com', 'key-abcdef-123456');
+    const result = await fetchUsageCached('kimi', 'https://api.example.com', 'key-abcdef-123456');
     expect(result.payload).toBe(fakePayload);
     expect(result.fromCache).toBe(false);
     expect(spy).toHaveBeenCalledTimes(1);
@@ -25,8 +25,8 @@ describe('fetchUsageCached', () => {
 
   it('returns cached payload within TTL', async () => {
     const spy = vi.spyOn(api, 'fetchUsage').mockResolvedValue(fakePayload);
-    await fetchUsageCached('https://api.example.com', 'k1');
-    const second = await fetchUsageCached('https://api.example.com', 'k1');
+    await fetchUsageCached('kimi', 'https://api.example.com', 'k1');
+    const second = await fetchUsageCached('kimi', 'https://api.example.com', 'k1');
     expect(second.fromCache).toBe(true);
     expect(spy).toHaveBeenCalledTimes(1);
   });
@@ -34,18 +34,18 @@ describe('fetchUsageCached', () => {
   it('refetches after TTL expires', async () => {
     vi.useFakeTimers();
     const spy = vi.spyOn(api, 'fetchUsage').mockResolvedValue(fakePayload);
-    await fetchUsageCached('https://api.example.com', 'k1');
+    await fetchUsageCached('kimi', 'https://api.example.com', 'k1');
     vi.advanceTimersByTime(61_000);
-    const second = await fetchUsageCached('https://api.example.com', 'k1');
+    const second = await fetchUsageCached('kimi', 'https://api.example.com', 'k1');
     expect(second.fromCache).toBe(false);
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
   it('clearCache forces refetch', async () => {
     const spy = vi.spyOn(api, 'fetchUsage').mockResolvedValue(fakePayload);
-    await fetchUsageCached('https://api.example.com', 'k1');
+    await fetchUsageCached('kimi', 'https://api.example.com', 'k1');
     clearCache();
-    await fetchUsageCached('https://api.example.com', 'k1');
+    await fetchUsageCached('kimi', 'https://api.example.com', 'k1');
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
@@ -56,8 +56,8 @@ describe('fetchUsageCached', () => {
     });
     const spy = vi.spyOn(api, 'fetchUsage').mockReturnValue(pending);
 
-    const first = fetchUsageCached('https://api.example.com', 'k1');
-    const second = fetchUsageCached('https://api.example.com', 'k1');
+    const first = fetchUsageCached('kimi', 'https://api.example.com', 'k1');
+    const second = fetchUsageCached('kimi', 'https://api.example.com', 'k1');
     expect(spy).toHaveBeenCalledTimes(1);
 
     resolveFetch(fakePayload);
@@ -74,7 +74,7 @@ describe('cacheStats', () => {
 
   it('reports hasEntry=true after fetch', async () => {
     vi.spyOn(api, 'fetchUsage').mockResolvedValue(fakePayload);
-    await fetchUsageCached('https://api.example.com', 'k1');
+    await fetchUsageCached('kimi', 'https://api.example.com', 'k1');
     const stats = cacheStats();
     expect(stats.hasEntry).toBe(true);
   });
@@ -83,7 +83,7 @@ describe('cacheStats', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2025, 0, 1, 12, 0, 0));
     vi.spyOn(api, 'fetchUsage').mockResolvedValue(fakePayload);
-    await fetchUsageCached('https://api.example.com', 'k1');
+    await fetchUsageCached('kimi', 'https://api.example.com', 'k1');
 
     const stats = cacheStats();
     expect(stats.hasEntry).toBe(true);
@@ -96,11 +96,11 @@ describe('cacheStats', () => {
     vi.useFakeTimers();
     const spy = vi.spyOn(api, 'fetchUsage').mockResolvedValue(fakePayload);
 
-    await fetchUsageCached('https://api.example.com', 'k1');
+    await fetchUsageCached('kimi', 'https://api.example.com', 'k1');
     clearCache();
     vi.advanceTimersByTime(1000);
 
-    await fetchUsageCached('https://api.example.com', 'k1');
+    await fetchUsageCached('kimi', 'https://api.example.com', 'k1');
     expect(spy).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
   });
@@ -110,9 +110,9 @@ describe('cacheStats', () => {
     const pending = new Promise((resolve) => {
       resolveFetch = resolve;
     });
-    const spy = vi.spyOn(api, 'fetchUsage').mockReturnValue(pending);
+    vi.spyOn(api, 'fetchUsage').mockReturnValue(pending);
 
-    const promise = fetchUsageCached('https://api.example.com', 'k1');
+    const promise = fetchUsageCached('kimi', 'https://api.example.com', 'k1');
     clearCache();
     resolveFetch(fakePayload);
     await promise;

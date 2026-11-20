@@ -13,6 +13,7 @@ vi.mock('vscode', () => ({
     this.value = text;
     this.isTrusted = false;
   }),
+  QuickPickItemKind: { Separator: -1, Default: 0 },
   window: {
     createStatusBarItem: vi.fn(() => ({
       show: vi.fn(),
@@ -76,6 +77,8 @@ vi.mock('vscode', () => ({
   l10n: { t: (msg: string) => msg },
 }));
 
+vi.mock('https', () => ({ get: vi.fn() }));
+
 vi.mock('./apiCache', () => ({
   fetchUsageCached: vi.fn(() => Promise.resolve({ payload: { usage: { used: 50, limit: 100 } } })),
 }));
@@ -84,6 +87,13 @@ vi.mock('./config', () => ({
   resolveApiKey: vi.fn(() => Promise.resolve('sk-test-key')),
   readThresholdSettings: vi.fn(() => ({ weekly: 20, fiveHours: 20 })),
   readPaceThresholds: vi.fn(() => ({ fast: 1.2, slow: 0.8 })),
+  readPrimaryProvider: vi.fn(() => 'kimi'),
+  readProviderSettings: vi.fn(() => ({
+    enabled: false,
+    apiKey: '',
+    baseUrl: 'https://api.kimi.com/coding/v1',
+  })),
+  enabledProviders: vi.fn(() => ['kimi']),
 }));
 
 vi.mock('./pace', () => ({
@@ -144,9 +154,12 @@ import {
   getStatusBarItem,
   refresh,
   showDetails,
+  getLastProviderItems,
+  nonKimiStatusText,
 } from './statusBar';
-import { resolveApiKey } from './config';
+import * as https from 'https';
 import { fetchUsageCached } from './apiCache';
+import { resolveApiKey, readPrimaryProvider, readProviderSettings, enabledProviders } from './config';
 import { parsePayload, isLinkIssue, isLowRemaining } from './api';
 
 // ---- Reset module-level state between tests ----
@@ -156,14 +169,12 @@ beforeEach(() => {
   stopInterval();
   setSnapshotStore(undefined as any);
   setNotifier(undefined as any);
+  getLastProviderItems().clear();
   // Reset the internally tracked statusBarItem by disposing + recreating
   const existing = getStatusBarItem();
   if (existing) {
     existing.dispose();
   }
-  // Force statusBarItem to undefined by creating a disposable that cleans up
-  // Unfortunately we cannot directly set module-level variables
-  // Instead, tests that need a fresh item call createStatusBarItem() themselves
 });
 
 afterEach(() => {
@@ -207,7 +218,7 @@ describe('createStatusBarItem', () => {
 
   it('disposes existing item before creating new one', () => {
     const first = createStatusBarItem();
-    const second = createStatusBarItem();
+    createStatusBarItem();
     expect(first.dispose).toHaveBeenCalled();
   });
 
@@ -311,11 +322,8 @@ describe('stopInterval', () => {
     spy.mockRestore();
   });
 
-  it('does nothing when no interval is running', () => {
-    const spy = vi.spyOn(global, 'clearInterval');
-    stopInterval();
-    expect(spy).not.toHaveBeenCalled();
-    spy.mockRestore();
+  it('clears safely when no interval is running', () => {
+    expect(() => stopInterval()).not.toThrow();
   });
 });
 
@@ -1075,5 +1083,320 @@ describe('refresh without statusBarItem', () => {
     const { refresh, getStatusBarItem } = await import('./statusBar');
     expect(getStatusBarItem()).toBeUndefined();
     await refresh();
+  });
+});
+
+// ===================================================================
+// Multi-provider refresh
+// ===================================================================
+
+const OR_BASE = 'https://openrouter.ai/api';
+const OR_KEY_URL = `${OR_BASE}/v1/auth/key`;
+const OR_CREDITS_URL = `${OR_BASE}/v1/credits`;
+const ANTHROPIC_URL = 'https://api.anthropic.com/api/oauth/usage';
+
+let orRoutes: Record<string, { status: number; body: string }>;
+
+function installOrRoutes() {
+  vi.mocked(https.get).mockImplementation((url: unknown, _opts: unknown, cb: (r: unknown) => void) => {
+    const r = orRoutes[String(url)] ?? { status: 500, body: 'unrouted' };
+    cb({
+      statusCode: r.status,
+      on: (event: string, fn: (chunk?: string) => void) => {
+        if (event === 'data') fn(r.body);
+        if (event === 'end') fn();
+      },
+    });
+    return { on: vi.fn(), destroy: vi.fn() } as unknown as ReturnType<typeof https.get>;
+  });
+}
+
+const OR_SETTINGS = { enabled: true, apiKey: 'sk-or', baseUrl: OR_BASE };
+
+function openrouterKeyBody(overrides: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    data: {
+      usage: 2.5,
+      limit: 10,
+      is_free_tier: false,
+      usage_daily: 1,
+      usage_weekly: 2,
+      usage_monthly: 3,
+      ...overrides,
+    },
+  });
+}
+
+describe('multi-provider refresh', () => {
+  beforeEach(() => {
+    vi.mocked(https.get).mockReset();
+    orRoutes = {};
+    installOrRoutes();
+  });
+
+  it('shows the OpenRouter money summary as primary', async () => {
+    vi.mocked(readPrimaryProvider).mockReturnValue('openrouter');
+    vi.mocked(enabledProviders).mockReturnValue(['openrouter']);
+    vi.mocked(readProviderSettings).mockReturnValue(OR_SETTINGS as never);
+    orRoutes[OR_KEY_URL] = { status: 200, body: openrouterKeyBody() };
+    orRoutes[OR_CREDITS_URL] = {
+      status: 200,
+      body: JSON.stringify({ data: { total_credits: 100, total_usage: 30 } }),
+    };
+
+    createStatusBarItem();
+    await refresh();
+    const item = getStatusBarItem()!;
+    expect(item.text).toBe('$(cloud) OpenRouter: $70.00 left');
+    const tooltip = item.tooltip as unknown as { value: string };
+    expect(tooltip.value).toContain('Credits: 70% left');
+    expect(tooltip.value).toContain('Usage: Daily: $1.0000');
+  });
+
+  it('shows dollars used when the credits endpoint is unavailable', async () => {
+    vi.mocked(readPrimaryProvider).mockReturnValue('openrouter');
+    vi.mocked(enabledProviders).mockReturnValue(['openrouter']);
+    vi.mocked(readProviderSettings).mockReturnValue(OR_SETTINGS as never);
+    orRoutes[OR_KEY_URL] = { status: 200, body: openrouterKeyBody({ limit: null }) };
+    orRoutes[OR_CREDITS_URL] = { status: 402, body: 'no' };
+
+    createStatusBarItem();
+    await refresh();
+    const item = getStatusBarItem()!;
+    expect(item.text).toBe('$(cloud) OpenRouter: $2.50 used');
+  });
+
+  it('shows a bare cloud label for window-less percent providers', async () => {
+    vi.mocked(readPrimaryProvider).mockReturnValue('anthropic');
+    vi.mocked(enabledProviders).mockReturnValue(['anthropic']);
+    vi.mocked(readProviderSettings).mockReturnValue({
+      enabled: true,
+      apiKey: 'token',
+      baseUrl: 'https://api.anthropic.com',
+    } as never);
+    orRoutes[ANTHROPIC_URL] = {
+      status: 200,
+      body: JSON.stringify({ five_hour: { utilization: 0.6 } }),
+    };
+
+    createStatusBarItem();
+    await refresh();
+    const item = getStatusBarItem()!;
+    expect(item.text).toBe('$(cloud) Anthropic: --');
+  });
+
+  it('shows the missing-key state for a non-kimi primary without a key', async () => {
+    vi.mocked(readPrimaryProvider).mockReturnValue('openrouter');
+    vi.mocked(enabledProviders).mockReturnValue(['openrouter']);
+    vi.mocked(readProviderSettings).mockReturnValue({
+      enabled: true,
+      apiKey: '',
+      baseUrl: OR_BASE,
+    } as never);
+
+    createStatusBarItem();
+    await refresh();
+    const item = getStatusBarItem()!;
+    expect(item.text).toBe('$(key) API Key Missing');
+    expect(item.tooltip).toBe('Set the API key via "Kimi Code Usage: Configure Providers".');
+  });
+
+  it('shows the server-error presentation when the primary provider fails with 5xx', async () => {
+    vi.mocked(readPrimaryProvider).mockReturnValue('openrouter');
+    vi.mocked(enabledProviders).mockReturnValue(['openrouter']);
+    vi.mocked(readProviderSettings).mockReturnValue(OR_SETTINGS as never);
+    orRoutes[OR_KEY_URL] = { status: 500, body: 'broken' };
+
+    createStatusBarItem();
+    await refresh();
+    const item = getStatusBarItem()!;
+    expect(item.text).toBe('$(server-process) Server Error Short');
+  });
+
+  it('appends secondary provider sections to the kimi tooltip', async () => {
+    vi.mocked(readPrimaryProvider).mockReturnValue('kimi');
+    vi.mocked(enabledProviders).mockReturnValue(['kimi', 'openrouter']);
+    vi.mocked(readProviderSettings).mockImplementation(((_cfg: unknown, id: string) =>
+      id === 'openrouter'
+        ? OR_SETTINGS
+        : { enabled: true, apiKey: '', baseUrl: 'https://api.kimi.com/coding/v1' }) as never);
+    orRoutes[OR_KEY_URL] = { status: 200, body: openrouterKeyBody() };
+    orRoutes[OR_CREDITS_URL] = {
+      status: 200,
+      body: JSON.stringify({ data: { total_credits: 100, total_usage: 30 } }),
+    };
+
+    createStatusBarItem();
+    await refresh();
+    const item = getStatusBarItem()!;
+    const tooltip = item.tooltip as unknown as { value: string };
+    expect(tooltip.value).toContain('**OpenRouter**');
+    expect(tooltip.value).toContain('Credits: 70% left');
+  });
+
+  it('skips a failing secondary provider without breaking kimi', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      vi.mocked(readPrimaryProvider).mockReturnValue('kimi');
+      vi.mocked(enabledProviders).mockReturnValue(['kimi', 'openrouter']);
+      vi.mocked(readProviderSettings).mockImplementation(((_cfg: unknown, id: string) =>
+        id === 'openrouter'
+          ? OR_SETTINGS
+          : { enabled: true, apiKey: '', baseUrl: 'https://api.kimi.com/coding/v1' }) as never);
+      orRoutes[OR_KEY_URL] = { status: 500, body: 'broken' };
+
+      createStatusBarItem();
+      await refresh();
+      const item = getStatusBarItem()!;
+      const tooltip = item.tooltip as unknown as { value: string };
+      expect(tooltip.value).not.toContain('**OpenRouter**');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('openrouter'));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('skips secondary providers with no key', async () => {
+    vi.mocked(readPrimaryProvider).mockReturnValue('kimi');
+    vi.mocked(enabledProviders).mockReturnValue(['kimi', 'openrouter']);
+    vi.mocked(readProviderSettings).mockReturnValue({
+      enabled: true,
+      apiKey: '',
+      baseUrl: OR_BASE,
+    } as never);
+
+    createStatusBarItem();
+    await refresh();
+    const item = getStatusBarItem()!;
+    const tooltip = item.tooltip as unknown as { value: string };
+    expect(tooltip.value).not.toContain('**OpenRouter**');
+    expect(https.get).not.toHaveBeenCalled();
+  });
+
+  it('groups showDetails picks by provider when several have data', async () => {
+    vi.mocked(readPrimaryProvider).mockReturnValue('kimi');
+    vi.mocked(enabledProviders).mockReturnValue(['kimi', 'openrouter']);
+    vi.mocked(readProviderSettings).mockImplementation(((_cfg: unknown, id: string) =>
+      id === 'openrouter'
+        ? OR_SETTINGS
+        : { enabled: true, apiKey: '', baseUrl: 'https://api.kimi.com/coding/v1' }) as never);
+    orRoutes[OR_KEY_URL] = { status: 200, body: openrouterKeyBody() };
+    orRoutes[OR_CREDITS_URL] = {
+      status: 200,
+      body: JSON.stringify({ data: { total_credits: 100, total_usage: 30 } }),
+    };
+
+    createStatusBarItem();
+    await refresh();
+    await showDetails();
+    const qp = vi.mocked(vscode.window.createQuickPick).mock.results[0]?.value as any;
+    const labels = qp.items.map((i: { label: string }) => i.label);
+    expect(labels).toContain('Kimi Code');
+    expect(labels).toContain('OpenRouter');
+    expect(labels).toContain('Credits: 70% left');
+  });
+});
+
+describe('nonKimiStatusText', () => {
+  const item = (label: string, used: number, limit: number) => ({
+    label,
+    used,
+    limit,
+    remaining: limit - used,
+    percent_left: limit > 0 ? ((limit - used) / limit) * 100 : 0,
+    reset_hint: null,
+    reset_seconds: null,
+    reset_at: null,
+  });
+
+  it('shows a chip placeholder for empty items', () => {
+    expect(nonKimiStatusText({ displayName: 'OpenRouter' }, [])).toBe('$(chip) OpenRouter: --');
+  });
+
+  it('shows dollars left for a Credits row with a limit', () => {
+    expect(nonKimiStatusText({ displayName: 'OpenRouter' }, [item('Credits', 30, 100)])).toBe(
+      '$(cloud) OpenRouter: $70.00 left',
+    );
+  });
+
+  it('shows dollars used for a money row without a limit', () => {
+    expect(nonKimiStatusText({ displayName: 'OpenRouter' }, [item('Credits', 12.3, 0)])).toBe(
+      '$(cloud) OpenRouter: $12.30 used',
+    );
+  });
+
+  it('falls back to a bare cloud label when no money row exists', () => {
+    expect(nonKimiStatusText({ displayName: 'Anthropic' }, [item('5 Hours', 40, 100)])).toBe(
+      '$(cloud) Anthropic: --',
+    );
+  });
+});
+
+describe('showDetails edge cases', () => {
+  it('warns when no providers are enabled', async () => {
+    vi.mocked(enabledProviders).mockReturnValue([]);
+    await showDetails();
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('No usage data');
+  });
+
+  it('informs when providers have keys but no items', async () => {
+    vi.mocked(enabledProviders).mockReturnValue(['kimi']);
+    vi.mocked(parsePayload).mockReturnValueOnce([]);
+    await showDetails();
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('No usage data');
+  });
+});
+
+describe('showDetails live fetch and secondary edges', () => {
+  beforeEach(() => {
+    vi.mocked(https.get).mockReset();
+    orRoutes = {};
+    installOrRoutes();
+  });
+
+  it('fetches a non-kimi primary live when no cached items exist', async () => {
+    vi.mocked(readPrimaryProvider).mockReturnValue('openrouter');
+    vi.mocked(enabledProviders).mockReturnValue(['openrouter']);
+    vi.mocked(readProviderSettings).mockReturnValue(OR_SETTINGS as never);
+    orRoutes[OR_KEY_URL] = { status: 200, body: openrouterKeyBody() };
+    orRoutes[OR_CREDITS_URL] = {
+      status: 200,
+      body: JSON.stringify({ data: { total_credits: 100, total_usage: 30 } }),
+    };
+
+    await showDetails();
+    const qp = vi.mocked(vscode.window.createQuickPick).mock.results[0]?.value as any;
+    const labels = qp.items.map((i: { label: string }) => i.label);
+    expect(labels).toContain('Credits: 70% left');
+    expect(labels).not.toContain('Kimi Code');
+  });
+
+  it('skips secondary providers without a key', async () => {
+    vi.mocked(readPrimaryProvider).mockReturnValue('kimi');
+    vi.mocked(enabledProviders).mockReturnValue(['kimi', 'openrouter']);
+    vi.mocked(readProviderSettings).mockReturnValue({
+      enabled: true,
+      apiKey: '',
+      baseUrl: OR_BASE,
+    } as never);
+
+    await showDetails();
+    const qp = vi.mocked(vscode.window.createQuickPick).mock.results[0]?.value as any;
+    const labels = qp.items.map((i: { label: string }) => i.label);
+    expect(labels).not.toContain('OpenRouter');
+    expect(https.get).not.toHaveBeenCalled();
+  });
+
+  it('shows the auth-failed presentation for an openrouter 401 primary', async () => {
+    vi.mocked(readPrimaryProvider).mockReturnValue('openrouter');
+    vi.mocked(enabledProviders).mockReturnValue(['openrouter']);
+    vi.mocked(readProviderSettings).mockReturnValue(OR_SETTINGS as never);
+    orRoutes[OR_KEY_URL] = { status: 401, body: 'invalid key' };
+
+    createStatusBarItem();
+    await refresh();
+    const item = getStatusBarItem()!;
+    expect(item.text).toBe('$(lock) Auth Failed Short');
+    expect(vscode.ThemeColor).toHaveBeenCalledWith('statusBarItem.errorBackground');
   });
 });

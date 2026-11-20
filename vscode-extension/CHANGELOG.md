@@ -1,16 +1,38 @@
 # Changelog
 
-## v0.2.1 — *Coverage Harness*
+## v0.2.1 — *Multi-Provider & Coverage Harness*
 
 ### 新增 / Added
+
+- 🔌 **多 Provider 支持**：在 Kimi 之外新增 **OpenRouter**（`/auth/key` + `/credits`，美元额度）、
+  **Anthropic**（`/api/oauth/usage`，5 小时 / 7 天窗口，仅接受 Claude Code OAuth 令牌）和
+  **OpenAI**（组织用量 completions + costs，需要 Org Admin 密钥）三个适配器，
+  忠实移植自 Python 版 `kimi-usage` CLI。
+- 🗝️ **交互式密钥配置**：新命令 `Kimi Code Usage: Configure Providers`（`kimiCodeUsage.configureProviders`）
+  — QuickPick 选择 provider，密码输入框粘贴密钥，可自定义 Base URL，写入用户设置后自动刷新。
+- 🎛️ **主 Provider 制状态栏**：新增 `kimiCodeUsage.primaryProvider`（默认 `kimi`），
+  状态栏只显示主 provider；其余启用的 provider 聚合到 tooltip 与详情面板（按 provider 分组）。
+- ⚙️ 平铺配置项：`openrouterEnabled/ApiKey/BaseUrl`、`anthropicEnabled/ApiKey/BaseUrl`、
+  `openaiEnabled/ApiKey/BaseUrl`、`kimiEnabled`，旧的 `apiKey`/`baseUrl` 语义不变。
+- 🌍 新增文案（Credits、Rate Limit、Configure Providers 等 26 个 key）已翻译到全部 10 种语言。
+
+### 变更 / Changed
+
+- API 缓存键加入 provider 前缀，两个 provider 不会互相命中缓存。
+- 各 provider 的 HTTP 错误统一携带 `HTTP <status>`，状态栏现在能对 401/429/5xx
+  显示对应的锁 / 警告 / 服务器图标（此前一律显示通用错误）。
+- User-Agent 版本号改为单一来源（`userAgent.ts`），此前 provider 请求永远报默认版本。
+
+### 新增 / Added（覆盖率）
 
 - 🧪 覆盖率门禁：CI 现在跑 `npm run test:coverage`，语句 / 分支 / 函数 / 行四项阈值均为 100%，
   覆盖率下降会直接让流水线失败。
 
 ### 说明 / Notes
 
-- 本版本无用户可见的行为变化。此前 `vitest --coverage` 因缺少 `@vitest/coverage-v8`
-  而无法运行，README 上的覆盖率徽章也无法复现，现已补齐。
+- OpenRouter 的 `/activity` 图表不做：扩展的 History 面板已有自己的历史快照机制。
+- OpenAI 普通 `sk-...` 项目密钥无法读取组织用量（API 限制），配置时会给出明确提示；
+  ChatGPT Plus/Pro 订阅没有任何用量 API。
 
 ## v0.2.0 — *Extra Usage & Provider Rows*
 

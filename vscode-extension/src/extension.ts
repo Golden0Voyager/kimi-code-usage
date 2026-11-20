@@ -15,6 +15,7 @@ import {
   showDetails,
   stopInterval,
 } from './statusBar';
+import { configureProviders } from './providerSettingsUi';
 import { SnapshotStore, buildSnapshotPath } from './storage';
 import { HistoryPanel } from './historyPanel';
 import { Notifier } from './notifier';
@@ -55,6 +56,9 @@ export function activate(context: vscode.ExtensionContext): void {
   const historyCmd = vscode.commands.registerCommand('kimiCodeUsage.showHistory', () => {
     historyPanel.show();
   });
+  const configureCmd = vscode.commands.registerCommand('kimiCodeUsage.configureProviders', () => {
+    void configureProviders();
+  });
 
   const configChangeDisposable = vscode.workspace.onDidChangeConfiguration(async (e) => {
     if (!e.affectsConfiguration('kimiCodeUsage')) return;
@@ -73,7 +77,21 @@ export function activate(context: vscode.ExtensionContext): void {
       setCacheTtlSeconds(fresh.get<number>('apiCacheTtlSeconds', DEFAULT_API_CACHE_TTL_SECONDS));
     }
 
-    if (e.affectsConfiguration('kimiCodeUsage.apiKey') || e.affectsConfiguration('kimiCodeUsage.baseUrl')) {
+    if (
+      e.affectsConfiguration('kimiCodeUsage.apiKey') ||
+      e.affectsConfiguration('kimiCodeUsage.baseUrl') ||
+      e.affectsConfiguration('kimiCodeUsage.openrouterApiKey') ||
+      e.affectsConfiguration('kimiCodeUsage.openrouterBaseUrl') ||
+      e.affectsConfiguration('kimiCodeUsage.anthropicApiKey') ||
+      e.affectsConfiguration('kimiCodeUsage.anthropicBaseUrl') ||
+      e.affectsConfiguration('kimiCodeUsage.openaiApiKey') ||
+      e.affectsConfiguration('kimiCodeUsage.openaiBaseUrl') ||
+      e.affectsConfiguration('kimiCodeUsage.primaryProvider') ||
+      e.affectsConfiguration('kimiCodeUsage.kimiEnabled') ||
+      e.affectsConfiguration('kimiCodeUsage.openrouterEnabled') ||
+      e.affectsConfiguration('kimiCodeUsage.anthropicEnabled') ||
+      e.affectsConfiguration('kimiCodeUsage.openaiEnabled')
+    ) {
       clearCache();
     }
 
@@ -110,7 +128,7 @@ export function activate(context: vscode.ExtensionContext): void {
     void refresh();
   });
 
-  context.subscriptions.push(refreshCmd, detailsCmd, historyCmd, configChangeDisposable, {
+  context.subscriptions.push(refreshCmd, detailsCmd, historyCmd, configureCmd, configChangeDisposable, {
     dispose: () => stopInterval(),
   });
 

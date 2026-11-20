@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
 import {
   type ErrorPresentation,
+  type PaceState,
   type RedAlertCondition,
-  type StatusBarAlignmentChoice,
   type Snapshot,
   type SnapshotItem,
+  type StatusBarAlignmentChoice,
+  type ThresholdConfig,
   type UsageItem,
   type WindowType,
   MIN_REFRESH_MINUTES,
@@ -23,8 +25,17 @@ import {
   fetchMonthlyUsageViaOAuth,
 } from './api';
 import { fetchUsageCached } from './apiCache';
-import { resolveApiKey, readPaceThresholds, readThresholdSettings } from './config';
+import {
+  resolveApiKey,
+  readPaceThresholds,
+  readThresholdSettings,
+  readPrimaryProvider,
+  readProviderSettings,
+  enabledProviders,
+} from './config';
 import { computePace, formatPaceBar, getPacePresentation } from './pace';
+import { getProvider } from './providers/registry';
+import type { ProviderId } from './providers/types';
 import type { SnapshotStore } from './storage';
 import type { Notifier } from './notifier';
 
@@ -35,12 +46,20 @@ let snapshotStore: SnapshotStore | undefined;
 let notifier: Notifier | undefined;
 let refreshInFlight: Promise<void> | undefined;
 
+/** Latest successful fetch per provider, reused by showDetails(). */
+const lastProviderItems = new Map<ProviderId, UsageItem[]>();
+
 export function setSnapshotStore(store: SnapshotStore | undefined): void {
   snapshotStore = store;
 }
 
 export function setNotifier(n: Notifier | undefined): void {
   notifier = n;
+}
+
+/** Test hook: the most recent items per provider. */
+export function getLastProviderItems(): Map<ProviderId, UsageItem[]> {
+  return lastProviderItems;
 }
 
 function buildErrorPresentation(err: unknown): ErrorPresentation {
@@ -122,7 +141,7 @@ export function setStatusBarCommand(commandId: string): void {
 }
 
 export function restartInterval(): void {
-  if (intervalId) clearInterval(intervalId);
+  clearInterval(intervalId);
 
   const cfg = vscode.workspace.getConfiguration('kimiCodeUsage');
   const configured = cfg.get<number>('refreshIntervalMinutes', 5);
@@ -131,10 +150,8 @@ export function restartInterval(): void {
 }
 
 export function stopInterval(): void {
-  if (intervalId) {
-    clearInterval(intervalId);
-    intervalId = undefined;
-  }
+  clearInterval(intervalId);
+  intervalId = undefined;
 }
 
 export function getStatusBarItem(): vscode.StatusBarItem | undefined {
@@ -149,11 +166,49 @@ export function refresh(): Promise<void> {
   return refreshInFlight;
 }
 
+/** Fetch a non-primary provider best-effort; failures log and yield []. */
+async function fetchSecondaryProvider(id: ProviderId): Promise<UsageItem[]> {
+  const cfg = vscode.workspace.getConfiguration('kimiCodeUsage');
+  const settings = readProviderSettings(cfg, id);
+  if (!settings.apiKey) return [];
+  try {
+    return await getProvider(id).fetch(settings.apiKey, settings.baseUrl);
+  } catch (err) {
+    console.warn(`[KimiCodeUsage] provider ${id} fetch failed: ${String(err)}`);
+    return [];
+  }
+}
+
 async function refreshOnce(): Promise<void> {
   if (!statusBarItem) return;
   const item = statusBarItem;
 
   const cfg = vscode.workspace.getConfiguration('kimiCodeUsage');
+  const primary = readPrimaryProvider(cfg);
+  const providerIds = enabledProviders(cfg);
+
+  // Secondary providers never block the status bar; collect for the tooltip.
+  const secondary: Array<{ id: ProviderId; items: UsageItem[] }> = [];
+  for (const id of providerIds) {
+    if (id === primary) continue;
+    const items = await fetchSecondaryProvider(id);
+    if (items.length > 0) secondary.push({ id, items });
+    if (items.length > 0) lastProviderItems.set(id, items);
+  }
+
+  if (primary === 'kimi') {
+    await refreshKimi(item, cfg, secondary);
+    return;
+  }
+
+  await refreshNonKimiPrimary(item, cfg, primary, secondary);
+}
+
+async function refreshKimi(
+  item: vscode.StatusBarItem,
+  cfg: vscode.WorkspaceConfiguration,
+  secondary: Array<{ id: ProviderId; items: UsageItem[] }>,
+): Promise<void> {
   const apiKey = await resolveApiKey();
   const baseUrl = cfg.get<string>('baseUrl', 'https://api.kimi.com/coding/v1');
   const thresholds = readThresholdSettings(cfg);
@@ -181,7 +236,7 @@ async function refreshOnce(): Promise<void> {
   }
 
   try {
-    const { payload: data } = await fetchUsageCached(baseUrl, apiKey);
+    const { payload: data } = await fetchUsageCached('kimi', baseUrl, apiKey);
     const items = parsePayload(data);
 
     if (items.length === 0) {
@@ -199,13 +254,15 @@ async function refreshOnce(): Promise<void> {
       // OAuth monthly is best-effort; never block the main display
     }
 
+    lastProviderItems.set('kimi', items);
+
     const weeklyItem = findWindowItem(items, 'weekly');
     const fiveHoursItem = findWindowItem(items, 'fiveHours');
 
     const showPace = cfg.get<boolean>('showPaceIndicator', true);
     const showPaceBar = cfg.get<boolean>('showPaceBar', true);
 
-    let pace: ReturnType<typeof computePace> = null;
+    let pace: PaceState | null = null;
     if (weeklyItem && showPace) {
       pace = computePace(weeklyItem, getWindowSeconds(weeklyItem.label), paceThresholds);
     }
@@ -303,6 +360,7 @@ async function refreshOnce(): Promise<void> {
     pushSection(markdownLines, t('Usage Telemetry'), overviewEntries);
     pushSection(markdownLines, t('Pace Details'), paceEntries);
     pushSection(markdownLines, t('Reset Schedule'), resetEntries);
+    pushSecondarySections(markdownLines, secondary);
 
     const tooltip = new vscode.MarkdownString(markdownLines.join('\n'));
     tooltip.supportThemeIcons = true;
@@ -321,61 +379,182 @@ async function refreshOnce(): Promise<void> {
   }
 }
 
-export async function showDetails(): Promise<void> {
-  const cfg = vscode.workspace.getConfiguration('kimiCodeUsage');
-  const apiKey = await resolveApiKey();
-  const baseUrl = cfg.get<string>('baseUrl', 'https://api.kimi.com/coding/v1');
-
-  if (!apiKey) {
-    vscode.window.showWarningMessage(
-      `${t('Can you hear me, Major Kimi?')}\n${t('Set `kimiCodeUsage.apiKey` or `.env` key to reconnect.')}`,
+function pushSecondarySections(
+  lines: string[],
+  secondary: Array<{ id: ProviderId; items: UsageItem[] }>,
+): void {
+  for (const { id, items } of secondary) {
+    const displayName = getProvider(id).spec.displayName;
+    const entries = items.map((i) =>
+      i.text_value != null
+        ? `${i.label}: ${i.text_value}`
+        : `${i.label}: ${i.percent_left.toFixed(0)}% ${t('left')}`,
     );
-    return;
+    pushSection(lines, displayName, entries);
   }
+}
 
-  if (!baseUrl || !baseUrl.trim()) {
-    vscode.window.showWarningMessage(
-      `${t('Can you hear me, Major Kimi?')}\n${t('Check baseUrl and network link.')}`,
-    );
+/** Compact money summary for a non-window provider: `$X left` or `$X used`. */
+function compactMoneySummary(items: UsageItem[]): string | null {
+  const first = items.find((i) => i.label === 'Credits' || i.label === 'Key Usage' || i.label === 'Cost');
+  if (!first) return null;
+  if (first.limit > 0) return `$${first.remaining.toFixed(2)} left`;
+  return `$${first.used.toFixed(2)} used`;
+}
+
+/** Compact status-bar text for a non-window primary provider. Exported for tests. */
+export function nonKimiStatusText(spec: { displayName: string }, items: UsageItem[]): string {
+  if (items.length === 0) return `$(chip) ${spec.displayName}: --`;
+  const summary = compactMoneySummary(items);
+  return summary !== null ? `$(cloud) ${spec.displayName}: ${summary}` : `$(cloud) ${spec.displayName}: --`;
+}
+
+async function refreshNonKimiPrimary(
+  item: vscode.StatusBarItem,
+  cfg: vscode.WorkspaceConfiguration,
+  primary: ProviderId,
+  secondary: Array<{ id: ProviderId; items: UsageItem[] }>,
+): Promise<void> {
+  const settings = readProviderSettings(cfg, primary);
+  const spec = getProvider(primary).spec;
+
+  if (!settings.apiKey) {
+    item.text = `$(key) ${t('API Key Missing')}`;
+    item.tooltip = t('Set the API key via "Kimi Code Usage: Configure Providers".');
+    item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
     return;
   }
 
   try {
-    const { payload: data } = await fetchUsageCached(baseUrl, apiKey);
-    const items = parsePayload(data);
+    const items = await getProvider(primary).fetch(settings.apiKey, settings.baseUrl);
+
+    lastProviderItems.set(primary, items);
+    item.text = nonKimiStatusText(spec, items);
+
+    const markdownLines: string[] = [];
+    const entries = items.map((i) =>
+      i.text_value != null
+        ? `${i.label}: ${i.text_value}`
+        : `${i.label}: ${i.percent_left.toFixed(0)}% ${t('left')}`,
+    );
+    pushSection(markdownLines, spec.displayName, entries);
+    pushSecondarySections(markdownLines, secondary);
+
+    const tooltip = new vscode.MarkdownString(markdownLines.join('\n'));
+    tooltip.supportThemeIcons = true;
+    item.tooltip = tooltip;
+    item.backgroundColor = undefined;
+  } catch (err) {
+    const errorView = buildErrorPresentation(err);
+    item.text = errorView.text;
+    item.tooltip = errorView.tooltip;
+    item.backgroundColor = errorView.isWarning
+      ? new vscode.ThemeColor('statusBarItem.errorBackground')
+      : undefined;
+  }
+}
+
+function providerPickItems(
+  id: ProviderId,
+  items: UsageItem[],
+  showPace: boolean,
+  paceThresholds: ThresholdConfig,
+  cfg: vscode.WorkspaceConfiguration,
+): vscode.QuickPickItem[] {
+  return items.map((qi) => {
+    const label =
+      qi.text_value != null
+        ? `${qi.label}: ${qi.text_value}`
+        : `${qi.label}: ${qi.percent_left.toFixed(0)}% ${t('left')}`;
+    const segments: string[] = [];
+    let detail = '';
+
+    if (showPace) {
+      const pace = computePace(qi, getWindowSeconds(qi.label), paceThresholds);
+      if (pace) {
+        const rawDeviation = (pace.ratio - 1.0) * 100;
+        const deviation = rawDeviation.toFixed(2);
+        const sign = rawDeviation > 0 ? '+' : '';
+        const pacePresentation = getPacePresentation(cfg, pace.state);
+        segments.push(`${t('Current Pace')}: ${sign}${deviation}%`);
+        segments.push(`$(${pacePresentation.icon}) ${pacePresentation.label}`);
+      }
+    }
+
+    if (qi.reset_at) {
+      const formatted = formatResetTimeAbsolute(qi.reset_at);
+      detail = t('Resets {0} (in {1})', formatted.absolute, formatted.relative);
+    } else if (qi.reset_hint) {
+      detail = qi.reset_hint;
+    }
+
+    return { label, description: segments.join('  \u2022  '), detail };
+  });
+}
+
+export async function showDetails(): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration('kimiCodeUsage');
+  const primary = readPrimaryProvider(cfg);
+  const providerIds = enabledProviders(cfg);
+
+  if (providerIds.length === 0) {
+    vscode.window.showWarningMessage(t('No usage data'));
+    return;
+  }
+
+  try {
     const paceThresholds = readPaceThresholds(cfg);
     const showPace = cfg.get<boolean>('showPaceIndicator', true);
 
-    const picks: vscode.QuickPickItem[] = items.map((qi) => {
-      const displayName = localizedLimitName(qi.label);
-      const label =
-        qi.text_value != null
-          ? `${displayName}: ${qi.text_value}`
-          : `${displayName}: ${qi.percent_left.toFixed(0)}% ${t('left')}`;
-      const segments: string[] = [];
-      let detail = '';
-
-      if (showPace) {
-        const pace = computePace(qi, getWindowSeconds(qi.label), paceThresholds);
-        if (pace) {
-          const rawDeviation = (pace.ratio - 1.0) * 100;
-          const deviation = rawDeviation.toFixed(2);
-          const sign = rawDeviation > 0 ? '+' : '';
-          const pacePresentation = getPacePresentation(cfg, pace.state);
-          segments.push(`${t('Current Pace')}: ${sign}${deviation}%`);
-          segments.push(`$(${pacePresentation.icon}) ${pacePresentation.label}`);
+    const perProvider: Array<{ id: ProviderId; items: UsageItem[] }> = [];
+    for (const id of providerIds) {
+      const settings = readProviderSettings(cfg, id);
+      const baseUrl =
+        id === 'kimi' ? cfg.get<string>('baseUrl', 'https://api.kimi.com/coding/v1') : settings.baseUrl;
+      if (typeof baseUrl !== 'string' || baseUrl.trim().length === 0) {
+        vscode.window.showWarningMessage(
+          `${t('Can you hear me, Major Kimi?')}\n${t('Check baseUrl and network link.')}`,
+        );
+        return;
+      }
+      const key = id === 'kimi' ? await resolveApiKey() : settings.apiKey;
+      if (key.length === 0) {
+        if (id === primary) {
+          vscode.window.showWarningMessage(
+            `${t('Can you hear me, Major Kimi?')}\n${t('Set `kimiCodeUsage.apiKey` or `.env` key to reconnect.')}`,
+          );
+          return;
         }
+        continue;
       }
-
-      if (qi.reset_at) {
-        const formatted = formatResetTimeAbsolute(qi.reset_at);
-        detail = t('Resets {0} (in {1})', formatted.absolute, formatted.relative);
-      } else if (qi.reset_hint) {
-        detail = qi.reset_hint;
+      let items = lastProviderItems.get(id) ?? [];
+      if (items.length === 0 && id === primary) {
+        const fetched =
+          id === 'kimi'
+            ? parsePayload((await fetchUsageCached('kimi', baseUrl, key)).payload)
+            : await getProvider(id).fetch(key, baseUrl);
+        items = fetched;
+        lastProviderItems.set(id, fetched);
       }
+      if (items.length === 0) continue;
+      perProvider.push({ id, items });
+    }
 
-      return { label, description: segments.join('  \u2022  '), detail };
-    });
+    const picks: vscode.QuickPickItem[] = [];
+    for (const { id, items } of perProvider) {
+      if (perProvider.length > 1) {
+        picks.push({
+          label: getProvider(id).spec.displayName,
+          kind: vscode.QuickPickItemKind.Separator,
+        });
+      }
+      picks.push(...providerPickItems(id, items, showPace, paceThresholds, cfg));
+    }
+
+    if (picks.length === 0) {
+      vscode.window.showInformationMessage(t('No usage data'));
+      return;
+    }
 
     const quickPick = vscode.window.createQuickPick();
     quickPick.items = picks;

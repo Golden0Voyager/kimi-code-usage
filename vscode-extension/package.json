@@ -227,6 +227,78 @@
           ],
           "description": "Status bar alignment / 状态栏对齐位置",
           "order": 9
+        },
+        "kimiCodeUsage.primaryProvider": {
+          "type": "string",
+          "default": "kimi",
+          "enum": [
+            "kimi",
+            "openrouter",
+            "anthropic",
+            "openai"
+          ],
+          "description": "Provider shown in the status bar; others appear in the details view / 状态栏显示的 provider，其余在详情面板中显示",
+          "order": 21
+        },
+        "kimiCodeUsage.kimiEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the Kimi provider / 启用 Kimi provider",
+          "order": 22
+        },
+        "kimiCodeUsage.openrouterEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the OpenRouter provider / 启用 OpenRouter provider",
+          "order": 23
+        },
+        "kimiCodeUsage.openrouterApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenRouter API key (or set OPENROUTER_API_KEY env var) / OpenRouter API 密钥（或设置 OPENROUTER_API_KEY 环境变量）",
+          "order": 24
+        },
+        "kimiCodeUsage.openrouterBaseUrl": {
+          "type": "string",
+          "default": "https://openrouter.ai/api",
+          "description": "OpenRouter API base URL / OpenRouter API 基础地址",
+          "order": 25
+        },
+        "kimiCodeUsage.anthropicEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the Anthropic provider / 启用 Anthropic provider",
+          "order": 26
+        },
+        "kimiCodeUsage.anthropicApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Anthropic API key or Claude Code OAuth token (or set ANTHROPIC_API_KEY env var) / Anthropic API 密钥或 Claude Code OAuth 令牌（或设置 ANTHROPIC_API_KEY 环境变量）",
+          "order": 27
+        },
+        "kimiCodeUsage.anthropicBaseUrl": {
+          "type": "string",
+          "default": "https://api.anthropic.com",
+          "description": "Anthropic API base URL / Anthropic API 基础地址",
+          "order": 28
+        },
+        "kimiCodeUsage.openaiEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the OpenAI provider (requires an Org Admin key) / 启用 OpenAI provider（需要组织管理员密钥）",
+          "order": 29
+        },
+        "kimiCodeUsage.openaiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI Org Admin API key (or set OPENAI_API_KEY env var) / OpenAI 组织管理员 API 密钥（或设置 OPENAI_API_KEY 环境变量）",
+          "order": 30
+        },
+        "kimiCodeUsage.openaiBaseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com",
+          "description": "OpenAI API base URL / OpenAI API 基础地址",
+          "order": 31
         }
       }
     },
@@ -244,6 +316,11 @@
       {
         "command": "kimiCodeUsage.showHistory",
         "title": "Show Usage History / 查看用量历史",
+        "category": "Kimi"
+      },
+      {
+        "command": "kimiCodeUsage.configureProviders",
+        "title": "Configure Providers / 配置 Provider",
         "category": "Kimi"
       }
     ]
