@@ -231,6 +231,34 @@ async def fetch_openrouter_usage(api_key: str, base_url: str, management_key: st
             text_value="Yes" if is_free_tier else "No"
         ))
 
+    # Free-model daily quota (":free" suffix models), reset at UTC midnight.
+    # Reported for the whole account on every key, independent of is_free_tier.
+    free_daily = key_data.get("free_model_daily_requests")
+    if isinstance(free_daily, dict):
+        free_limit = free_daily.get("limit")
+        free_used = free_daily.get("used")
+        if isinstance(free_limit, (int, float)) and isinstance(free_used, (int, float)):
+            free_remaining = free_daily.get("remaining")
+            if not isinstance(free_remaining, (int, float)):
+                free_remaining = max(0, free_limit - free_used)
+            if is_zh:
+                free_text = f"今日剩余 {int(free_remaining)}/{int(free_limit)} 次（UTC 0 点重置）"
+                free_label = "免费模型"
+            else:
+                free_text = f"{int(free_remaining)}/{int(free_limit)} free requests left today (resets at UTC 0)"
+                free_label = "Free Models"
+            res.append(ProviderUsage(
+                provider="openrouter",
+                label=free_label,
+                used=0.0,
+                limit=None,
+                remaining=None,
+                percent=None,
+                reset_at=None,
+                unit="text",
+                text_value=free_text
+            ))
+
     limit_reset = key_data.get("limit_reset")
     if limit_reset:
         res.append(ProviderUsage(
