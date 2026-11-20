@@ -1890,3 +1890,37 @@ def test_fit_scroll_body():
     # Localized scroll label
     out_zh, _ = _fit_scroll_body(big, budget=10, scroll_offset=0, lang_zh=True)
     assert "滚动" in out_zh.plain.split("\n")[-1]
+
+
+# -- CLI help text (docs the user actually reads) --
+def test_cli_help_documents_config_path_and_env(monkeypatch):
+    import io
+
+    monkeypatch.setattr("sys.argv", ["kimi-usage", "--help"])
+    buf = io.StringIO()
+    with patch("sys.stdout", buf):
+        with pytest.raises(SystemExit) as exc:
+            run_cli()
+    assert exc.value.code == 0
+    help_text = buf.getvalue()
+    assert "kimi-usage" in help_text
+    assert "~/.kimi-usage/config.json" in help_text
+    assert "kimiMonthly" in help_text
+    assert "KIMI_MONTHLY_USAGE" in help_text
+    assert "codex" in help_text and "claude" in help_text
+
+
+def test_cli_kimi_monthly_flag_overrides_config(monkeypatch):
+    # 配置里没开，命令行显式 --kimi-monthly 也要让月度路径跑起来
+    with patch("kimi_code_usage.main.ConfigResolver") as mock_resolver, patch(
+        "kimi_code_usage.main.dispatch_all", new=AsyncMock(return_value=({}, {}))
+    ), patch("kimi_code_usage.main._preflight_webbridge") as mock_preflight, \
+       patch("kimi_code_usage.main._interactive_mode", new=AsyncMock()) as mock_interactive:
+        monkeypatch.setattr("sys.argv", ["kimi-usage", "-i", "--kimi-monthly"])
+        run_cli()
+        cfg = mock_resolver.return_value.resolve.return_value
+        assert cfg.kimi_monthly is True
+        # _interactive_mode 拿到的 config 就是被 flag 打开过的那份
+        assert mock_interactive.call_args.args[0] is cfg
+        # kimi_monthly 是 True 时 preflight 才会真的去查 webbridge
+        mock_preflight.assert_called_once()
