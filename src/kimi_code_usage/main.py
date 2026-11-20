@@ -16,8 +16,10 @@ from rich.text import Text
 from kimi_code_usage.config import (
     API_OPT_IN_PROVIDERS,
     DEFAULT_CONFIG_PATH,
+    SUBSCRIPTION_PROVIDERS,
     AppConfig,
     ConfigResolver,
+    local_login_present,
     save_provider_settings,
     save_theme,
 )
@@ -302,6 +304,13 @@ def _render_setting_view(
         if p in API_OPT_IN_PROVIDERS:
             key_hint = "key ✓" if has_key else ("no key" if not lang_zh else "无 key")
             line = f"{cursor} {icon} [{num}] {short:<13} {state:<3} {key_hint}"
+        elif p in SUBSCRIPTION_PROVIDERS:
+            logged = local_login_present(p)
+            if lang_zh:
+                login_hint = "已登录" if logged else "未登录"
+            else:
+                login_hint = "logged in" if logged else "not logged in"
+            line = f"{cursor} {icon} [{num}] {short:<13} {state:<3} {login_hint}"
         else:
             line = f"{cursor} {icon} [{num}] {short:<13} {state}"
         if i == settings_cursor:

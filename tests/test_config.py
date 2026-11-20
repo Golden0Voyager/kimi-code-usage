@@ -143,20 +143,20 @@ def test_config_resolver_subscription_provider_autodetect(tmp_path, monkeypatch)
     for key in ("CODEX_ENABLED", "CLAUDE_ENABLED"):
         monkeypatch.delenv(key, raising=False)
 
-    monkeypatch.setattr(cfg_mod, "_local_login_present", lambda p: p == "codex")
+    monkeypatch.setattr(cfg_mod, "local_login_present", lambda p: p == "codex")
     resolved = ConfigResolver(config_path=str(config_path)).resolve()
     assert "codex" in resolved.enabled_providers
     assert "claude" not in resolved.enabled_providers
 
     # 没登录文件 → 默认关
-    monkeypatch.setattr(cfg_mod, "_local_login_present", lambda p: False)
+    monkeypatch.setattr(cfg_mod, "local_login_present", lambda p: False)
     resolved = ConfigResolver(config_path=str(config_path)).resolve()
     assert "codex" not in resolved.enabled_providers
 
     # 用户手动关掉要能覆盖自动检测
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump({"providers": {"codex": {"enabled": False}}}, f)
-    monkeypatch.setattr(cfg_mod, "_local_login_present", lambda p: True)
+    monkeypatch.setattr(cfg_mod, "local_login_present", lambda p: True)
     assert "codex" not in ConfigResolver(config_path=str(config_path)).resolve().enabled_providers
 
 

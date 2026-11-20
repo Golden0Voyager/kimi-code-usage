@@ -568,7 +568,7 @@ def test_preflight_reports_start_failure_without_blocking_tui():
     assert "cannot bind" in str(console.return_value.print.call_args.args[0])
 
 
-def test_render_setting_view_shows_enable_state_and_key_prompt():
+def test_render_setting_view_shows_enable_state_and_key_prompt(monkeypatch):
     from kimi_code_usage.config import AppConfig, ProviderConfig
     from kimi_code_usage.main import _render_setting_view
 
@@ -580,12 +580,18 @@ def test_render_setting_view_shows_enable_state_and_key_prompt():
         provider_order=["anthropic", "codex"],
     )
 
+    # 订阅类要标出本机登录状态：开着的 codex 但没登录 → 一眼看出为什么没数据
+    monkeypatch.setattr("kimi_code_usage.main.local_login_present", lambda p: False)
     flat = _render_setting_view(cfg, {"anthropic"}, settings_cursor=0, lang_zh=False).plain
     assert "Anthropic API" in flat
     assert "off" in flat
     assert "no key" in flat
     assert "ChatGPT+" in flat
+    assert "not logged in" in flat
     assert "[e]" in flat and "[k]" in flat
+
+    monkeypatch.setattr("kimi_code_usage.main.local_login_present", lambda p: True)
+    assert "logged in" in _render_setting_view(cfg, set(), settings_cursor=0, lang_zh=False).plain
 
     prompt = _render_setting_view(
         cfg, {"anthropic"}, settings_cursor=0, lang_zh=False, key_edit="anthropic", key_buffer="abc"

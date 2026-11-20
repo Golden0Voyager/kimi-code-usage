@@ -11,7 +11,7 @@ SUBSCRIPTION_PROVIDERS = ("codex", "claude")
 API_OPT_IN_PROVIDERS = ("openai", "anthropic")
 
 
-def _local_login_present(provider: str) -> bool:
+def local_login_present(provider: str) -> bool:
     """Cheap file-existence probe for a subscription login.
 
     Must stay import-free: ``config`` is loaded on every run, so importing the
@@ -179,7 +179,7 @@ class ConfigResolver:
                     if env_enabled is not None:
                         enabled = env_enabled.lower() in ("true", "1", "yes")
                     else:
-                        enabled = _local_login_present(p)
+                        enabled = local_login_present(p)
                 if enabled:
                     api_key = "enabled"  # Sentinel: passes enabled_providers check
             elif p in API_OPT_IN_PROVIDERS:
