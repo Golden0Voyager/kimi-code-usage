@@ -189,10 +189,18 @@ In the vastness of the code universe, your creative flow shouldn't be pulled dow
 
 完整历史见 [CHANGELOG.md](CHANGELOG.md) · Full history: [CHANGELOG.md](CHANGELOG.md)
 
-**v0.2.0** — *Extra Usage & Provider Rows*（最新 / latest）
+**v0.2.1** — *Coverage Harness*（最新 / latest）
+- 🧪 覆盖率门禁：CI 强制执行 100% 语句 / 分支 / 函数 / 行覆盖率，回归会直接失败
+- 本版本无用户可见的行为变化；此前覆盖率无法本地复现，现已补齐
+
+<details>
+<summary>v0.2.0 — <em>Extra Usage &amp; Provider Rows</em></summary>
+
 - 🧾 加油包（`Extra Usage`）用量行：未启用时显示「未启用 / Not enabled」，启用但无金额时不虚构数字
 - 📊 并发数（`Parallel limit`）与总额度（`Total quota`）行
 - 🌍 新增文案覆盖全部 10 种语言；详情面板如实显示字面值行
+
+</details>
 
 ---
 
