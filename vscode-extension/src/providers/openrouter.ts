@@ -147,6 +147,28 @@ export const openrouterProvider: ProviderAdapter = {
       res.push(textRow(t('Free Tier'), keyData.is_free_tier === true ? t('Yes') : t('No')));
     }
 
+    // Free-model daily quota (":free" suffix models), reset at UTC midnight.
+    // Account-wide counter, reported on every key regardless of is_free_tier.
+    const freeDaily: unknown = keyData.free_model_daily_requests;
+    if (freeDaily != null && typeof freeDaily === 'object' && !Array.isArray(freeDaily)) {
+      const fd = freeDaily as Record<string, unknown>;
+      const freeLimit = toNum(fd.limit);
+      const freeUsed = toNum(fd.used);
+      if (freeLimit != null && freeUsed != null) {
+        const freeRemaining = toNum(fd.remaining) ?? Math.max(0, freeLimit - freeUsed);
+        res.push(
+          textRow(
+            t('Free Models'),
+            t(
+              '{0}/{1} free requests left today (resets at UTC 0)',
+              Math.trunc(freeRemaining),
+              Math.trunc(freeLimit),
+            ),
+          ),
+        );
+      }
+    }
+
     const limitReset: unknown = keyData.limit_reset;
     if (typeof limitReset === 'string' && limitReset.length > 0) {
       res.push(textRow(t('Limit Reset'), limitReset));
