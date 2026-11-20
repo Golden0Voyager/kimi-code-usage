@@ -31,6 +31,12 @@ jobs:
       - name: Run security scan (bandit)
         run: uv tool run bandit -r src/ || true
 
+      - name: Run tests with coverage
+        run: uv run pytest --cov --cov-report=term-missing tests/
+
+      - name: Enforce coverage threshold
+        run: uv run coverage report
+
       - name: Run dependency audit
         # `uv audit` exists since uv 0.11 but is still experimental, and the old
         # step ran it behind `|| true` — so it did report real advisories while
@@ -38,13 +44,10 @@ jobs:
         # means the local uv predates 0.11 (0.9.17), not that CI never ran it.
         # pip-audit reads the same frozen lock, needs no virtualenv, is pinned,
         # and fails the job on a known advisory.
+        #
+        # 必须排在 pytest / coverage 之后（AGENTS.md 的 CI 标准管道顺序）：
+        # 一个陈旧公告库不该让「Run tests with coverage」变成 skipped，否则
+        # 测试反馈会被安全门禁整体吞掉。
         run: |
           uv export --frozen --no-emit-project --format requirements-txt --no-hashes > "$RUNNER_TEMP/requirements.txt"
           uvx pip-audit@2.10.1 --disable-pip --no-deps -r "$RUNNER_TEMP/requirements.txt" --progress-spinner off
-
-
-      - name: Run tests with coverage
-        run: uv run pytest --cov --cov-report=term-missing tests/
-
-      - name: Enforce coverage threshold
-        run: uv run coverage report
