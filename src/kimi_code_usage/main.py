@@ -1570,7 +1570,25 @@ async def _interactive_mode(config: "AppConfig", initial_theme: str, config_path
 
 async def main():
     load_dotenv()
-    parser = argparse.ArgumentParser(description="Multi-Provider AI Quota Tracker CLI")
+    parser = argparse.ArgumentParser(
+        prog="kimi-usage",
+        description="Multi-Provider AI Quota Tracker CLI",
+        epilog="""\
+examples:
+  kimi-usage                              one-shot panel
+  kimi-usage -i                          interactive: r refresh · q quit · ←/→ themes
+  kimi-usage --provider kimi,openrouter --json
+  KIMI_MONTHLY_USAGE=1 kimi-usage        also fetch Kimi monthly credits (~2.5s, WebBridge)
+
+config file (default ~/.kimi-usage/config.json, override with --config):
+  { "general": { "kimiMonthly": true, "theme": "mint-dark", "language": "zh" } }
+
+environment:
+  KIMI_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / OPENROUTER_API_KEY ...
+  KIMI_MONTHLY_USAGE=1     include the Kimi monthly-credits row (opt-in, ~2.5s)
+""".strip(),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--plain", action="store_true")
     parser.add_argument(
@@ -1579,18 +1597,35 @@ async def main():
         action="store_true",
         help="Interactive mode: h help, c config, ←/→ or [/] themes, r refresh, q quit",
     )
-    parser.add_argument("--provider", help="Comma-separated providers to query (kimi,openai,anthropic,openrouter)")
-    parser.add_argument("--config", help="Custom configuration file path")
+    parser.add_argument(
+        "--provider",
+        help="Comma-separated providers to query "
+             "(kimi, openai, anthropic, openrouter, codex, claude)",
+    )
+    parser.add_argument(
+        "--config",
+        help="Config file to load (default ~/.kimi-usage/config.json)",
+    )
     parser.add_argument(
         "--theme",
-        help="Specify color theme: blue-dark, blue-light, sky-dark, salmon-dark, turquoise-dark, pink-light, violet-dark, amber-dark, mint-dark, monochrome, blind-deuteranopia, blind-tritanopia",
+        help="Specify color theme: blue-dark, blue-light, sky-dark, salmon-dark, "
+             "turquoise-dark, pink-light, violet-dark, amber-dark, mint-dark, "
+             "monochrome, blind-deuteranopia, blind-tritanopia",
     )
     parser.add_argument("--serve", action="store_true", help="Start web server instead of CLI output")
     parser.add_argument("--port", type=int, default=8765, help="Web server port (default: 8765)")
+    parser.add_argument(
+        "--kimi-monthly",
+        action="store_true",
+        help="Include the Kimi monthly-credits row (drives WebBridge, adds ~2.5s). "
+             "Equivalent to KIMI_MONTHLY_USAGE=1 or general.kimiMonthly: true.",
+    )
     args = parser.parse_args()
 
     resolver = ConfigResolver(config_path=args.config)
     config = resolver.resolve()
+    if args.kimi_monthly:
+        config.kimi_monthly = True
 
     # Serve mode: start web server
     if args.serve:
