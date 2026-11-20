@@ -581,7 +581,7 @@ def test_render_setting_view_shows_enable_state_and_key_prompt():
     )
 
     flat = _render_setting_view(cfg, {"anthropic"}, settings_cursor=0, lang_zh=False).plain
-    assert "Anthropic" in flat
+    assert "Anthropic API" in flat
     assert "off" in flat
     assert "no key" in flat
     assert "ChatGPT+" in flat
@@ -591,6 +591,7 @@ def test_render_setting_view_shows_enable_state_and_key_prompt():
         cfg, {"anthropic"}, settings_cursor=0, lang_zh=False, key_edit="anthropic", key_buffer="abc"
     ).plain
     assert "Paste the Anthropic API key" in prompt
+    assert "API API" not in prompt
     assert "•••" in prompt
 
 
