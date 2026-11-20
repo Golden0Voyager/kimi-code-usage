@@ -177,5 +177,7 @@
   "{0} configured.": "{0} を設定しました。",
   "Set the API key via \"Kimi Code Usage: Configure Providers\".": "「Kimi Code Usage: Configure Providers」コマンドで API キーを設定してください。",
   "This key cannot read Anthropic usage: /api/oauth/usage only accepts a Claude Code OAuth token. Use the claude provider for subscription quotas.": "このキーでは Anthropic の使用量を読み取れません：/api/oauth/usage は Claude Code の OAuth トークンのみを受け付けます。サブスクリプションの割合は claude プロバイダーを使用してください。",
-  "OpenAI organization usage API returned 401/403. This endpoint requires an Org Admin API key (platform.openai.com → Settings → API Keys, role: Org Admin) — a regular sk-... project key is not enough. ChatGPT Plus/Pro subscriptions have no usage API at all; disable this provider with openaiEnabled=false.": "OpenAI の組織使用量 API が 401/403 を返しました。このエンドポイントには組織管理者の API キーが必要です（platform.openai.com → Settings → API Keys、役割: Org Admin）。通常の sk-... プロジェクトキーでは不足しています。ChatGPT Plus/Pro のサブスクリプションには使用量 API がありません。openaiEnabled=false でこのプロバイダーを無効にしてください。"
+  "OpenAI organization usage API returned 401/403. This endpoint requires an Org Admin API key (platform.openai.com → Settings → API Keys, role: Org Admin) — a regular sk-... project key is not enough. ChatGPT Plus/Pro subscriptions have no usage API at all; disable this provider with openaiEnabled=false.": "OpenAI の組織使用量 API が 401/403 を返しました。このエンドポイントには組織管理者の API キーが必要です（platform.openai.com → Settings → API Keys、役割: Org Admin）。通常の sk-... プロジェクトキーでは不足しています。ChatGPT Plus/Pro のサブスクリプションには使用量 API がありません。openaiEnabled=false でこのプロバイダーを無効にしてください。",
+  "Free Models": "無料モデル",
+  "{0}/{1} free requests left today (resets at UTC 0)": "今日の無料リクエスト残り {0}/{1}（UTC 0 時にリセット）"
 }
