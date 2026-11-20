@@ -421,3 +421,12 @@ def test_config_resolver_kimi_monthly_from_json_and_env(tmp_path, monkeypatch):
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump({"general": {}}, f)
     assert ConfigResolver(config_path=str(config_path)).resolve().kimi_monthly is True
+
+
+def test_save_theme_accepts_str_config_path(tmp_path):
+    from kimi_code_usage.config import save_theme
+
+    path = tmp_path / "custom.json"
+    save_theme("mint-dark", config_path=str(path))
+
+    assert json.loads(path.read_text(encoding="utf-8"))["general"]["theme"] == "mint-dark"
