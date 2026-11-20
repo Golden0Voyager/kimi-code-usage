@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.2.1 — *Coverage Harness*
+
+### 新增 / Added
+
+- 🧪 覆盖率门禁：CI 现在跑 `npm run test:coverage`，语句 / 分支 / 函数 / 行四项阈值均为 100%，
+  覆盖率下降会直接让流水线失败。
+
+### 说明 / Notes
+
+- 本版本无用户可见的行为变化。此前 `vitest --coverage` 因缺少 `@vitest/coverage-v8`
+  而无法运行，README 上的覆盖率徽章也无法复现，现已补齐。
+
 ## v0.2.0 — *Extra Usage & Provider Rows*
 
 ### 新增 / Added
