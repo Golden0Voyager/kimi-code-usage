@@ -6,19 +6,25 @@ from kimi_code_usage.providers.anthropic import fetch_anthropic_usage
 
 
 @pytest.mark.asyncio
-async def test_fetch_anthropic_usage_ignores_api_key_and_uses_local_login():
-    """sk-ant- API keys must not silently produce a fake "API Plan" row anymore.
+async def test_fetch_anthropic_usage_key_cannot_read_usage():
+    """A rejected key gets an actionable text row, not a silent empty one."""
+    cm = AsyncMock()
+    cm.__aenter__ = AsyncMock(return_value=cm)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    cm.status = 401
 
-    The provider reads the Claude Code login (keychain/credentials file) like
-    ``claude`` does; a regular ``sk-ant-`` key is not a subscription token and
-    gets a clear error instead of a misleading placeholder.
-    """
-    with patch(
-        "kimi_code_usage.providers.anthropic._read_oauth_token",
-        side_effect=FileNotFoundError("Claude OAuth token not found"),
-    ):
-        with pytest.raises(FileNotFoundError):
-            await fetch_anthropic_usage("sk-ant-api03-xxxx", "https://api.anthropic.com")
+    mock_session = AsyncMock()
+    mock_session.get = lambda *args, **kwargs: cm
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("aiohttp.ClientSession", return_value=mock_session):
+        res = await fetch_anthropic_usage("sk-ant-api03-xxxx", "https://api.anthropic.com")
+
+    assert len(res) == 1
+    assert res[0].provider == "anthropic"
+    assert res[0].unit == "text"
+    assert "claude provider" in res[0].text_value
 
 
 @pytest.mark.asyncio
@@ -40,42 +46,21 @@ async def test_fetch_anthropic_usage_oauth_success():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=None)
 
-    with patch("aiohttp.ClientSession", return_value=mock_session), patch(
-        "kimi_code_usage.providers.anthropic._read_oauth_token", return_value="token"
-    ):
-        res = await fetch_anthropic_usage("anything", "https://api.anthropic.com")
-        assert len(res) == 2
+    with patch("aiohttp.ClientSession", return_value=mock_session):
+        res = await fetch_anthropic_usage("oauth-token", "https://api.anthropic.com")
 
-        assert res[0].label == "5 Hours"
-        assert res[0].used == 45.0
-        assert res[0].remaining == 55.0
-        assert res[0].percent == 45.0
-        assert res[0].unit == "%"
+    assert len(res) == 2
+    assert res[0].label == "5 Hours"
+    assert res[0].used == 45.0
+    assert res[0].remaining == 55.0
+    assert res[0].percent == 45.0
+    assert res[0].unit == "%"
 
-        assert res[1].label == "7 Days"
-        assert res[1].used == 12.0
-        assert res[1].remaining == 88.0
-        assert res[1].percent == 12.0
-        assert res[1].unit == "%"
-
-
-@pytest.mark.asyncio
-async def test_fetch_anthropic_usage_oauth_auth_error():
-    cm = AsyncMock()
-    cm.__aenter__ = AsyncMock(return_value=cm)
-    cm.__aexit__ = AsyncMock(return_value=None)
-    cm.status = 403
-
-    mock_session = AsyncMock()
-    mock_session.get = lambda *args, **kwargs: cm
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=None)
-
-    with patch("aiohttp.ClientSession", return_value=mock_session), patch(
-        "kimi_code_usage.providers.anthropic._read_oauth_token", return_value="expired"
-    ):
-        with pytest.raises(RuntimeError, match="claude login"):
-            await fetch_anthropic_usage("anything", "https://api.anthropic.com")
+    assert res[1].label == "7 Days"
+    assert res[1].used == 12.0
+    assert res[1].remaining == 88.0
+    assert res[1].percent == 12.0
+    assert res[1].unit == "%"
 
 
 @pytest.mark.asyncio
@@ -91,9 +76,7 @@ async def test_fetch_anthropic_usage_oauth_api_error():
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=None)
 
-    with patch("aiohttp.ClientSession", return_value=mock_session), patch(
-        "kimi_code_usage.providers.anthropic._read_oauth_token", return_value="token"
-    ):
+    with patch("aiohttp.ClientSession", return_value=mock_session):
         with pytest.raises(RuntimeError) as exc:
-            await fetch_anthropic_usage("anything", "https://api.anthropic.com")
-        assert "Anthropic API Error 500" in str(exc.value)
+            await fetch_anthropic_usage("oauth-token", "https://api.anthropic.com")
+    assert "Anthropic API Error 500" in str(exc.value)
