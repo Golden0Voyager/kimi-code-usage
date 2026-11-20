@@ -24,7 +24,13 @@ async def fetch_openai_usage(api_key: str, base_url: str, management_key: str | 
     async with aiohttp.ClientSession() as session:
         async with session.get(completions_url, headers=headers) as resp:
             if resp.status in (401, 403):
-                raise Exception("Requires Org Admin Key")
+                raise Exception(
+                    "OpenAI organization usage API returned 401/403. This endpoint "
+                    "requires an Org Admin API key (platform.openai.com → Settings → "
+                    "API Keys, role: Org Admin) — a regular sk-... project key is not "
+                    "enough. ChatGPT Plus/Pro subscriptions have no usage API at all; "
+                    "disable this provider with OPENAI_ENABLED=false."
+                )
             if resp.status != 200:
                 text = await resp.text()
                 raise Exception(f"OpenAI API Error {resp.status}: {text}")

@@ -86,7 +86,8 @@ def test_config_resolver_env_variables(tmp_path, monkeypatch):
     config = resolver.resolve()
 
     assert "kimi" in config.enabled_providers
-    assert "anthropic" in config.enabled_providers
+    # anthropic 现在跟 codex/claude 同一档：默认关，须 ANTHROPIC_ENABLED=1 显式开启
+    assert "anthropic" not in config.enabled_providers
     assert "openai" not in config.enabled_providers
     assert "openrouter" not in config.enabled_providers
 
@@ -94,6 +95,22 @@ def test_config_resolver_env_variables(tmp_path, monkeypatch):
     assert config.providers["kimi"].base_url == "https://env.kimi"
     assert config.providers["anthropic"].api_key == "env-anthropic-key"
     assert config.providers["anthropic"].base_url == "https://api.anthropic.com"
+
+
+def test_config_resolver_anthropic_opt_in_via_env_and_json(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    monkeypatch.delenv("ANTHROPIC_ENABLED", raising=False)
+
+    # 默认关
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump({}, f)
+    assert "anthropic" not in ConfigResolver(config_path=str(config_path)).resolve().enabled_providers
+
+    # env 显式开
+    monkeypatch.setenv("ANTHROPIC_ENABLED", "1")
+    resolved = ConfigResolver(config_path=str(config_path)).resolve()
+    assert resolved.providers["anthropic"].api_key == "enabled"
+    assert "anthropic" in resolved.enabled_providers
 
 
 def test_config_resolver_openrouter_admin_key(tmp_path, monkeypatch):
